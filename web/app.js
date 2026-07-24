@@ -393,32 +393,42 @@ function renderLiftExercises() {
   container.innerHTML = state.activeWorkoutExercises
     .map((ex, i) => {
       const loggedRows = ex.loggedSets
-        .map((s, si) => {
+        .map((s) => {
           const rest = s.restSeconds ? " · rested " + fmtRest(s.restSeconds) + " before" : "";
-          return '<div class="pr-row"><span class="name" style="font-weight:500;">Set ' + (si + 1) + '</span><span class="tnum" style="color:var(--neutral);font-size:0.82rem;">' + fmtWeight(s.weightKg) + " × " + s.reps + " · RIR " + s.rir + rest + "</span></div>";
+          return (
+            '<div class="pr-row"><span class="name" style="font-weight:500;">Set ' + s.setNumber + "</span>" +
+            '<span class="v" style="display:flex;align-items:center;gap:0.5rem;">' +
+            '<span class="tnum" style="color:var(--neutral);font-size:0.82rem;">' + fmtWeight(s.weightKg) + " × " + s.reps + " reps" + rest + "</span>" +
+            '<button class="set-delete-btn" data-exi="' + i + '" data-setid="' + s.id + '" aria-label="Delete set ' + s.setNumber + '">×</button>' +
+            "</span></div>"
+          );
         })
         .join("");
       const restChips = REST_PRESETS_SEC
         .map((sec, ci) => '<button type="button" class="chip' + (ci === 2 ? " active" : "") + '" data-rest="' + sec + '">' + fmtRest(sec) + "</button>")
         .join("");
+      const nextSet = ex.loggedSets.length + 1;
       return (
         '<div class="card"><span class="kicker">' + ex.name + '</span>' +
-        '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-bottom:0.6rem;">Target: ' + fmtWeight(ex.load_kg) + " × " + ex.sets + " sets × " + ex.reps + " reps · RIR " + ex.target_rir + "</div>" +
+        '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-bottom:0.6rem;">Target: ' + fmtWeight(ex.load_kg) + " × " + ex.sets + " sets × " + ex.reps + " reps</div>" +
         '<div style="display:flex;gap:0.5rem;margin-bottom:0.7rem;">' +
         '<div class="field" style="margin-bottom:0;flex:1;"><label>Weight (' + weightUnit() + ")</label><input type=\"number\" inputmode=\"decimal\" step=\"0.5\" value=\"" + kgToDisplay(ex.load_kg) + '" id="ex-' + i + '-weight"></div>' +
-        '<div class="field" style="margin-bottom:0;flex:1;"><label>Reps</label><input type="number" inputmode="numeric" value="' + ex.reps + '" id="ex-' + i + '-reps"></div>' +
-        '<div class="field" style="margin-bottom:0;flex:1;"><label>RIR</label><input type="number" inputmode="decimal" step="0.5" value="' + ex.target_rir + '" id="ex-' + i + '-rir"></div>' +
+        '<div class="field" style="margin-bottom:0;flex:1;"><label>Sets</label><input type="number" inputmode="numeric" min="1" value="' + nextSet + '" id="ex-' + i + '-sets"></div>' +
+        '<div class="field" style="margin-bottom:0;flex:1;"><label>Reps</label><input type="number" inputmode="numeric" min="1" value="' + ex.reps + '" id="ex-' + i + '-reps"></div>' +
         "</div>" +
         '<div class="field" style="margin-bottom:0.7rem;"><label>Rest before this set (optional)</label>' +
         '<div class="chip-row" id="ex-' + i + '-rest-chips">' + restChips + "</div></div>" +
-        '<button class="btn subtle" data-exi="' + i + '" data-action="log-movement">Log Movement</button>' +
+        '<button class="btn subtle" data-exi="' + i + '" data-action="log-set">Log Set</button>' +
         '<div style="margin-top:0.5rem;">' + loggedRows + "</div></div>"
       );
     })
     .join("");
 
-  container.querySelectorAll('[data-action="log-movement"]').forEach((btn) => {
-    btn.addEventListener("click", () => logMovement(parseInt(btn.dataset.exi, 10)));
+  container.querySelectorAll('[data-action="log-set"]').forEach((btn) => {
+    btn.addEventListener("click", () => logSet(parseInt(btn.dataset.exi, 10)));
+  });
+  container.querySelectorAll('.set-delete-btn').forEach((btn) => {
+    btn.addEventListener("click", () => deleteLoggedSet(parseInt(btn.dataset.exi, 10), parseInt(btn.dataset.setid, 10)));
   });
   container.querySelectorAll('input[type=number]').forEach((input) => {
     // tap the number and start typing immediately, no manual clear first
@@ -434,31 +444,37 @@ function renderLiftExercises() {
   });
 }
 
-async function logMovement(exi) {
+async function logSet(exi) {
   const ex = state.activeWorkoutExercises[exi];
   const weightKg = displayToKg(document.getElementById("ex-" + exi + "-weight").value);
+  const setNumber = parseInt(document.getElementById("ex-" + exi + "-sets").value, 10) || ex.loggedSets.length + 1;
   const reps = parseInt(document.getElementById("ex-" + exi + "-reps").value, 10);
-  const rir = parseFloat(document.getElementById("ex-" + exi + "-rir").value);
   const activeRestChip = document.querySelector('#ex-' + exi + '-rest-chips .chip.active');
   const restSeconds = activeRestChip ? parseInt(activeRestChip.dataset.rest, 10) : null;
-  const setIndex = ex.loggedSets.length + 1; // no cap -- keep logging as many sets as you did
 
-  await api("/workouts/" + state.activeWorkoutSessionId + "/sets", {
+  const created = await api("/workouts/" + state.activeWorkoutSessionId + "/sets", {
     method: "POST",
     body: JSON.stringify({
       exercise_id: ex.exercise_id,
-      set_index: setIndex,
+      set_index: setNumber,
       prescribed_reps: ex.reps,
       prescribed_load_kg: ex.load_kg,
       actual_reps: reps,
       actual_load_kg: weightKg,
-      rir: rir,
       rest_seconds: restSeconds,
     }),
   });
-  ex.loggedSets.push({ weightKg: weightKg, reps: reps, rir: rir, restSeconds: restSeconds });
+  ex.loggedSets.push({ id: created.id, setNumber: setNumber, weightKg: weightKg, reps: reps, restSeconds: restSeconds });
   renderLiftExercises();
-  toast("Movement logged — set " + setIndex);
+  toast("Set " + setNumber + " logged");
+}
+
+async function deleteLoggedSet(exi, setId) {
+  await api("/sets/" + setId, { method: "DELETE" });
+  const ex = state.activeWorkoutExercises[exi];
+  ex.loggedSets = ex.loggedSets.filter((s) => s.id !== setId);
+  renderLiftExercises();
+  toast("Set removed");
 }
 
 document.getElementById("btn-finish-workout").addEventListener("click", async () => {

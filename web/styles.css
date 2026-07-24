@@ -201,6 +201,14 @@ hr.hair { border: none; border-top: 1px solid var(--border); margin: 0.6rem 0; }
 .pr-row .date { font-size: 0.72rem; color: var(--neutral-2); }
 .pr-row .val { font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; color: var(--success-text); }
 
+.set-delete-btn {
+  width: 22px; height: 22px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--neutral-2); font-size: 1.05rem; line-height: 1;
+  transition: background .1s, color .1s;
+}
+.set-delete-btn:hover, .set-delete-btn:focus-visible { background: var(--critical-bg); color: var(--critical-text); }
+
 .empty-note { font-size: 0.85rem; color: var(--neutral-2); padding: 0.5rem 0.1rem; }
 .back-btn { font-size: 0.85rem; font-weight: 600; color: var(--neutral); margin-bottom: 0.7rem; display: inline-flex; align-items: center; gap: 0.3rem; }
 

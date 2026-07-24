@@ -126,10 +126,14 @@ def _progressed_load(db: Session, user_id: int, exercise_id: int, target_rir: fl
     if not last:
         return starting_load_kg, "No prior data — starting weight"
     hit_reps = (last.actual_reps or 0) >= (last.prescribed_reps or 0)
-    if last.rir is not None and last.rir >= target_rir and hit_reps:
+    # RIR is optional -- the logging UI doesn't capture it. When it's present, use it as
+    # an extra gate; when it's absent (the normal case now), reps-hit alone decides.
+    rir_ok = last.rir is None or last.rir >= target_rir
+    if hit_reps and rir_ok:
+        detail = f"RIR {last.rir:g} at target, reps hit" if last.rir is not None else "reps hit"
         return (
             last.actual_load_kg + SMALLEST_INCREMENT_KG,
-            f"Last session: RIR {last.rir:g} at target, reps hit — progressing +{SMALLEST_INCREMENT_KG:g}kg",
+            f"Last session: {detail} — progressing +{SMALLEST_INCREMENT_KG:g}kg",
         )
     return last.actual_load_kg, "Last session missed target — holding load"
 

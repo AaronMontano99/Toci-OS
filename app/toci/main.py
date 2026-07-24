@@ -199,6 +199,15 @@ def log_set(session_id: int, payload: schemas.SetIn, db: Session = Depends(get_d
     return {"id": row.id}
 
 
+@app.delete("/api/sets/{set_id}")
+def delete_set(set_id: int, db: Session = Depends(get_db)):
+    row = db.query(models.WorkoutSet).get(set_id)
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True}
+
+
 @app.post("/api/workouts/{session_id}/complete")
 def complete_workout(session_id: int, db: Session = Depends(get_db)):
     session = db.query(models.WorkoutSession).get(session_id)
