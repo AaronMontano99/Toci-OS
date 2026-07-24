@@ -20,10 +20,16 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
+    age = Column(Integer)
+    height_cm = Column(Float)  # canonical storage is metric; imperial is a display/input conversion
     goal = Column(String, nullable=False, default="hypertrophy")
     experience_level = Column(String, nullable=False, default="intermediate")
     equipment = Column(String, nullable=False, default="full_gym")
-    units = Column(String, nullable=False, default="metric")
+    units = Column(String, nullable=False, default="imperial")  # "imperial" (lb/in) | "metric" (kg/cm)
+    password_hash = Column(String)  # salt$hash -- see engine.hash_password. Nothing currently checks this;
+    # there's no login screen in this demo, so it's a real persisted setting with nothing to gate yet.
+    notif_daily_recommendation = Column(Boolean, nullable=False, default=True)
+    notif_readiness_alerts = Column(Boolean, nullable=False, default=True)
 
 
 class Injury(Base):
@@ -96,6 +102,7 @@ class WorkoutSet(Base):
     actual_reps = Column(Integer)
     actual_load_kg = Column(Float)
     rir = Column(Float)
+    rest_seconds = Column(Integer)  # rest taken before this set (no cap -- log as many sets as you did)
 
 
 class CardioSession(Base):

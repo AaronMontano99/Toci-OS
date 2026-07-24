@@ -22,7 +22,10 @@ def seed(reset: bool = False):
             print("Already seeded — pass --reset to wipe and reseed.")
             return
 
-        db.add(models.User(id=1, name="Aaron", goal="hypertrophy", experience_level="intermediate", equipment="full_gym", units="metric"))
+        db.add(models.User(
+            id=1, name="Aaron", age=27, height_cm=177.8,  # 5'10"
+            goal="hypertrophy", experience_level="intermediate", equipment="full_gym", units="imperial",
+        ))
         db.commit()
 
         exercise_defs = [

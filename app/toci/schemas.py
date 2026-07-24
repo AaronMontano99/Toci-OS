@@ -23,6 +23,7 @@ class SetIn(BaseModel):
     actual_reps: int
     actual_load_kg: float
     rir: Optional[float] = None
+    rest_seconds: Optional[int] = None
 
 
 class RunIn(BaseModel):
@@ -41,3 +42,20 @@ class ExerciseIn(BaseModel):
     name: str
     movement_pattern: Optional[str] = "custom"
     primary_muscle_group: Optional[str] = "custom"
+
+
+class SettingsUpdateIn(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    height_cm: Optional[float] = None
+    goal: Optional[str] = None
+    experience_level: Optional[str] = None
+    equipment: Optional[str] = None
+    units: Optional[str] = None  # "imperial" | "metric"
+    notif_daily_recommendation: Optional[bool] = None
+    notif_readiness_alerts: Optional[bool] = None
+
+
+class PasswordUpdateIn(BaseModel):
+    new_password: str
+    confirm_password: str

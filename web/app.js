@@ -4,7 +4,49 @@ const state = {
   exercises: [],
   activeWorkoutSessionId: null,
   activeWorkoutExercises: [],
+  units: "imperial", // "imperial" (lb/in) | "metric" (kg/cm) -- loaded from /api/settings at boot
 };
+
+const KG_PER_LB = 0.45359237;
+const REST_PRESETS_SEC = [30, 60, 90, 120, 180, 300]; // 0:30, 1:00, 1:30, 2:00, 3:00, 5:00
+
+function weightUnit() {
+  return state.units === "imperial" ? "lb" : "kg";
+}
+function heightUnit() {
+  return state.units === "imperial" ? "in" : "cm";
+}
+// Canonical storage is always kg / cm. These only convert for display and input.
+function kgToDisplay(kg) {
+  if (kg == null) return null;
+  const v = state.units === "imperial" ? kg / KG_PER_LB : kg;
+  return Math.round(v * 10) / 10;
+}
+function displayToKg(value) {
+  const v = parseFloat(value);
+  if (Number.isNaN(v)) return null;
+  return state.units === "imperial" ? v * KG_PER_LB : v;
+}
+function cmToDisplay(cm) {
+  if (cm == null) return null;
+  const v = state.units === "imperial" ? cm / 2.54 : cm;
+  return Math.round(v * 10) / 10;
+}
+function displayToCm(value) {
+  const v = parseFloat(value);
+  if (Number.isNaN(v)) return null;
+  return state.units === "imperial" ? v * 2.54 : v;
+}
+function fmtWeight(kg) {
+  const v = kgToDisplay(kg);
+  return v == null ? "—" : v + weightUnit();
+}
+function fmtRest(sec) {
+  if (!sec) return null;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m + ":" + String(s).padStart(2, "0");
+}
 
 // ---------------------------------------------------------------- helpers ----
 
@@ -113,7 +155,7 @@ function renderRecommendation(reco) {
   if (reco.session_type === "lift") {
     kicker.textContent = "Lift — " + (p.label || "");
     const rows = p.exercises
-      .map((e) => '<div class="tnum" style="font-size:0.85rem;margin-top:0.25rem;">' + e.name + " — " + e.sets + "×" + e.reps + " @ " + e.load_kg + "kg</div>")
+      .map((e) => '<div class="tnum" style="font-size:0.85rem;margin-top:0.25rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>")
       .join("");
     body.innerHTML =
       '<div style="font-weight:700;font-size:1rem;">' + (p.exercises[0] ? p.exercises[0].name : "Lift session") + "</div>" +
@@ -321,12 +363,14 @@ document.getElementById("btn-add-exercise").addEventListener("click", async () =
       exerciseName = found ? found.name : "Exercise";
     }
 
+    // sensible round default per unit, converted to kg for canonical storage
+    const defaultLoadKg = state.units === "imperial" ? 45 * KG_PER_LB : 20;
     state.activeWorkoutExercises.push({
       exercise_id: exerciseId,
       name: exerciseName,
       sets: 3,
       reps: 8,
-      load_kg: 20,
+      load_kg: defaultLoadKg,
       target_rir: 2,
       loggedSets: [],
     });
@@ -343,38 +387,61 @@ document.getElementById("btn-add-exercise").addEventListener("click", async () =
 function renderLiftExercises() {
   const container = document.getElementById("lift-exercise-list");
   if (!state.activeWorkoutExercises.length) {
-    container.innerHTML = '<div class="empty-note">Nothing added yet — pick an exercise below to get started.</div>';
+    container.innerHTML = '<div class="empty-note">Nothing added yet — pick an exercise below to get started. There\'s no limit on how many exercises or sets you can log.</div>';
     return;
   }
   container.innerHTML = state.activeWorkoutExercises
     .map((ex, i) => {
       const loggedRows = ex.loggedSets
-        .map((s, si) => '<div class="pr-row"><span class="name" style="font-weight:500;">Set ' + (si + 1) + '</span><span class="tnum" style="color:var(--neutral);font-size:0.82rem;">' + s.weight + "kg × " + s.reps + " · RIR " + s.rir + "</span></div>")
+        .map((s, si) => {
+          const rest = s.restSeconds ? " · rested " + fmtRest(s.restSeconds) + " before" : "";
+          return '<div class="pr-row"><span class="name" style="font-weight:500;">Set ' + (si + 1) + '</span><span class="tnum" style="color:var(--neutral);font-size:0.82rem;">' + fmtWeight(s.weightKg) + " × " + s.reps + " · RIR " + s.rir + rest + "</span></div>";
+        })
+        .join("");
+      const restChips = REST_PRESETS_SEC
+        .map((sec, ci) => '<button type="button" class="chip' + (ci === 2 ? " active" : "") + '" data-rest="' + sec + '">' + fmtRest(sec) + "</button>")
         .join("");
       return (
         '<div class="card"><span class="kicker">' + ex.name + '</span>' +
-        '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-bottom:0.6rem;">Target: ' + ex.sets + "×" + ex.reps + " @ " + ex.load_kg + "kg · RIR " + ex.target_rir + "</div>" +
-        '<div style="display:flex;gap:0.5rem;margin-bottom:0.6rem;">' +
-        '<div class="field" style="margin-bottom:0;flex:1;"><label>Weight (kg)</label><input type="number" step="0.5" value="' + ex.load_kg + '" id="ex-' + i + '-weight"></div>' +
-        '<div class="field" style="margin-bottom:0;flex:1;"><label>Reps</label><input type="number" value="' + ex.reps + '" id="ex-' + i + '-reps"></div>' +
-        '<div class="field" style="margin-bottom:0;flex:1;"><label>RIR</label><input type="number" step="0.5" value="' + ex.target_rir + '" id="ex-' + i + '-rir"></div>' +
-        '</div><button class="btn subtle" data-exi="' + i + '" data-action="log-set">Log Set</button>' +
+        '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-bottom:0.6rem;">Target: ' + fmtWeight(ex.load_kg) + " × " + ex.sets + " sets × " + ex.reps + " reps · RIR " + ex.target_rir + "</div>" +
+        '<div style="display:flex;gap:0.5rem;margin-bottom:0.7rem;">' +
+        '<div class="field" style="margin-bottom:0;flex:1;"><label>Weight (' + weightUnit() + ")</label><input type=\"number\" inputmode=\"decimal\" step=\"0.5\" value=\"" + kgToDisplay(ex.load_kg) + '" id="ex-' + i + '-weight"></div>' +
+        '<div class="field" style="margin-bottom:0;flex:1;"><label>Reps</label><input type="number" inputmode="numeric" value="' + ex.reps + '" id="ex-' + i + '-reps"></div>' +
+        '<div class="field" style="margin-bottom:0;flex:1;"><label>RIR</label><input type="number" inputmode="decimal" step="0.5" value="' + ex.target_rir + '" id="ex-' + i + '-rir"></div>' +
+        "</div>" +
+        '<div class="field" style="margin-bottom:0.7rem;"><label>Rest before this set (optional)</label>' +
+        '<div class="chip-row" id="ex-' + i + '-rest-chips">' + restChips + "</div></div>" +
+        '<button class="btn subtle" data-exi="' + i + '" data-action="log-movement">Log Movement</button>' +
         '<div style="margin-top:0.5rem;">' + loggedRows + "</div></div>"
       );
     })
     .join("");
 
-  container.querySelectorAll('[data-action="log-set"]').forEach((btn) => {
-    btn.addEventListener("click", () => logSet(parseInt(btn.dataset.exi, 10)));
+  container.querySelectorAll('[data-action="log-movement"]').forEach((btn) => {
+    btn.addEventListener("click", () => logMovement(parseInt(btn.dataset.exi, 10)));
+  });
+  container.querySelectorAll('input[type=number]').forEach((input) => {
+    // tap the number and start typing immediately, no manual clear first
+    input.addEventListener("focus", () => input.select());
+  });
+  container.querySelectorAll('[id$="-rest-chips"]').forEach((row) => {
+    row.querySelectorAll(".chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        row.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+      });
+    });
   });
 }
 
-async function logSet(exi) {
+async function logMovement(exi) {
   const ex = state.activeWorkoutExercises[exi];
-  const weight = parseFloat(document.getElementById("ex-" + exi + "-weight").value);
+  const weightKg = displayToKg(document.getElementById("ex-" + exi + "-weight").value);
   const reps = parseInt(document.getElementById("ex-" + exi + "-reps").value, 10);
   const rir = parseFloat(document.getElementById("ex-" + exi + "-rir").value);
-  const setIndex = ex.loggedSets.length + 1;
+  const activeRestChip = document.querySelector('#ex-' + exi + '-rest-chips .chip.active');
+  const restSeconds = activeRestChip ? parseInt(activeRestChip.dataset.rest, 10) : null;
+  const setIndex = ex.loggedSets.length + 1; // no cap -- keep logging as many sets as you did
 
   await api("/workouts/" + state.activeWorkoutSessionId + "/sets", {
     method: "POST",
@@ -384,13 +451,14 @@ async function logSet(exi) {
       prescribed_reps: ex.reps,
       prescribed_load_kg: ex.load_kg,
       actual_reps: reps,
-      actual_load_kg: weight,
+      actual_load_kg: weightKg,
       rir: rir,
+      rest_seconds: restSeconds,
     }),
   });
-  ex.loggedSets.push({ weight: weight, reps: reps, rir: rir });
+  ex.loggedSets.push({ weightKg: weightKg, reps: reps, rir: rir, restSeconds: restSeconds });
   renderLiftExercises();
-  toast("Set " + setIndex + " logged");
+  toast("Movement logged — set " + setIndex);
 }
 
 document.getElementById("btn-finish-workout").addEventListener("click", async () => {
@@ -449,6 +517,7 @@ async function loadProgress() {
 }
 
 async function renderProgressChart(exerciseId) {
+  document.getElementById("chart-kicker").textContent = "Est. 1RM (" + weightUnit() + ")";
   const data = await api("/progress/strength/" + exerciseId);
   const svg = document.getElementById("prog-chart");
   const emptyNote = document.getElementById("chart-empty");
@@ -459,9 +528,10 @@ async function renderProgressChart(exerciseId) {
     return;
   }
   emptyNote.classList.add("hidden");
+  data.points.forEach((p) => { p.est_1rm_display = kgToDisplay(p.est_1rm_kg); });
 
   const W = 280, H = 120;
-  const values = data.points.map((p) => p.est_1rm_kg);
+  const values = data.points.map((p) => p.est_1rm_display);
   const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
   const pad = (max - min) * 0.15 || 5;
   const yMin = min - pad, yMax = max + pad;
@@ -469,7 +539,7 @@ async function renderProgressChart(exerciseId) {
   const xFor = (i) => (n === 1 ? W : (i / (n - 1)) * W);
   const yFor = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
 
-  const coords = data.points.map((p, i) => [xFor(i), yFor(p.est_1rm_kg)]);
+  const coords = data.points.map((p, i) => [xFor(i), yFor(p.est_1rm_display)]);
   const linePath = coords.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
   const areaPath = linePath + " L" + W + "," + H + " L0," + H + " Z";
 
@@ -497,7 +567,7 @@ async function renderProgressChart(exerciseId) {
     const py = (coords[nearest][1] / H) * rect.height;
     tip.style.left = px + "px";
     tip.style.top = py + "px";
-    tip.textContent = data.points[nearest].date + " · " + data.points[nearest].est_1rm_kg + "kg";
+    tip.textContent = data.points[nearest].date + " · " + data.points[nearest].est_1rm_display + weightUnit();
     tip.style.opacity = "1";
   };
   svg.onmouseleave = () => { tip.style.opacity = "0"; };
@@ -512,7 +582,7 @@ async function renderPRs() {
   }
   el.innerHTML = data.prs
     .map((p) => {
-      const val = p.est_1rm_kg != null ? p.est_1rm_kg + " kg" : p.pace_per_km + " /km";
+      const val = p.est_1rm_kg != null ? fmtWeight(p.est_1rm_kg) : p.pace_per_km + " /km";
       return '<div class="pr-row"><div><div class="name">' + p.exercise + '</div><div class="date">' + p.date + "</div></div>" +
         '<div class="val">▲ ' + val + "</div></div>";
     })
@@ -551,12 +621,29 @@ async function loadProgram() {
 
 // --------------------------------------------------------------- settings ----
 
+function setNotifToggle(btn, on) {
+  btn.textContent = on ? "On" : "Off";
+  btn.classList.toggle("subtle", on);
+  btn.classList.toggle("gray", !on);
+  btn.dataset.on = on ? "1" : "0";
+}
+
 async function loadSettings() {
   const data = await api("/settings");
-  document.getElementById("set-name").textContent = data.name;
-  document.getElementById("set-goal").textContent = titleCase(data.goal);
-  document.getElementById("set-experience").textContent = titleCase(data.experience_level);
-  document.getElementById("set-equipment").textContent = titleCase(data.equipment);
+  state.units = data.units;
+
+  document.getElementById("set-input-name").value = data.name || "";
+  document.getElementById("set-input-age").value = data.age ?? "";
+  document.getElementById("height-unit-label").textContent = heightUnit();
+  document.getElementById("set-input-height").value = data.height_cm != null ? cmToDisplay(data.height_cm) : "";
+  document.getElementById("set-input-goal").value = data.goal;
+  document.getElementById("set-input-experience").value = data.experience_level;
+  document.getElementById("set-input-equipment").value = data.equipment;
+
+  document.querySelectorAll("#units-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.val === data.units));
+
+  setNotifToggle(document.getElementById("toggle-notif-daily"), data.notif_daily_recommendation);
+  setNotifToggle(document.getElementById("toggle-notif-readiness"), data.notif_readiness_alerts);
 
   const injuryList = document.getElementById("injury-list");
   if (!data.injuries.length) {
@@ -590,6 +677,94 @@ document.getElementById("btn-add-injury").addEventListener("click", async () => 
   loadToday();
 });
 
+// Units: applies immediately (like a toggle), refreshes any weight already on screen.
+document.querySelectorAll("#units-chips .chip").forEach((chip) => {
+  chip.addEventListener("click", async () => {
+    const newUnits = chip.dataset.val;
+    document.querySelectorAll("#units-chips .chip").forEach((c) => c.classList.toggle("active", c === chip));
+    state.units = newUnits;
+    document.getElementById("height-unit-label").textContent = heightUnit();
+    await api("/settings", { method: "PATCH", body: JSON.stringify({ units: newUnits }) });
+    toast("Units set to " + (newUnits === "imperial" ? "lb / in" : "kg / cm"));
+    await loadSettings();
+    await loadToday();
+    // if the Progress tab has already been visited its chart needs a refresh too
+    const progressSelect = document.getElementById("progress-exercise-select");
+    if (progressSelect.dataset.wired) renderProgressChart(progressSelect.value);
+  });
+});
+
+document.getElementById("btn-save-profile").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-save-profile");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const heightVal = document.getElementById("set-input-height").value;
+    await api("/settings", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: document.getElementById("set-input-name").value.trim() || undefined,
+        age: parseInt(document.getElementById("set-input-age").value, 10) || null,
+        height_cm: heightVal ? displayToCm(heightVal) : null,
+        goal: document.getElementById("set-input-goal").value,
+        experience_level: document.getElementById("set-input-experience").value,
+        equipment: document.getElementById("set-input-equipment").value,
+      }),
+    });
+    toast("Profile saved");
+    loadToday();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save Profile";
+  }
+});
+
+[
+  ["toggle-notif-daily", "notif_daily_recommendation"],
+  ["toggle-notif-readiness", "notif_readiness_alerts"],
+].forEach(([btnId, field]) => {
+  document.getElementById(btnId).addEventListener("click", async () => {
+    const btn = document.getElementById(btnId);
+    const nowOn = btn.dataset.on !== "1";
+    setNotifToggle(btn, nowOn);
+    await api("/settings", { method: "PATCH", body: JSON.stringify({ [field]: nowOn }) });
+    toast((nowOn ? "Enabled" : "Disabled") + " — " + titleCase(field.replace("notif_", "")));
+  });
+});
+
+document.getElementById("btn-save-password").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-save-password");
+  const pw = document.getElementById("set-input-password");
+  const pwConfirm = document.getElementById("set-input-password-confirm");
+  if (!pw.value || pw.value.length < 8) {
+    toast("Password must be at least 8 characters");
+    return;
+  }
+  if (pw.value !== pwConfirm.value) {
+    toast("Passwords don't match");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    await api("/settings/password", {
+      method: "POST",
+      body: JSON.stringify({ new_password: pw.value, confirm_password: pwConfirm.value }),
+    });
+    pw.value = "";
+    pwConfirm.value = "";
+    toast("Password updated");
+  } catch (e) {
+    toast("Something went wrong — try again");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Update Password";
+  }
+});
+
 // ------------------------------------------------------------------- boot ----
 
-loadToday();
+(async function boot() {
+  await loadSettings(); // populates state.units before anything renders a weight
+  await loadToday();
+})();

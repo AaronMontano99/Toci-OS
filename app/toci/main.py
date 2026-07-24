@@ -13,6 +13,7 @@ from . import models, schemas
 from .database import Base
 from .database import engine as db_engine
 from .database import get_db
+from .security import hash_password
 
 Base.metadata.create_all(bind=db_engine)
 
@@ -305,12 +306,39 @@ def get_settings(db: Session = Depends(get_db)):
     injuries = db.query(models.Injury).filter_by(user_id=DEMO_USER_ID, active=True).all()
     return {
         "name": user.name,
+        "age": user.age,
+        "height_cm": user.height_cm,  # canonical storage; convert client-side per `units`
         "goal": user.goal,
         "experience_level": user.experience_level,
         "equipment": user.equipment,
         "units": user.units,
+        "has_password": bool(user.password_hash),
+        "notif_daily_recommendation": user.notif_daily_recommendation,
+        "notif_readiness_alerts": user.notif_readiness_alerts,
         "injuries": [{"id": i.id, "body_region": i.body_region, "description": i.description} for i in injuries],
     }
+
+
+@app.patch("/api/settings")
+def update_settings(payload: schemas.SettingsUpdateIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(user, field, value)
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/settings/password")
+def update_password(payload: schemas.PasswordUpdateIn, db: Session = Depends(get_db)):
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(400, "Passwords don't match")
+    if len(payload.new_password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}
 
 
 @app.post("/api/injuries")
