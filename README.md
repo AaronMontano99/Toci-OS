@@ -6,7 +6,11 @@ An adaptive AI fitness coach — not a workout tracker. It remembers your workou
 
 ## Status
 
-Architecture and product design phase. No application code yet — this repo currently holds the system design: product architecture, UX, data model, and the recommendation engine logic, before implementation begins.
+A working local demo exists: real readiness scoring, progressive overload, and autoregulation, running against a real (SQLite) database with a real UI you can log into and use.
+
+**Run it:** see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
+
+Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See the "what's deliberately not production-ready" section in the app README for the full list before mistaking this for more than it is.
 
 Full spec: **[docs/architecture.md](docs/architecture.md)**
 Rendered version: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
