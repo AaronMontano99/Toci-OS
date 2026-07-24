@@ -35,3 +35,9 @@ class RunIn(BaseModel):
 class InjuryIn(BaseModel):
     body_region: str
     description: Optional[str] = None
+
+
+class ExerciseIn(BaseModel):
+    name: str
+    movement_pattern: Optional[str] = "custom"
+    primary_muscle_group: Optional[str] = "custom"

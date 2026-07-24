@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import engine as reco_engine
@@ -153,6 +154,27 @@ def submit_checkin(payload: schemas.CheckinIn, db: Session = Depends(get_db)):
 def list_exercises(db: Session = Depends(get_db)):
     rows = db.query(models.Exercise).order_by(models.Exercise.name).all()
     return [{"id": e.id, "name": e.name, "primary_muscle_group": e.primary_muscle_group} for e in rows]
+
+
+@app.post("/api/exercises")
+def add_exercise(payload: schemas.ExerciseIn, db: Session = Depends(get_db)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(400, "Exercise name is required")
+    # case-insensitive upsert-by-name so retyping an existing exercise
+    # (different casing included) doesn't create a duplicate
+    existing = db.query(models.Exercise).filter(func.lower(models.Exercise.name) == name.lower()).first()
+    if existing:
+        return {"id": existing.id, "name": existing.name}
+    row = models.Exercise(
+        name=name,
+        movement_pattern=payload.movement_pattern or "custom",
+        primary_muscle_group=payload.primary_muscle_group or "custom",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "name": row.name}
 
 
 @app.post("/api/workouts")

@@ -114,6 +114,20 @@
     <span class="kicker" id="lift-session-kicker">—</span>
     <h1 class="h1" id="lift-session-title">Workout</h1>
     <div id="lift-exercise-list"></div>
+
+    <div class="card" id="add-exercise-card">
+      <span class="kicker">Add Exercise</span>
+      <select class="chip-select" id="add-exercise-select" style="margin-bottom:0.6rem;">
+        <option value="">Choose an exercise…</option>
+        <option value="__custom__">＋ Custom exercise…</option>
+      </select>
+      <div class="field hidden" id="custom-exercise-field" style="margin-bottom:0.6rem;">
+        <label>Custom exercise name</label>
+        <input type="text" id="custom-exercise-name" placeholder="e.g. Cable Fly">
+      </div>
+      <button class="btn subtle" id="btn-add-exercise">＋ Add to Workout</button>
+    </div>
+
     <button class="btn primary" id="btn-finish-workout" style="margin-top:0.6rem;">Finish Workout</button>
   </section>
 

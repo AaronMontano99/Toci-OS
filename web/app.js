@@ -241,10 +241,15 @@ document.getElementById("btn-open-run").addEventListener("click", () => {
 
 // ------------------------------------------------------------ log a lift ----
 
+async function ensureExercisesLoaded() {
+  if (!state.exercises.length) state.exercises = await api("/exercises");
+  return state.exercises;
+}
+
 async function openLiftSession() {
   const reco = state.today.recommendation;
   const exercises = reco.session_type === "lift" ? reco.prescription.exercises : [];
-  if (!exercises.length) toast("No lift prescribed today — logging freeform");
+  if (!exercises.length) toast("No lift prescribed today — add exercises below to log freely");
 
   const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: reco.prescription.label || "Freeform" }) });
   state.activeWorkoutSessionId = session.id;
@@ -252,14 +257,93 @@ async function openLiftSession() {
 
   document.getElementById("lift-session-kicker").textContent = state.activeWorkoutExercises.length ? "In progress" : "Freeform";
   document.getElementById("lift-session-title").textContent = reco.prescription.label || "Workout";
+
+  await ensureExercisesLoaded();
+  populateAddExerciseSelect();
+  resetAddExerciseForm();
   renderLiftExercises();
   showView("view-lift");
 }
 
+function populateAddExerciseSelect() {
+  const select = document.getElementById("add-exercise-select");
+  const options = state.exercises
+    .map((e) => '<option value="' + e.id + '">' + e.name + "</option>")
+    .join("");
+  select.innerHTML = '<option value="">Choose an exercise…</option><option value="__custom__">＋ Custom exercise…</option>' + options;
+}
+
+function resetAddExerciseForm() {
+  document.getElementById("add-exercise-select").value = "";
+  document.getElementById("custom-exercise-field").classList.add("hidden");
+  document.getElementById("custom-exercise-name").value = "";
+}
+
+document.getElementById("add-exercise-select").addEventListener("change", (e) => {
+  document.getElementById("custom-exercise-field").classList.toggle("hidden", e.target.value !== "__custom__");
+});
+
+document.getElementById("btn-add-exercise").addEventListener("click", async () => {
+  const select = document.getElementById("add-exercise-select");
+  const btn = document.getElementById("btn-add-exercise");
+  const choice = select.value;
+
+  if (!choice) {
+    toast("Choose an exercise first");
+    return;
+  }
+  if (!state.activeWorkoutSessionId) {
+    toast("Start a workout first");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Adding…";
+  try {
+    let exerciseId, exerciseName;
+    if (choice === "__custom__") {
+      const name = document.getElementById("custom-exercise-name").value.trim();
+      if (!name) {
+        toast("Type an exercise name first");
+        return;
+      }
+      const created = await api("/exercises", { method: "POST", body: JSON.stringify({ name: name }) });
+      exerciseId = created.id;
+      exerciseName = created.name;
+      // cache it so it shows up next time without a refetch, and in the Progress picker too
+      if (!state.exercises.some((e) => e.id === exerciseId)) {
+        state.exercises.push({ id: exerciseId, name: exerciseName, primary_muscle_group: "custom" });
+      }
+      populateAddExerciseSelect();
+    } else {
+      exerciseId = parseInt(choice, 10);
+      const found = state.exercises.find((e) => e.id === exerciseId);
+      exerciseName = found ? found.name : "Exercise";
+    }
+
+    state.activeWorkoutExercises.push({
+      exercise_id: exerciseId,
+      name: exerciseName,
+      sets: 3,
+      reps: 8,
+      load_kg: 20,
+      target_rir: 2,
+      loggedSets: [],
+    });
+
+    resetAddExerciseForm();
+    renderLiftExercises();
+    toast(exerciseName + " added");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "＋ Add to Workout";
+  }
+});
+
 function renderLiftExercises() {
   const container = document.getElementById("lift-exercise-list");
   if (!state.activeWorkoutExercises.length) {
-    container.innerHTML = '<div class="empty-note">No prescribed exercises today — finish the workout when done.</div>';
+    container.innerHTML = '<div class="empty-note">Nothing added yet — pick an exercise below to get started.</div>';
     return;
   }
   container.innerHTML = state.activeWorkoutExercises
