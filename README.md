@@ -11,6 +11,13 @@ Architecture and product design phase. No application code yet — this repo cur
 Full spec: **[docs/architecture.md](docs/architecture.md)**
 Rendered version: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
 
+## Design
+
+UI concept for all 8 core screens (Onboarding, Today, Log a Lift, Log a Run, Recovery, Progress, Program, Settings), built on the [Subtle Gradient Design System](docs/design-system.md):
+
+Full breakdown: **[docs/ui-concept.md](docs/ui-concept.md)**
+Live, interactive version: **[Toci OS — UI Concept](https://claude.ai/code/artifact/d30e1511-5324-47f5-b913-b0a14a455339)**
+
 ## Decisions locked
 
 | Decision | Choice |
