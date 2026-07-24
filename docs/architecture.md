@@ -1,4 +1,4 @@
-# Hybrid OS — Architecture Draft v0.1
+# Toci OS — Architecture Draft v0.1
 
 *Product & systems architecture. Prepared for review, not implementation.*
 

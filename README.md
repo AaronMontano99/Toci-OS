@@ -1,4 +1,4 @@
-# Hybrid OS
+# Toci OS
 
 An adaptive AI fitness coach — not a workout tracker. It remembers your workouts, recovery, nutrition, cardio, and wearable data, and tells you exactly what to do each day: workout selection, weights, progression, or recovery.
 
@@ -9,7 +9,7 @@ An adaptive AI fitness coach — not a workout tracker. It remembers your workou
 Architecture and product design phase. No application code yet — this repo currently holds the system design: product architecture, UX, data model, and the recommendation engine logic, before implementation begins.
 
 Full spec: **[docs/architecture.md](docs/architecture.md)**
-Rendered version: **[Hybrid OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
+Rendered version: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
 
 ## Decisions locked
 
