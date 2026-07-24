@@ -39,9 +39,19 @@
     </div>
 
     <div class="card" id="reco-card">
-      <span class="kicker" id="reco-kicker">—</span>
-      <div id="reco-body">Loading…</div>
+      <div class="reco-header">
+        <div class="reco-ico" id="reco-ico"></div>
+        <div style="min-width:0;flex:1;">
+          <span class="kicker" id="reco-kicker">—</span>
+          <div id="reco-body">Loading…</div>
+        </div>
+      </div>
       <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.8rem;">Start</button>
+    </div>
+
+    <div class="card tight" id="music-card">
+      <span class="kicker">Music</span>
+      <div id="music-body">Loading…</div>
     </div>
 
     <div class="set-group-label">This Week</div>
@@ -255,6 +265,27 @@
       <div class="set-row"><span class="k">Health Connect</span><span class="v"><span class="badge neutral">Simulated on laptop</span></span></div>
     </div>
     <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Recovery data is simulated for this demo — adjust it from the Recovery Check-in screen.</div>
+
+    <div class="set-group-label">Connected Music</div>
+    <div class="card">
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
+        This is a real Spotify connection, not a mock. Create a free app at
+        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
+        add this exact Redirect URI to it, then paste the app's Client ID below:
+      </div>
+      <div class="tnum" id="spotify-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
+      <div class="field"><label>Spotify Client ID</label><input type="text" id="spotify-client-id-input" placeholder="paste from your Spotify app"></div>
+      <button class="btn subtle" id="btn-save-spotify-client-id">Save Client ID</button>
+      <hr class="hair">
+      <div id="spotify-connect-area"><div class="empty-note">Loading…</div></div>
+    </div>
+
+    <div class="card tight">
+      <div class="set-row"><span class="k">Apple Music</span><span class="v"><button class="btn small gray" data-stub-note="Needs a paid Apple Developer Program membership ($99/yr) plus MusicKit JS setup — not wired up yet.">Connect</button></span></div>
+      <div class="set-row"><span class="k">Pandora</span><span class="v"><button class="btn small gray" data-stub-note="Pandora has no public third-party OAuth API for consumer apps to connect to.">Connect</button></span></div>
+      <div class="set-row"><span class="k">SoundCloud</span><span class="v"><button class="btn small gray" data-stub-note="SoundCloud's API requires app approval before it can be used — not wired up yet.">Connect</button></span></div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">These three aren't functional yet — tap Connect to see what each actually needs.</div>
   </section>
 
   <div class="tab-bar">

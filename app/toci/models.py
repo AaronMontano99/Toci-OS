@@ -31,6 +31,13 @@ class User(Base):
     notif_daily_recommendation = Column(Boolean, nullable=False, default=True)
     notif_readiness_alerts = Column(Boolean, nullable=False, default=True)
 
+    # Spotify: real OAuth (Authorization Code + PKCE), no client secret needed.
+    # User supplies their own client_id from developer.spotify.com/dashboard.
+    spotify_client_id = Column(String)
+    spotify_access_token = Column(String)
+    spotify_refresh_token = Column(String)
+    spotify_token_expires_at = Column(DateTime)
+
 
 class Injury(Base):
     __tablename__ = "injuries"

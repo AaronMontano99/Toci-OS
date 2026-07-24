@@ -2,14 +2,17 @@ import datetime as dt
 import random
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import engine as reco_engine
 from . import models, schemas
+from . import spotify as spotify_client
 from .database import Base
 from .database import engine as db_engine
 from .database import get_db
@@ -20,6 +23,10 @@ Base.metadata.create_all(bind=db_engine)
 DEMO_USER_ID = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WEB_DIR = REPO_ROOT / "web"
+# Must match exactly what's registered in the Spotify app's dashboard settings.
+# Use 127.0.0.1, not localhost, to open the app -- Spotify's own recommendation
+# for loopback redirect URIs, and it's what this string is fixed to.
+SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/spotify/callback"
 
 app = FastAPI(title="Toci OS API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -366,6 +373,80 @@ def remove_injury(injury_id: int, db: Session = Depends(get_db)):
         row.active = False
         db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- spotify ----
+# Real Authorization Code + PKCE flow -- see toci/spotify.py for the "why".
+
+@app.get("/api/spotify/status")
+def spotify_status(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    return {
+        "client_id_configured": bool(user.spotify_client_id),
+        "client_id": user.spotify_client_id or "",
+        "connected": bool(user.spotify_access_token),
+        "redirect_uri": SPOTIFY_REDIRECT_URI,
+    }
+
+
+@app.post("/api/spotify/client-id")
+def spotify_set_client_id(payload: schemas.SpotifyClientIdIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.spotify_client_id = payload.client_id.strip()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/spotify/callback")
+def spotify_callback(payload: schemas.SpotifyCallbackIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    if not user.spotify_client_id:
+        raise HTTPException(400, "No Spotify Client ID configured yet — add one in Settings first")
+    try:
+        spotify_client.exchange_code(db, user, payload.code, payload.code_verifier, payload.redirect_uri)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(400, "Spotify token exchange failed: " + e.response.text)
+    return {"ok": True}
+
+
+@app.post("/api/spotify/disconnect")
+def spotify_disconnect(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.spotify_access_token = None
+    user.spotify_refresh_token = None
+    user.spotify_token_expires_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/spotify/now-playing")
+def spotify_now_playing(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    if not user.spotify_access_token:
+        return {"connected": False}
+    result = spotify_client.get_now_playing(db, user)
+    if result is None:
+        return {"connected": False}
+    result["connected"] = True
+    return result
+
+
+@app.post("/api/spotify/playback")
+def spotify_playback(payload: schemas.SpotifyPlaybackIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    ok, error = spotify_client.set_playback(db, user, payload.action)
+    if not ok:
+        raise HTTPException(400, error or "Playback control failed")
+    return {"ok": True}
+
+
+@app.get("/spotify/callback")
+def spotify_callback_page():
+    # Spotify redirects the browser here (not an /api/ path) after the user
+    # approves. This isn't a real page -- it just serves the SPA shell so the
+    # frontend's own JS can read `?code=` from the URL and complete the
+    # exchange. Without this route, StaticFiles would 404 on this exact path.
+    return FileResponse(str(WEB_DIR / "index.html"))
 
 
 # Mount the static frontend last so it doesn't shadow the /api/* routes above.

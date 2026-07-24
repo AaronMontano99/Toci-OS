@@ -59,3 +59,17 @@ class SettingsUpdateIn(BaseModel):
 class PasswordUpdateIn(BaseModel):
     new_password: str
     confirm_password: str
+
+
+class SpotifyClientIdIn(BaseModel):
+    client_id: str
+
+
+class SpotifyCallbackIn(BaseModel):
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+
+class SpotifyPlaybackIn(BaseModel):
+    action: str  # "play" | "pause"

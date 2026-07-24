@@ -100,6 +100,7 @@ document.querySelectorAll(".tab-bar .tab").forEach((t) => {
   t.addEventListener("click", () => {
     const id = t.dataset.tab;
     showView(id);
+    if (id === "view-today") loadMusicCard();
     if (id === "view-progress") loadProgress();
     if (id === "view-program") loadProgram();
     if (id === "view-settings") loadSettings();
@@ -145,12 +146,85 @@ async function loadToday() {
   renderWeekStrip(data.week);
 }
 
+// Simple pictogram figures (circle head + line limbs), one per workout split --
+// same convention as exercise-chart icons: minimal enough to always read cleanly.
+const PICTOGRAMS = {
+  bench: // Upper Push -- lying on a bench, bar pressed overhead
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M10 48H40M14 48V54M36 48V54"/>' +
+    '<circle cx="10" cy="42" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M15 42H30"/><path d="M30 42L34 48L30 54"/>' +
+    '<path d="M22 42V20"/>' +
+    '<path d="M10 20H34" stroke-width="3.8"/>' +
+    '<circle cx="10" cy="20" r="4" fill="currentColor" stroke="none"/><circle cx="34" cy="20" r="4" fill="currentColor" stroke="none"/>' +
+    "</svg>",
+  deadlift: // Upper Pull -- bent-over hinge, bar at the floor
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="20" cy="14" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M20 19L34 34"/>' +
+    '<path d="M34 34L30 54M34 34L38 54"/>' +
+    '<path d="M21 20L22 50"/>' +
+    '<path d="M12 50H34" stroke-width="3.8"/>' +
+    '<circle cx="12" cy="50" r="5" fill="currentColor" stroke="none"/><circle cx="34" cy="50" r="5" fill="currentColor" stroke="none"/>' +
+    "</svg>",
+  squat: // Lower Body -- bar racked on the shoulders, knees bent
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="32" cy="12" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M32 19V32"/>' +
+    '<path d="M32 32L24 42L22 54M32 32L40 42L42 54"/>' +
+    '<path d="M28 19L22 17M36 19L42 17"/>' +
+    '<path d="M18 19H46" stroke-width="3.8"/>' +
+    '<circle cx="18" cy="19" r="4" fill="currentColor" stroke="none"/><circle cx="46" cy="19" r="4" fill="currentColor" stroke="none"/>' +
+    "</svg>",
+  fullbody: // Full Body -- standing, a dumbbell in each hand
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="32" cy="12" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M32 17V36"/>' +
+    '<path d="M32 36L26 54M32 36L38 54"/>' +
+    '<path d="M32 20L20 32M32 20L44 32"/>' +
+    '<circle cx="20" cy="32" r="4" fill="currentColor" stroke="none"/><circle cx="44" cy="32" r="4" fill="currentColor" stroke="none"/>' +
+    "</svg>",
+  running: // Run day -- mid-stride
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="24" cy="12" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M24 17L32 32"/>' +
+    '<path d="M32 32L40 28L44 38"/>' +
+    '<path d="M32 32L22 40L16 48"/>' +
+    '<path d="M27 20L18 26M27 20L38 18"/>' +
+    "</svg>",
+  resting: // Recover / rest -- relaxed, reclined
+    '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="14" cy="38" r="5" fill="currentColor" stroke="none"/>' +
+    '<path d="M19 38L34 30"/>' +
+    '<path d="M34 30L48 34"/>' +
+    '<path d="M22 34L14 30"/>' +
+    "</svg>",
+};
+
+const LIFT_LABEL_PICTOGRAMS = {
+  "Upper Push": "bench",
+  "Upper Pull": "deadlift",
+  "Lower Body": "squat",
+  "Full Body": "fullbody",
+};
+
+function pictogramFor(reco) {
+  if (reco.session_type === "lift") {
+    const key = LIFT_LABEL_PICTOGRAMS[reco.prescription.label] || "fullbody";
+    return PICTOGRAMS[key];
+  }
+  if (reco.session_type === "run") return PICTOGRAMS.running;
+  return PICTOGRAMS.resting; // recover | rest
+}
+
 function renderRecommendation(reco) {
   const kicker = document.getElementById("reco-kicker");
   const body = document.getElementById("reco-body");
   const startBtn = document.getElementById("btn-start-session");
   const p = reco.prescription;
   const reasoning = (reco.reasoning || []).join(" ");
+
+  document.getElementById("reco-ico").innerHTML = pictogramFor(reco);
 
   if (reco.session_type === "lift") {
     kicker.textContent = "Lift — " + (p.label || "");
@@ -681,6 +755,8 @@ async function loadSettings() {
       });
     });
   }
+
+  await loadSpotifySettings();
 }
 
 document.getElementById("btn-add-injury").addEventListener("click", async () => {
@@ -778,9 +854,155 @@ document.getElementById("btn-save-password").addEventListener("click", async () 
   }
 });
 
+// -------------------------------------------------------------- spotify -----
+// Real Authorization Code + PKCE flow against the Spotify Web API -- no
+// client secret involved, that's the point of PKCE for a public client.
+
+const SPOTIFY_SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+
+function base64UrlEncode(buffer) {
+  let str = "";
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomVerifier(length) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const random = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(random).map((b) => chars[b % chars.length]).join("");
+}
+
+async function pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return base64UrlEncode(digest);
+}
+
+async function connectSpotify(clientId, redirectUri) {
+  if (!clientId) {
+    toast("Save a Client ID first");
+    return;
+  }
+  const verifier = randomVerifier(64);
+  sessionStorage.setItem("spotify_code_verifier", verifier);
+  const challenge = await pkceChallenge(verifier);
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: redirectUri,
+    code_challenge_method: "S256",
+    code_challenge: challenge,
+    scope: SPOTIFY_SCOPES,
+  });
+  window.location.href = "https://accounts.spotify.com/authorize?" + params.toString();
+}
+
+async function handleSpotifyRedirectIfPresent() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const authError = params.get("error");
+  if (!code && !authError) return;
+
+  history.replaceState({}, "", window.location.pathname.startsWith("/spotify") ? "/" : window.location.pathname);
+
+  if (authError) {
+    toast("Spotify: " + authError);
+    return;
+  }
+  const verifier = sessionStorage.getItem("spotify_code_verifier");
+  sessionStorage.removeItem("spotify_code_verifier");
+  if (!verifier) {
+    toast("Spotify connection expired — try connecting again");
+    return;
+  }
+  try {
+    const status = await api("/spotify/status"); // canonical redirect_uri, same one used to open the auth request
+    await api("/spotify/callback", {
+      method: "POST",
+      body: JSON.stringify({ code: code, code_verifier: verifier, redirect_uri: status.redirect_uri }),
+    });
+    toast("Spotify connected");
+  } catch (e) {
+    toast("Spotify connection failed");
+  }
+}
+
+async function loadSpotifySettings() {
+  const status = await api("/spotify/status");
+  document.getElementById("spotify-redirect-display").textContent = status.redirect_uri;
+  document.getElementById("spotify-client-id-input").value = status.client_id;
+
+  const area = document.getElementById("spotify-connect-area");
+  if (!status.client_id_configured) {
+    area.innerHTML = '<div class="empty-note">Save a Client ID above first.</div>';
+  } else if (status.connected) {
+    area.innerHTML = '<button class="btn outline" id="btn-disconnect-spotify">Disconnect Spotify</button>';
+    document.getElementById("btn-disconnect-spotify").addEventListener("click", async () => {
+      await api("/spotify/disconnect", { method: "POST" });
+      toast("Spotify disconnected");
+      loadSpotifySettings();
+      loadMusicCard();
+    });
+  } else {
+    area.innerHTML = '<button class="btn primary" id="btn-connect-spotify">Connect Spotify</button>';
+    document.getElementById("btn-connect-spotify").addEventListener("click", () => connectSpotify(status.client_id, status.redirect_uri));
+  }
+}
+
+document.getElementById("btn-save-spotify-client-id").addEventListener("click", async () => {
+  const input = document.getElementById("spotify-client-id-input");
+  const val = input.value.trim();
+  if (!val) {
+    toast("Paste a Client ID first");
+    return;
+  }
+  await api("/spotify/client-id", { method: "POST", body: JSON.stringify({ client_id: val }) });
+  toast("Client ID saved");
+  loadSpotifySettings();
+});
+
+document.querySelectorAll("[data-stub-note]").forEach((btn) => {
+  btn.addEventListener("click", () => toast(btn.dataset.stubNote));
+});
+
+async function loadMusicCard() {
+  const body = document.getElementById("music-body");
+  const status = await api("/spotify/status");
+  if (!status.connected) {
+    body.innerHTML = '<div style="font-size:0.85rem;color:var(--neutral-2);">Not connected — <a href="#" id="music-goto-settings">connect Spotify in Settings</a>.</div>';
+    document.getElementById("music-goto-settings").addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelector('.tab-bar [data-tab="view-settings"]').click();
+    });
+    return;
+  }
+  const now = await api("/spotify/now-playing");
+  if (!now.connected || !now.track) {
+    body.innerHTML = '<div style="font-size:0.85rem;color:var(--neutral-2);">Connected — nothing playing right now.</div>';
+    return;
+  }
+  const art = now.album_art ? '<img src="' + now.album_art + '" alt="" style="width:44px;height:44px;border-radius:8px;flex:none;">' : "";
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;gap:0.7rem;">' + art +
+    '<div style="min-width:0;flex:1;">' +
+    '<div style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + now.track + "</div>" +
+    '<div style="font-size:0.78rem;color:var(--neutral-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + now.artist + "</div></div>" +
+    '<button class="btn small subtle" id="btn-toggle-playback" style="flex:none;">' + (now.playing ? "Pause" : "Play") + "</button></div>";
+  document.getElementById("btn-toggle-playback").addEventListener("click", async () => {
+    try {
+      await api("/spotify/playback", { method: "POST", body: JSON.stringify({ action: now.playing ? "pause" : "play" }) });
+      loadMusicCard();
+    } catch (e) {
+      toast("Playback control failed — is Spotify open somewhere?");
+    }
+  });
+}
+
 // ------------------------------------------------------------------- boot ----
 
 (async function boot() {
+  await handleSpotifyRedirectIfPresent(); // must run before the settings/today fetches below
   await loadSettings(); // populates state.units before anything renders a weight
   await loadToday();
+  await loadMusicCard();
 })();

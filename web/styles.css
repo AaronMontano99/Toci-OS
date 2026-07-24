@@ -124,6 +124,13 @@ a { color: var(--brand); }
 .card.tight { padding: 0.85rem 1rem; }
 .kicker { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); margin-bottom: 0.3rem; display: block; }
 
+.reco-header { display: flex; gap: 0.85rem; align-items: flex-start; }
+.reco-ico {
+  flex: none; width: 58px; height: 58px; border-radius: 14px;
+  background: var(--brand-subtle-bg); display: flex; align-items: center; justify-content: center;
+}
+.reco-ico svg { width: 40px; height: 40px; color: var(--brand-dark); }
+
 .btn { display: flex; align-items: center; justify-content: center; gap: 0.4rem; width: 100%; padding: 13px 16px; border-radius: 12px; font-size: 0.95rem; font-weight: 600; transition: opacity .1s; }
 .btn:active { opacity: 0.8; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
