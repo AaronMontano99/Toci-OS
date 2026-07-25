@@ -8,7 +8,7 @@ import datetime as dt
 import random
 
 from .database import Base, SessionLocal, engine
-from . import models
+from . import models, nutrition
 
 
 def seed(reset: bool = False):
@@ -22,10 +22,24 @@ def seed(reset: bool = False):
             print("Already seeded — pass --reset to wipe and reseed.")
             return
 
+        calorie_goal = nutrition.compute_calorie_goal(
+            sex="male", weight_kg=79.8, height_cm=177.8, age=27,
+            activity_level="active", goal_pace_key="gain_0_5",
+        )
         db.add(models.User(
             id=1, name="Aaron", age=27, height_cm=177.8,  # 5'10"
             goal="hypertrophy", experience_level="intermediate", equipment="full_gym", units="imperial",
+            goal_weight_kg=83.9,  # 185 lb, matches the seeded hypertrophy goal
+            goal_pace_key="gain_0_5", activity_level="active",  # matches the seeded 6-day program
+            onboarding_completed=True, sex="male", daily_calorie_goal_kcal=calorie_goal,
         ))
+        db.commit()
+
+        # a slight upward trend over the past month, consistent with the seeded
+        # lean-gain goal, so the weight sparkline has something real to show
+        today = dt.date.today()
+        for days_ago, weight_lb in [(21, 173.0), (14, 174.5), (7, 175.2), (0, 176.0)]:
+            db.add(models.BodyMetric(user_id=1, date=today - dt.timedelta(days=days_ago), weight_kg=round(weight_lb * 0.45359237, 1)))
         db.commit()
 
         exercise_defs = [

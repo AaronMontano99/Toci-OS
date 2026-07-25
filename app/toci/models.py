@@ -48,6 +48,17 @@ class User(Base):
     whoop_token_expires_at = Column(DateTime)
     wearable_display_stats = Column(JSON)  # up to 3 keys from whoop.STAT_CATALOG, e.g. ["recovery_score","hrv_rmssd_milli","strain"]
 
+    # Onboarding: goal_pace_key / activity_level are plain unvalidated strings,
+    # same convention as goal/experience_level/equipment above -- the option
+    # catalogs (label + description) live in the frontend, not here.
+    goal_weight_kg = Column(Float)
+    goal_pace_key = Column(String)  # e.g. "lose_1", "maintain", "gain_0_5"
+    activity_level = Column(String)  # "sedentary" | "lightly_active" | "active" | "very_active"
+    onboarding_completed = Column(Boolean, nullable=False, default=False)
+    sex = Column(String)  # "male" | "female" -- used only for the Mifflin-St Jeor BMR formula
+    daily_calorie_goal_kcal = Column(Float)  # computed once at onboarding; editable after, not auto-recomputed
+    is_premium = Column(Boolean, nullable=False, default=False)  # demo stub -- no real payment processor exists
+
 
 class Injury(Base):
     __tablename__ = "injuries"

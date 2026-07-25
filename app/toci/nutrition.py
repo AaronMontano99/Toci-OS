@@ -188,3 +188,33 @@ def log_saved_meal(db: Session, user_id: int, meal: models.SavedMeal, multiplier
     for entry in created:
         db.refresh(entry)
     return created
+
+
+# Standard Mifflin-St Jeor BMR -> TDEE -> goal-pace-adjusted daily calorie target.
+# Deliberately simple and transparent (no ML), matching engine.py's rule-based style.
+
+ACTIVITY_MULTIPLIERS = {
+    "sedentary": 1.2,
+    "lightly_active": 1.375,
+    "active": 1.55,
+    "very_active": 1.725,
+}
+
+# kcal/day adjustment, derived from ~3500 kcal per lb spread over 7 days
+GOAL_PACE_KCAL_ADJUSTMENT = {
+    "lose_2": -1000,
+    "lose_1_5": -750,
+    "lose_1": -500,
+    "lose_0_5": -250,
+    "maintain": 0,
+    "gain_0_5": 250,
+    "gain_1": 500,
+}
+
+
+def compute_calorie_goal(sex: str, weight_kg: float, height_cm: float, age: int, activity_level: str, goal_pace_key: str) -> float:
+    bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age
+    bmr += 5 if sex == "male" else -161
+    tdee = bmr * ACTIVITY_MULTIPLIERS.get(activity_level, 1.2)
+    adjustment = GOAL_PACE_KCAL_ADJUSTMENT.get(goal_pace_key, 0)
+    return round(tdee + adjustment)

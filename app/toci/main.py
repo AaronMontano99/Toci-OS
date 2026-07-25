@@ -304,6 +304,132 @@ def get_prs(db: Session = Depends(get_db)):
     return {"prs": prs[:10]}
 
 
+@app.get("/api/body-weight/history")
+def body_weight_history(days: int = 30, db: Session = Depends(get_db)):
+    start = dt.date.today() - dt.timedelta(days=days)
+    rows = (
+        db.query(models.BodyMetric)
+        .filter(models.BodyMetric.user_id == DEMO_USER_ID, models.BodyMetric.date >= start)
+        .order_by(models.BodyMetric.date)
+        .all()
+    )
+    return {"points": [{"date": r.date.isoformat(), "weight_kg": r.weight_kg} for r in rows if r.weight_kg is not None]}
+
+
+@app.get("/api/progress/weekly-summary")
+def progress_weekly_summary(db: Session = Depends(get_db)):
+    today = dt.date.today()
+    week_start = today - dt.timedelta(days=6)
+
+    food_rows = (
+        db.query(models.FoodLogEntry, models.FoodItem)
+        .join(models.FoodItem, models.FoodLogEntry.food_item_id == models.FoodItem.id)
+        .filter(models.FoodLogEntry.user_id == DEMO_USER_ID, models.FoodLogEntry.date >= week_start)
+        .all()
+    )
+    calories_this_week = sum(f.calories * e.servings for e, f in food_rows)
+    days_logged = len({e.date for e, f in food_rows})
+    avg_daily_calories = round(calories_this_week / days_logged) if days_logged else 0
+
+    weight_rows = (
+        db.query(models.BodyMetric)
+        .filter(models.BodyMetric.user_id == DEMO_USER_ID, models.BodyMetric.date >= week_start)
+        .order_by(models.BodyMetric.date)
+        .all()
+    )
+    weight_delta_kg = round(weight_rows[-1].weight_kg - weight_rows[0].weight_kg, 1) if len(weight_rows) >= 2 else None
+
+    _, meso = _active_mesocycle(db)
+    program_days = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()
+    by_weekday = {d.weekday: d for d in program_days}
+    planned_days = 0
+    matched_days = 0
+    checkin_days = 0
+    for i in range(7):
+        d = week_start + dt.timedelta(days=i)
+        pd = by_weekday.get(d.weekday())
+        if pd and pd.day_type in ("lift", "run"):
+            planned_days += 1
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
+                matched_days += 1
+        if db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=d).first():
+            checkin_days += 1
+
+    workout_adherence = (matched_days / planned_days) if planned_days else 1.0
+    nutrition_adherence = days_logged / 7
+    checkin_adherence = checkin_days / 7
+    score = round(100 * (0.5 * workout_adherence + 0.3 * nutrition_adherence + 0.2 * checkin_adherence))
+    band = "Excellent" if score >= 80 else "Good" if score >= 50 else "Needs Work"
+
+    return {
+        "calories_this_week": round(calories_this_week),
+        "avg_daily_calories": avg_daily_calories,
+        "days_logged": days_logged,
+        "weight_delta_kg": weight_delta_kg,
+        "consistency": {
+            "score": score,
+            "band": band,
+            "workout_adherence": round(workout_adherence, 2),
+            "nutrition_adherence": round(nutrition_adherence, 2),
+            "checkin_adherence": round(checkin_adherence, 2),
+        },
+    }
+
+
+@app.get("/api/workouts/last-session")
+def last_session_for_split(label: str, day_type: str, db: Session = Depends(get_db)):
+    """Powers 'what did I do last time I trained this split' when tapping a
+    day in This Week's Training -- looks up the most recent session matching
+    this label (lift) or the most recent run (cardio has no per-split label)."""
+    if day_type == "lift":
+        session = (
+            db.query(models.WorkoutSession)
+            .filter(models.WorkoutSession.user_id == DEMO_USER_ID, models.WorkoutSession.label == label, models.WorkoutSession.date < dt.date.today())
+            .order_by(models.WorkoutSession.date.desc())
+            .first()
+        )
+        if not session:
+            return {"found": False}
+        rows = (
+            db.query(models.WorkoutSet, models.Exercise.name)
+            .join(models.Exercise, models.WorkoutSet.exercise_id == models.Exercise.id)
+            .filter(models.WorkoutSet.workout_session_id == session.id)
+            .order_by(models.WorkoutSet.id)
+            .all()
+        )
+        grouped, order = {}, []
+        for s, name in rows:
+            if name not in grouped:
+                grouped[name] = []
+                order.append(name)
+            grouped[name].append(s)
+        exercises = []
+        for name in order:
+            sets = grouped[name]
+            top = max(sets, key=lambda r: (r.actual_load_kg or 0))
+            exercises.append({"name": name, "sets": len(sets), "top_load_kg": top.actual_load_kg, "top_reps": top.actual_reps})
+        return {"found": True, "type": "lift", "date": session.date.isoformat(), "exercises": exercises}
+
+    if day_type == "run":
+        session = (
+            db.query(models.CardioSession)
+            .filter(models.CardioSession.user_id == DEMO_USER_ID, models.CardioSession.date < dt.date.today())
+            .order_by(models.CardioSession.date.desc())
+            .first()
+        )
+        if not session:
+            return {"found": False}
+        return {
+            "found": True, "type": "run", "date": session.date.isoformat(),
+            "duration_min": round(session.duration_seconds / 60),
+            "distance_km": round((session.distance_meters or 0) / 1000, 2),
+            "avg_hr": session.avg_hr,
+        }
+
+    return {"found": False}
+
+
 # --------------------------------------------------------------- program ----
 
 @app.get("/api/program")
@@ -327,6 +453,12 @@ def get_program(db: Session = Depends(get_db)):
 def get_settings(db: Session = Depends(get_db)):
     user = db.query(models.User).get(DEMO_USER_ID)
     injuries = db.query(models.Injury).filter_by(user_id=DEMO_USER_ID, active=True).all()
+    latest_weight = (
+        db.query(models.BodyMetric)
+        .filter_by(user_id=DEMO_USER_ID)
+        .order_by(models.BodyMetric.date.desc())
+        .first()
+    )
     return {
         "name": user.name,
         "age": user.age,
@@ -339,6 +471,14 @@ def get_settings(db: Session = Depends(get_db)):
         "notif_daily_recommendation": user.notif_daily_recommendation,
         "notif_readiness_alerts": user.notif_readiness_alerts,
         "injuries": [{"id": i.id, "body_region": i.body_region, "description": i.description} for i in injuries],
+        "current_weight_kg": latest_weight.weight_kg if latest_weight else None,
+        "goal_weight_kg": user.goal_weight_kg,
+        "goal_pace_key": user.goal_pace_key,
+        "activity_level": user.activity_level,
+        "onboarding_completed": user.onboarding_completed,
+        "sex": user.sex,
+        "daily_calorie_goal_kcal": user.daily_calorie_goal_kcal,
+        "is_premium": user.is_premium,
     }
 
 
@@ -348,6 +488,66 @@ def update_settings(payload: schemas.SettingsUpdateIn, db: Session = Depends(get
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(user, field, value)
+    db.commit()
+    return {"ok": True}
+
+
+def _log_body_weight(db: Session, weight_kg: float, date: dt.date):
+    row = db.query(models.BodyMetric).filter_by(user_id=DEMO_USER_ID, date=date).first()
+    if row is None:
+        row = models.BodyMetric(user_id=DEMO_USER_ID, date=date)
+        db.add(row)
+    row.weight_kg = weight_kg
+    db.commit()
+    return row
+
+
+@app.post("/api/body-weight")
+def log_body_weight(payload: schemas.BodyWeightIn, db: Session = Depends(get_db)):
+    _log_body_weight(db, payload.weight_kg, dt.date.today())
+    return {"ok": True}
+
+
+@app.post("/api/settings/recalculate-calories")
+def recalculate_calorie_goal(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    if not user.sex or not user.activity_level or not user.goal_pace_key:
+        raise HTTPException(400, "Complete onboarding first")
+    latest_weight = (
+        db.query(models.BodyMetric)
+        .filter_by(user_id=DEMO_USER_ID)
+        .order_by(models.BodyMetric.date.desc())
+        .first()
+    )
+    user.daily_calorie_goal_kcal = nutrition_client.compute_calorie_goal(
+        sex=user.sex,
+        weight_kg=latest_weight.weight_kg if latest_weight else 70.0,
+        height_cm=user.height_cm or 175.0,
+        age=user.age or 30,
+        activity_level=user.activity_level,
+        goal_pace_key=user.goal_pace_key,
+    )
+    db.commit()
+    return {"daily_calorie_goal_kcal": user.daily_calorie_goal_kcal}
+
+
+@app.post("/api/onboarding/complete")
+def complete_onboarding(payload: schemas.OnboardingCompleteIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    _log_body_weight(db, payload.current_weight_kg, dt.date.today())
+    user.goal_weight_kg = payload.goal_weight_kg
+    user.goal_pace_key = payload.goal_pace_key
+    user.activity_level = payload.activity_level
+    user.sex = payload.sex
+    user.daily_calorie_goal_kcal = nutrition_client.compute_calorie_goal(
+        sex=payload.sex,
+        weight_kg=payload.current_weight_kg,
+        height_cm=user.height_cm or 175.0,  # falls back if the profile's height was never set
+        age=user.age or 30,
+        activity_level=payload.activity_level,
+        goal_pace_key=payload.goal_pace_key,
+    )
+    user.onboarding_completed = True
     db.commit()
     return {"ok": True}
 
@@ -615,7 +815,7 @@ def wearable_whoop_disconnect(db: Session = Depends(get_db)):
 def wearable_today(db: Session = Depends(get_db)):
     user = db.query(models.User).get(DEMO_USER_ID)
     if not user.whoop_access_token:
-        return {"connected": False}
+        return {"connected": False, "exercise_calories_burned": None}
     raw_stats = whoop_client.fetch_today_stats(db, user, dt.date.today())
     display_keys = user.wearable_display_stats or whoop_client.DEFAULT_DISPLAY_STATS
     stats = []
@@ -624,7 +824,13 @@ def wearable_today(db: Session = Depends(get_db)):
         if not meta or key not in raw_stats:
             continue
         stats.append({"key": key, "label": meta["label"], "unit": meta["unit"], "value": raw_stats[key]})
-    return {"connected": True, "stats": stats}
+    return {
+        "connected": True,
+        "stats": stats,
+        # independent of the 3 chosen display stats, so the calorie budget card
+        # always has exercise calories when available, regardless of what's pinned
+        "exercise_calories_burned": raw_stats.get("calories_burned"),
+    }
 
 
 @app.post("/api/wearable/display-stats")

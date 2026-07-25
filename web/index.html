@@ -9,13 +9,67 @@
 <body>
 <div class="app" id="app">
 
+  <div class="splash-screen" id="splash-screen">
+    <div class="splash-word">Toci OS</div>
+    <div class="splash-tagline">Lift. Run. Recover. Progress. Repeat.</div>
+    <div class="splash-status" id="splash-status">Loading your account…</div>
+  </div>
+
+  <!-- ============ ONBOARDING ============ -->
+  <section class="view" id="view-onboarding">
+    <span class="kicker">Welcome</span>
+    <h1 class="h1">Let's set up your plan</h1>
+
+    <div class="card">
+      <div class="field"><label>Current weight (<span id="onb-weight-unit-1">lb</span>)</label><input type="number" step="0.1" id="onb-current-weight" placeholder="e.g. 176"></div>
+      <div class="field"><label>Goal weight (<span id="onb-weight-unit-2">lb</span>)</label><input type="number" step="0.1" id="onb-goal-weight" placeholder="e.g. 185"></div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Sex (used only for your calorie calculation)</label>
+        <div class="chip-row" id="onb-sex-chips">
+          <button type="button" class="chip active" data-val="male">Male</button>
+          <button type="button" class="chip" data-val="female">Female</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="set-group-label">Goal Pace</div>
+    <div id="onb-pace-options"></div>
+
+    <div class="set-group-label">Activity Level</div>
+    <div id="onb-activity-options"></div>
+
+    <button class="btn primary" id="btn-onboarding-continue" style="margin-top:0.8rem;">Continue</button>
+  </section>
+
   <!-- ============ TODAY ============ -->
   <section class="view active" id="view-today">
-    <div class="topline">
-      <span class="date" id="today-date">—</span>
-      <span class="badge neutral" id="today-week-badge">—</span>
+    <div class="home-header">
+      <button class="avatar-btn" id="btn-avatar" aria-label="Profile">—</button>
+      <div class="home-header-mid">
+        <span class="date" id="today-date">—</span>
+      </div>
+      <div class="notif-wrap">
+        <button class="bell-btn" id="btn-notifications" aria-label="Notifications">
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="19" height="19">
+            <path d="M5 8a5 5 0 0110 0c0 3.5 1.2 4.8 1.5 5.3H3.5C3.8 12.8 5 11.5 5 8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M8.2 16a1.8 1.8 0 003.6 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span class="bell-dot hidden" id="notif-dot"></span>
+        </button>
+        <div class="notif-panel hidden" id="notif-panel"><div class="empty-note">Nothing new.</div></div>
+      </div>
     </div>
     <h1 class="h1">Today</h1>
+
+    <div class="card premium-banner hidden" id="premium-banner">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.7rem;">
+        <div>
+          <div style="font-weight:700;font-size:0.9rem;">Go Premium</div>
+          <div style="font-size:0.78rem;color:var(--neutral-2);">Unlock deeper insights and advanced programming.</div>
+        </div>
+        <button class="btn small primary" id="btn-premium-upsell" style="width:auto;flex:none;">Upgrade</button>
+      </div>
+    </div>
 
     <div class="card" style="position:relative;display:flex;align-items:center;gap:0.9rem;">
       <button class="btn small subtle hidden" id="btn-goto-checkin" style="position:absolute;top:0.7rem;right:0.7rem;width:auto;">Check In</button>
@@ -44,18 +98,33 @@
       <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.8rem;">Start</button>
     </div>
 
-    <div class="card tight" id="nutrition-card">
-      <span class="kicker">Nutrition Today</span>
-      <div id="nutrition-card-body">Loading…</div>
+    <div class="card" id="calorie-budget-card">
+      <span class="kicker">Calorie Budget</span>
+      <div id="calorie-budget-body">Loading…</div>
+    </div>
+
+    <div class="card" id="weight-progress-card">
+      <span class="kicker">Weight Progress</span>
+      <div id="weight-progress-body">Loading…</div>
+    </div>
+
+    <div class="card tight" id="steps-card">
+      <span class="kicker">Steps</span>
+      <div class="empty-note">Not available from any connected source yet.</div>
+    </div>
+
+    <div class="set-group-label">This Week's Training</div>
+    <div class="card tight" id="exercise-summary-list"></div>
+
+    <div class="card" id="weekly-progress-card">
+      <span class="kicker">Weekly Progress</span>
+      <div id="weekly-progress-body">Loading…</div>
     </div>
 
     <div class="card tight" id="music-card">
       <span class="kicker">Music</span>
       <div id="music-body">Loading…</div>
     </div>
-
-    <div class="set-group-label">This Week</div>
-    <div class="week-strip" id="week-strip"></div>
   </section>
 
   <!-- ============ RECOVERY CHECK-IN ============ -->
@@ -326,8 +395,59 @@
           <option value="minimal">Minimal / bodyweight</option>
         </select>
       </div>
-      <button class="btn primary" id="btn-save-profile">Save Profile</button>
+      <div class="field"><label>Goal weight (<span id="set-weight-unit-label">lb</span>)</label><input type="number" step="0.1" id="set-input-goal-weight"></div>
+      <div class="field">
+        <label>Goal Pace</label>
+        <select class="chip-select" id="set-input-goal-pace" style="margin-bottom:0;">
+          <option value="lose_2">Lose 2 lb/week</option>
+          <option value="lose_1_5">Lose 1.5 lb/week</option>
+          <option value="lose_1">Lose 1 lb/week</option>
+          <option value="lose_0_5">Lose 0.5 lb/week</option>
+          <option value="maintain">Maintain weight</option>
+          <option value="gain_0_5">Gain 0.5 lb/week</option>
+          <option value="gain_1">Gain 1 lb/week</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Activity Level</label>
+        <select class="chip-select" id="set-input-activity" style="margin-bottom:0;">
+          <option value="sedentary">Not Much Activity</option>
+          <option value="lightly_active">Lightly Active</option>
+          <option value="active">Active</option>
+          <option value="very_active">Very Active</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Sex (used only for your calorie calculation)</label>
+        <div class="chip-row" id="set-sex-chips">
+          <button type="button" class="chip" data-val="male">Male</button>
+          <button type="button" class="chip" data-val="female">Female</button>
+        </div>
+      </div>
+      <button class="btn primary" id="btn-save-profile" style="margin-top:0.9rem;">Save Profile</button>
     </div>
+
+    <div class="set-group-label">Body Weight</div>
+    <div class="card tight">
+      <div class="set-row"><span class="k">Current</span><span class="v tnum" id="set-current-weight-display">—</span></div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.7rem;">
+        <div class="field" style="margin-bottom:0;flex:1;"><label>Log new weight (<span id="set-weight-unit-label-2">lb</span>)</label><input type="number" step="0.1" id="set-input-log-weight"></div>
+        <button class="btn subtle" id="btn-log-weight" style="width:auto;padding:0.6rem 0.9rem;">Log</button>
+      </div>
+    </div>
+
+    <div class="set-group-label">Calorie Goal</div>
+    <div class="card tight">
+      <div class="set-row"><span class="k">Daily Target</span><span class="v tnum" id="set-calorie-goal-display">—</span></div>
+      <button class="btn subtle" id="btn-recalculate-calories" style="margin-top:0.7rem;">Recalculate from Profile</button>
+    </div>
+    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Need to redo the initial setup? <a href="#" id="btn-redo-onboarding">Redo onboarding</a>.</div>
+
+    <div class="set-group-label">Demo Options</div>
+    <div class="card tight">
+      <div class="set-row"><span class="k">Simulate Premium</span><span class="v"><button class="btn small subtle" id="toggle-premium">—</button></span></div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">No real payment processor exists in this build — this only toggles the Today banner for demo purposes.</div>
 
     <div class="set-group-label">Notifications</div>
     <div class="card tight">

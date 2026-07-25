@@ -54,6 +54,13 @@ class SettingsUpdateIn(BaseModel):
     units: Optional[str] = None  # "imperial" | "metric"
     notif_daily_recommendation: Optional[bool] = None
     notif_readiness_alerts: Optional[bool] = None
+    goal_weight_kg: Optional[float] = None
+    goal_pace_key: Optional[str] = None
+    activity_level: Optional[str] = None
+    onboarding_completed: Optional[bool] = None  # lets Settings offer a "redo onboarding" reset
+    sex: Optional[str] = None
+    daily_calorie_goal_kcal: Optional[float] = None
+    is_premium: Optional[bool] = None  # demo-only "Simulate Premium" toggle -- no real billing
 
 
 class PasswordUpdateIn(BaseModel):
@@ -122,3 +129,15 @@ class WhoopCallbackIn(BaseModel):
 
 class WearableDisplayStatsIn(BaseModel):
     stats: List[str]
+
+
+class BodyWeightIn(BaseModel):
+    weight_kg: float
+
+
+class OnboardingCompleteIn(BaseModel):
+    current_weight_kg: float
+    goal_weight_kg: float
+    goal_pace_key: str
+    activity_level: str
+    sex: str
