@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -73,3 +73,37 @@ class SpotifyCallbackIn(BaseModel):
 
 class SpotifyPlaybackIn(BaseModel):
     action: str  # "play" | "pause"
+
+
+class FoodItemIn(BaseModel):
+    name: str
+    brand: Optional[str] = None
+    serving_qty: float = 1.0
+    serving_unit: str = "serving"
+    calories: float
+    protein_g: float = 0.0
+    carbs_g: float = 0.0
+    fat_g: float = 0.0
+
+
+class FoodLogIn(BaseModel):
+    food_item_id: int
+    servings: float = 1.0
+
+
+class FoodLogUpdateIn(BaseModel):
+    servings: float
+
+
+class SavedMealItemIn(BaseModel):
+    food_item_id: int
+    servings: float = 1.0
+
+
+class SavedMealIn(BaseModel):
+    name: str
+    items: List[SavedMealItemIn]
+
+
+class LogSavedMealIn(BaseModel):
+    multiplier: float = 1.0

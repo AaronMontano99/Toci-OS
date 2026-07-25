@@ -153,6 +153,108 @@
     <button class="btn primary" id="btn-save-run">Save Run</button>
   </section>
 
+  <!-- ============ FOOD ============ -->
+  <section class="view" id="view-food">
+    <span class="kicker" id="food-date">—</span>
+    <h1 class="h1">Nutrition</h1>
+
+    <div class="stat-row">
+      <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="food-total-calories">0</div></div>
+      <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="food-total-protein">0g</div></div>
+      <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="food-total-carbs">0g</div></div>
+      <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="food-total-fat">0g</div></div>
+    </div>
+
+    <div class="btn-row" style="margin-bottom:0.9rem;">
+      <button class="btn primary" id="btn-open-add-food">+ Add Food</button>
+      <button class="btn subtle" id="btn-open-saved-meals">Saved Meals</button>
+    </div>
+
+    <div class="set-group-label">Today's Log</div>
+    <div class="card tight" id="food-log-list"><div class="empty-note">Nothing logged yet today.</div></div>
+  </section>
+
+  <!-- ============ ADD FOOD ============ -->
+  <section class="view" id="view-food-add">
+    <button class="back-btn" data-back="view-food">‹ Back</button>
+    <span class="kicker">Add Food</span>
+    <h1 class="h1">What did you eat?</h1>
+
+    <div class="chip-row" id="food-add-mode-chips" style="margin-bottom:0.9rem;">
+      <button class="chip active" data-mode="scan">Scan Barcode</button>
+      <button class="chip" data-mode="search">Search</button>
+      <button class="chip" data-mode="custom">Custom Food</button>
+    </div>
+
+    <div class="food-add-panel" id="food-panel-scan">
+      <div class="scan-video-wrap hidden" id="scan-video-wrap">
+        <video id="scan-video" playsinline muted></video>
+      </div>
+      <button class="btn primary" id="btn-start-scan">Start Camera Scan</button>
+      <div class="empty-note" id="scan-status"></div>
+      <div class="field" style="margin-top:0.8rem;">
+        <label>Or enter the barcode number</label>
+        <input type="text" inputmode="numeric" id="manual-barcode-input" placeholder="e.g. 0289000210">
+      </div>
+      <button class="btn subtle" id="btn-lookup-manual-barcode">Look Up</button>
+    </div>
+
+    <div class="food-add-panel hidden" id="food-panel-search">
+      <div class="field"><label>Search foods</label><input type="text" id="food-search-input" placeholder="e.g. chicken breast"></div>
+      <div class="card tight" id="food-search-results"><div class="empty-note">Type to search.</div></div>
+    </div>
+
+    <div class="food-add-panel hidden" id="food-panel-custom">
+      <div class="field"><label>Name</label><input type="text" id="custom-food-name" placeholder="e.g. Homemade Chili"></div>
+      <div class="field"><label>Brand (optional)</label><input type="text" id="custom-food-brand"></div>
+      <div style="display:flex;gap:0.5rem;">
+        <div class="field" style="flex:1;"><label>Serving size</label><input type="number" step="0.1" id="custom-food-serving-qty" value="1"></div>
+        <div class="field" style="flex:1;"><label>Unit</label><input type="text" id="custom-food-serving-unit" value="serving"></div>
+      </div>
+      <div class="field"><label>Calories (per serving)</label><input type="number" step="1" id="custom-food-calories"></div>
+      <div style="display:flex;gap:0.5rem;">
+        <div class="field" style="flex:1;"><label>Protein (g)</label><input type="number" step="0.1" id="custom-food-protein"></div>
+        <div class="field" style="flex:1;"><label>Carbs (g)</label><input type="number" step="0.1" id="custom-food-carbs"></div>
+        <div class="field" style="flex:1;"><label>Fat (g)</label><input type="number" step="0.1" id="custom-food-fat"></div>
+      </div>
+      <button class="btn primary" id="btn-create-custom-food">Create Food</button>
+    </div>
+
+    <div class="card hidden" id="food-selected-card">
+      <span class="kicker">Selected</span>
+      <div style="font-weight:700;font-size:1rem;" id="food-selected-name">—</div>
+      <div class="tnum" style="font-size:0.82rem;color:var(--neutral-2);margin-bottom:0.7rem;" id="food-selected-sub">—</div>
+      <div class="servings-stepper" style="margin-bottom:0.8rem;">
+        <button type="button" id="btn-servings-minus">−</button>
+        <span class="val tnum" id="food-selected-servings">1</span>
+        <button type="button" id="btn-servings-plus">+</button>
+      </div>
+      <div class="tnum" style="font-size:0.85rem;margin-bottom:0.8rem;" id="food-selected-macros">—</div>
+      <button class="btn primary" id="btn-add-to-today">Add to Today</button>
+    </div>
+  </section>
+
+  <!-- ============ SAVED MEALS ============ -->
+  <section class="view" id="view-food-meals">
+    <button class="back-btn" data-back="view-food">‹ Back</button>
+    <span class="kicker">Saved Meals</span>
+    <h1 class="h1">Quick-log a meal</h1>
+
+    <div class="card tight" id="saved-meals-list"><div class="empty-note">No saved meals yet.</div></div>
+
+    <button class="btn subtle" id="btn-open-new-meal" style="margin-top:0.7rem;">+ New Meal</button>
+
+    <div id="new-meal-builder" class="hidden">
+      <div class="set-group-label">New Meal</div>
+      <div class="field"><label>Meal name</label><input type="text" id="new-meal-name" placeholder="e.g. Post-Workout Shake"></div>
+      <div class="field"><label>Add a food</label><input type="text" id="new-meal-search-input" placeholder="Search foods…"></div>
+      <div class="card tight hidden" id="new-meal-search-results"></div>
+      <div class="set-group-label">Items</div>
+      <div class="card tight" id="new-meal-items"><div class="empty-note">No items added yet.</div></div>
+      <button class="btn primary" id="btn-save-new-meal" style="margin-top:0.6rem;">Save Meal</button>
+    </div>
+  </section>
+
   <!-- ============ PROGRESS ============ -->
   <section class="view" id="view-progress">
     <h1 class="h1">Progress</h1>
@@ -300,6 +402,13 @@
         <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.7"/>
         <path d="M10 7V13M7 10H13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg></div>Log
+    </button>
+    <button class="tab" data-tab="view-food">
+      <div class="ico"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 3V9.5C5 10.6 5.9 11.5 7 11.5C8.1 11.5 9 10.6 9 9.5V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 11.5V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <path d="M13.5 3C12 3 11 4.5 11 6.5C11 8 11.8 9 13 9.3V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg></div>Food
     </button>
     <button class="tab" data-tab="view-progress">
       <div class="ico"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">

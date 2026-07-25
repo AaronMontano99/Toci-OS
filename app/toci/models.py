@@ -180,3 +180,45 @@ class BodyMetric(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
     weight_kg = Column(Float)
+
+
+class FoodItem(Base):
+    __tablename__ = "food_items"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    barcode = Column(String, index=True)  # set when sourced from a barcode lookup; null for custom foods
+    name = Column(String, nullable=False)
+    brand = Column(String)
+    serving_qty = Column(Float, nullable=False, default=1.0)
+    serving_unit = Column(String, nullable=False, default="serving")
+    calories = Column(Float, nullable=False, default=0.0)
+    protein_g = Column(Float, nullable=False, default=0.0)
+    carbs_g = Column(Float, nullable=False, default=0.0)
+    fat_g = Column(Float, nullable=False, default=0.0)
+    source = Column(String, nullable=False, default="custom")  # "custom" | "barcode"
+
+
+class FoodLogEntry(Base):
+    __tablename__ = "food_log_entries"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    food_item_id = Column(Integer, ForeignKey("food_items.id"), nullable=False)
+    date = Column(Date, nullable=False, default=dt.date.today)
+    servings = Column(Float, nullable=False, default=1.0)  # multiplier on the food item's serving
+    logged_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class SavedMeal(Base):
+    __tablename__ = "saved_meals"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class SavedMealItem(Base):
+    __tablename__ = "saved_meal_items"
+    id = Column(Integer, primary_key=True)
+    saved_meal_id = Column(Integer, ForeignKey("saved_meals.id"), nullable=False)
+    food_item_id = Column(Integer, ForeignKey("food_items.id"), nullable=False)
+    servings = Column(Float, nullable=False, default=1.0)

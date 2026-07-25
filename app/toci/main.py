@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from . import engine as reco_engine
 from . import models, schemas
+from . import nutrition as nutrition_client
 from . import spotify as spotify_client
 from .database import Base
 from .database import engine as db_engine
@@ -373,6 +374,109 @@ def remove_injury(injury_id: int, db: Session = Depends(get_db)):
         row.active = False
         db.commit()
     return {"ok": True}
+
+
+# --------------------------------------------------------------- nutrition ----
+# See toci/nutrition.py for the Open Food Facts lookup + shaping logic.
+
+@app.get("/api/nutrition/today")
+def nutrition_today(db: Session = Depends(get_db)):
+    return nutrition_client.today_summary(db, DEMO_USER_ID, dt.date.today())
+
+
+@app.get("/api/nutrition/foods")
+def nutrition_search_foods(q: str = "", db: Session = Depends(get_db)):
+    query = db.query(models.FoodItem).filter(models.FoodItem.user_id == DEMO_USER_ID)
+    if q:
+        query = query.filter(models.FoodItem.name.ilike(f"%{q}%"))
+    rows = query.order_by(models.FoodItem.name).limit(25).all()
+    return {"foods": [nutrition_client.food_dict(f) for f in rows]}
+
+
+@app.post("/api/nutrition/foods")
+def nutrition_create_food(payload: schemas.FoodItemIn, db: Session = Depends(get_db)):
+    row = models.FoodItem(user_id=DEMO_USER_ID, source="custom", **payload.dict())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return nutrition_client.food_dict(row)
+
+
+@app.get("/api/nutrition/lookup/{barcode}")
+def nutrition_lookup_barcode(barcode: str, db: Session = Depends(get_db)):
+    food = nutrition_client.lookup_barcode(db, DEMO_USER_ID, barcode)
+    if not food:
+        raise HTTPException(404, "No product found for that barcode — try Custom Food instead")
+    return nutrition_client.food_dict(food)
+
+
+@app.post("/api/nutrition/log")
+def nutrition_log_food(payload: schemas.FoodLogIn, db: Session = Depends(get_db)):
+    food = db.query(models.FoodItem).get(payload.food_item_id)
+    if not food:
+        raise HTTPException(404, "Food not found")
+    row = models.FoodLogEntry(
+        user_id=DEMO_USER_ID,
+        food_item_id=payload.food_item_id,
+        date=dt.date.today(),
+        servings=payload.servings,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id}
+
+
+@app.patch("/api/nutrition/log/{entry_id}")
+def nutrition_update_log_entry(entry_id: int, payload: schemas.FoodLogUpdateIn, db: Session = Depends(get_db)):
+    row = db.query(models.FoodLogEntry).get(entry_id)
+    if not row:
+        raise HTTPException(404, "Log entry not found")
+    row.servings = payload.servings
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/nutrition/log/{entry_id}")
+def nutrition_delete_log_entry(entry_id: int, db: Session = Depends(get_db)):
+    row = db.query(models.FoodLogEntry).get(entry_id)
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/nutrition/meals")
+def nutrition_list_meals(db: Session = Depends(get_db)):
+    return {"meals": nutrition_client.list_saved_meals(db, DEMO_USER_ID)}
+
+
+@app.post("/api/nutrition/meals")
+def nutrition_create_meal(payload: schemas.SavedMealIn, db: Session = Depends(get_db)):
+    meal = models.SavedMeal(user_id=DEMO_USER_ID, name=payload.name)
+    db.add(meal)
+    db.flush()
+    for item in payload.items:
+        db.add(models.SavedMealItem(saved_meal_id=meal.id, food_item_id=item.food_item_id, servings=item.servings))
+    db.commit()
+    return {"id": meal.id}
+
+
+@app.delete("/api/nutrition/meals/{meal_id}")
+def nutrition_delete_meal(meal_id: int, db: Session = Depends(get_db)):
+    db.query(models.SavedMealItem).filter_by(saved_meal_id=meal_id).delete()
+    db.query(models.SavedMeal).filter_by(id=meal_id).delete()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/nutrition/meals/{meal_id}/log")
+def nutrition_log_meal(meal_id: int, payload: schemas.LogSavedMealIn, db: Session = Depends(get_db)):
+    meal = db.query(models.SavedMeal).get(meal_id)
+    if not meal:
+        raise HTTPException(404, "Saved meal not found")
+    created = nutrition_client.log_saved_meal(db, DEMO_USER_ID, meal, payload.multiplier, dt.date.today())
+    return {"created": len(created)}
 
 
 # ---------------------------------------------------------------- spotify ----

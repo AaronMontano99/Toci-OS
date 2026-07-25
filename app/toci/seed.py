@@ -132,6 +132,29 @@ def seed(reset: bool = False):
         db.add(models.Injury(user_id=1, body_region="left_shoulder", description="Mild strain — avoid heavy overhead pressing", active=True))
         db.commit()
 
+        # a small starter food library so Search and the saved-meal builder
+        # aren't empty on first run -- name, brand, serving_qty, serving_unit,
+        # calories, protein_g, carbs_g, fat_g
+        food_defs = [
+            ("Chicken Breast, Grilled", None, 170, "g", 280, 53.0, 0.0, 6.0),
+            ("White Rice, Cooked", None, 158, "g", 205, 4.3, 44.5, 0.4),
+            ("Egg, Large", None, 50, "g", 72, 6.3, 0.4, 4.8),
+            ("Banana", None, 118, "g", 105, 1.3, 27.0, 0.4),
+            ("Whey Protein Powder", None, 31, "g", 120, 24.0, 3.0, 1.5),
+            ("Rolled Oats, Dry", None, 40, "g", 150, 5.0, 27.0, 2.5),
+            ("Olive Oil", None, 14, "g", 119, 0.0, 0.0, 13.5),
+            ("Greek Yogurt, Plain Nonfat", None, 170, "g", 100, 17.0, 6.0, 0.0),
+            ("Almonds", None, 28, "g", 164, 6.0, 6.0, 14.0),
+            ("Sweet Potato, Baked", None, 200, "g", 180, 4.0, 41.0, 0.3),
+        ]
+        for name, brand, serving_qty, serving_unit, calories, protein, carbs, fat in food_defs:
+            db.add(models.FoodItem(
+                user_id=1, source="custom", name=name, brand=brand,
+                serving_qty=serving_qty, serving_unit=serving_unit,
+                calories=calories, protein_g=protein, carbs_g=carbs, fat_g=fat,
+            ))
+        db.commit()
+
         print("Seeded demo data for user 'Aaron'.")
     finally:
         db.close()

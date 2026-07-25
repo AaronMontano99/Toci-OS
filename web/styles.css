@@ -231,3 +231,13 @@ select.chip-select { padding: 0.5rem 0.7rem; border-radius: 10px; border: 1px so
 @media (min-width: 481px) {
   .app { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
 }
+
+.scan-video-wrap { position: relative; border-radius: 14px; overflow: hidden; background: #000; margin-bottom: 0.7rem; aspect-ratio: 4/3; }
+.scan-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.food-result-row { display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.1rem; border-bottom: 1px solid var(--border); }
+.food-result-row:last-child { border-bottom: none; }
+.food-result-row .name { font-size: 0.85rem; font-weight: 600; }
+.food-result-row .sub { font-size: 0.72rem; color: var(--neutral-2); }
+.servings-stepper { display: flex; align-items: center; gap: 0.6rem; }
+.servings-stepper button { width: 30px; height: 30px; flex: none; border-radius: 8px; background: var(--brand-subtle-bg); color: var(--brand-dark); font-weight: 700; font-size: 1.1rem; }
+.servings-stepper .val { font-family: var(--font-display); font-weight: 800; font-size: 1rem; min-width: 2.2rem; text-align: center; }
