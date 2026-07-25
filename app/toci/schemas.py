@@ -61,6 +61,8 @@ class SettingsUpdateIn(BaseModel):
     sex: Optional[str] = None
     daily_calorie_goal_kcal: Optional[float] = None
     is_premium: Optional[bool] = None  # demo-only "Simulate Premium" toggle -- no real billing
+    dietary_preferences: Optional[List[str]] = None
+    food_restrictions: Optional[List[str]] = None
 
 
 class PasswordUpdateIn(BaseModel):
@@ -153,6 +155,22 @@ class WearableDisplayStatsIn(BaseModel):
 
 class BodyWeightIn(BaseModel):
     weight_kg: float
+
+
+class RecipeFitMacrosIn(BaseModel):
+    target_protein_g: float
+
+
+class RecipeIngredientOverrideIn(BaseModel):
+    ingredient_id: int
+    alt_name: Optional[str] = None  # swap to this substitution's name
+    quantity: Optional[float] = None  # e.g. the scaled quantity returned by Fit My Macros
+
+
+class RecipeLogIn(BaseModel):
+    servings: float = 1.0
+    meal_slot: str = "dinner"
+    overrides: List[RecipeIngredientOverrideIn] = []
 
 
 class OnboardingCompleteIn(BaseModel):

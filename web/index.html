@@ -240,6 +240,7 @@
     <div class="btn-row" style="margin-bottom:0.6rem;">
       <button class="btn primary" id="btn-open-add-food">+ Add Food</button>
       <button class="btn subtle" id="btn-open-saved-meals">Saved Meals</button>
+      <button class="btn subtle" id="btn-open-recipes">Recipes</button>
     </div>
     <div class="btn-row" style="margin-bottom:0.9rem;">
       <button class="btn outline small" id="btn-copy-yesterday" style="width:auto;">Copy Yesterday</button>
@@ -379,6 +380,72 @@
     </div>
   </section>
 
+  <!-- ============ RECIPE HUB ============ -->
+  <section class="view" id="view-food-recipes">
+    <button class="back-btn" data-back="view-food">‹ Back</button>
+    <span class="kicker">Recipes</span>
+    <h1 class="h1">What should you eat next?</h1>
+
+    <div class="set-group-label">Recommended for You</div>
+    <div class="recipe-scroll-row" id="recommended-recipes-row"><div class="empty-note">Loading…</div></div>
+
+    <div id="recipe-category-rows"><div class="empty-note">Loading…</div></div>
+  </section>
+
+  <!-- ============ RECIPE DETAIL ============ -->
+  <section class="view" id="view-recipe-detail">
+    <button class="back-btn" data-back="view-food-recipes">‹ Back</button>
+
+    <div class="recipe-hero" id="recipe-detail-hero">
+      <span id="recipe-detail-icon">🍽️</span>
+    </div>
+    <h1 class="h1" id="recipe-detail-name">—</h1>
+    <div class="chip-row" id="recipe-detail-badges" style="margin-bottom:0.7rem;"></div>
+
+    <div class="stat-row">
+      <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="recipe-detail-calories">0</div></div>
+      <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="recipe-detail-protein">0g</div></div>
+      <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="recipe-detail-carbs">0g</div></div>
+      <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="recipe-detail-fat">0g</div></div>
+    </div>
+    <div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin:0.5rem 0 0.9rem;" id="recipe-detail-meta">—</div>
+
+    <div class="set-group-label">Ingredients — tap to swap</div>
+    <div class="card tight" id="recipe-detail-ingredients"></div>
+
+    <div class="card" id="recipe-fit-macros-card">
+      <span class="kicker">Fit My Macros</span>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.7rem;">Tell Toci how much protein you want from this meal — it scales the main ingredient to hit it.</div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+        <div class="field" style="margin-bottom:0;flex:1;"><label>Target protein (g)</label><input type="number" step="1" id="recipe-fit-macros-target"></div>
+        <button class="btn subtle" id="btn-fit-macros" style="width:auto;padding:0.6rem 0.9rem;">Fit It</button>
+      </div>
+      <div class="tnum empty-note hidden" id="recipe-fit-macros-result" style="margin-top:0.6rem;"></div>
+    </div>
+
+    <div class="set-group-label">Instructions</div>
+    <div class="card tight" id="recipe-detail-instructions"></div>
+
+    <div class="card" id="recipe-log-card">
+      <span class="kicker">Log This</span>
+      <div class="servings-stepper" style="margin:0.6rem 0;">
+        <button type="button" id="btn-recipe-servings-minus">−</button>
+        <span class="val tnum" id="recipe-log-servings">1</span>
+        <button type="button" id="btn-recipe-servings-plus">+</button>
+      </div>
+      <div class="field">
+        <label>Meal</label>
+        <div class="chip-row" id="recipe-log-meal-chips">
+          <button type="button" class="chip" data-val="breakfast">Breakfast</button>
+          <button type="button" class="chip" data-val="lunch">Lunch</button>
+          <button type="button" class="chip" data-val="dinner">Dinner</button>
+          <button type="button" class="chip" data-val="snack">Snack</button>
+        </div>
+      </div>
+      <button class="btn primary" id="btn-log-recipe">Log This</button>
+    </div>
+  </section>
+
   <!-- ============ PROGRESS ============ -->
   <section class="view" id="view-progress">
     <h1 class="h1">Progress</h1>
@@ -497,6 +564,44 @@
       <button class="btn subtle" id="btn-recalculate-calories" style="margin-top:0.7rem;">Recalculate from Profile</button>
     </div>
     <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Need to redo the initial setup? <a href="#" id="btn-redo-onboarding">Redo onboarding</a>.</div>
+
+    <div class="set-group-label">Diet Style</div>
+    <div class="card tight">
+      <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Pick any that apply — recipes matching these show up first in the Recipe Hub.</div>
+      <div class="chip-row" id="diet-preference-chips" style="padding:0.6rem 0.9rem 0.9rem;">
+        <button type="button" class="chip" data-val="high_protein">High Protein</button>
+        <button type="button" class="chip" data-val="mediterranean">Mediterranean</button>
+        <button type="button" class="chip" data-val="pescatarian">Pescatarian</button>
+        <button type="button" class="chip" data-val="vegetarian">Vegetarian</button>
+        <button type="button" class="chip" data-val="vegan">Vegan</button>
+        <button type="button" class="chip" data-val="keto">Keto</button>
+        <button type="button" class="chip" data-val="paleo">Paleo</button>
+        <button type="button" class="chip" data-val="low_carb">Low Carb</button>
+        <button type="button" class="chip" data-val="gluten_free">Gluten Free</button>
+        <button type="button" class="chip" data-val="dairy_free">Dairy Free</button>
+        <button type="button" class="chip" data-val="fat_loss">Fat Loss</button>
+        <button type="button" class="chip" data-val="muscle_gain">Muscle Gain</button>
+      </div>
+    </div>
+
+    <div class="set-group-label">Food Restrictions</div>
+    <div class="card tight">
+      <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Recipes containing these are excluded entirely from your Recipe Hub.</div>
+      <div class="chip-row" id="food-restriction-chips" style="padding:0.6rem 0.9rem 0.9rem;">
+        <button type="button" class="chip" data-val="shellfish">Shellfish</button>
+        <button type="button" class="chip" data-val="peanuts">Peanuts</button>
+        <button type="button" class="chip" data-val="dairy">Dairy</button>
+        <button type="button" class="chip" data-val="gluten">Gluten</button>
+        <button type="button" class="chip" data-val="eggs">Eggs</button>
+        <button type="button" class="chip" data-val="pork">Pork</button>
+        <button type="button" class="chip" data-val="beef">Beef</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;padding:0 0.9rem 0.9rem;">
+        <div class="field" style="margin-bottom:0;flex:1;"><input type="text" id="custom-restriction-input" placeholder="Add another…"></div>
+        <button class="btn subtle" id="btn-add-custom-restriction" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
+      </div>
+    </div>
+    <button class="btn primary" id="btn-save-diet-prefs" style="margin-top:0.6rem;">Save Diet Preferences</button>
 
     <div class="set-group-label">Demo Options</div>
     <div class="card tight">

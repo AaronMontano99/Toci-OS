@@ -59,6 +59,9 @@ class User(Base):
     daily_calorie_goal_kcal = Column(Float)  # computed once at onboarding; editable after, not auto-recomputed
     is_premium = Column(Boolean, nullable=False, default=False)  # demo stub -- no real payment processor exists
 
+    dietary_preferences = Column(JSON, nullable=False, default=list)  # e.g. ["high_protein", "mediterranean"]
+    food_restrictions = Column(JSON, nullable=False, default=list)  # e.g. ["shellfish", "peanuts"] -- excluded ingredient tags
+
 
 class Injury(Base):
     __tablename__ = "injuries"
@@ -252,6 +255,41 @@ class SavedMealItem(Base):
     saved_meal_id = Column(Integer, ForeignKey("saved_meals.id"), nullable=False)
     food_item_id = Column(Integer, ForeignKey("food_items.id"), nullable=False)
     servings = Column(Float, nullable=False, default=1.0)
+
+
+class Recipe(Base):
+    __tablename__ = "recipes"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    diet_tags = Column(JSON, nullable=False, default=list)  # e.g. ["high_protein", "dinner", "muscle_gain"]
+    calories = Column(Float, nullable=False, default=0.0)
+    protein_g = Column(Float, nullable=False, default=0.0)
+    carbs_g = Column(Float, nullable=False, default=0.0)
+    fat_g = Column(Float, nullable=False, default=0.0)
+    fiber_g = Column(Float, nullable=False, default=0.0)
+    prep_minutes = Column(Integer, nullable=False, default=10)
+    cook_minutes = Column(Integer, nullable=False, default=0)
+    difficulty = Column(String, nullable=False, default="easy")  # "easy" | "medium" | "hard"
+    servings = Column(Integer, nullable=False, default=1)
+    icon_emoji = Column(String, nullable=False, default="\U0001f37d️")
+    gradient_key = Column(String, nullable=False, default="1")  # keys into a small fixed CSS gradient palette
+    instructions = Column(JSON, nullable=False, default=list)  # ["Step 1...", "Step 2...", ...]
+
+
+class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+    id = Column(Integer, primary_key=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
+    name = Column(String, nullable=False)
+    quantity = Column(Float, nullable=False, default=1.0)
+    unit = Column(String, nullable=False, default="serving")
+    calories = Column(Float, nullable=False, default=0.0)
+    protein_g = Column(Float, nullable=False, default=0.0)
+    carbs_g = Column(Float, nullable=False, default=0.0)
+    fat_g = Column(Float, nullable=False, default=0.0)
+    restriction_tags = Column(JSON, nullable=False, default=list)  # e.g. ["shellfish"] -- excludes the parent recipe for matching users
+    is_primary_protein = Column(Boolean, nullable=False, default=False)  # scaled by "Fit My Macros"
+    substitutions = Column(JSON, nullable=False, default=list)  # [{"name","calories","protein_g","carbs_g","fat_g","restriction_tags":[...]}]
 
 
 class WearableDayStats(Base):

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from . import engine as reco_engine
 from . import models, schemas
 from . import nutrition as nutrition_client
+from . import recipes as recipes_client
 from . import spotify as spotify_client
 from . import whoop as whoop_client
 from .database import Base
@@ -479,6 +480,8 @@ def get_settings(db: Session = Depends(get_db)):
         "sex": user.sex,
         "daily_calorie_goal_kcal": user.daily_calorie_goal_kcal,
         "is_premium": user.is_premium,
+        "dietary_preferences": user.dietary_preferences or [],
+        "food_restrictions": user.food_restrictions or [],
     }
 
 
@@ -768,6 +771,70 @@ def nutrition_log_meal(meal_id: int, payload: schemas.LogSavedMealIn, db: Sessio
         raise HTTPException(404, "Saved meal not found")
     created = nutrition_client.log_saved_meal(db, DEMO_USER_ID, meal, payload.multiplier, dt.date.today())
     return {"created": len(created)}
+
+
+# ----------------------------------------------------------------- recipes ----
+
+@app.get("/api/recipes")
+def recipe_list(category: str = "", db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    recipes = recipes_client.list_recipes(db, user, category=category or None)
+    return {"recipes": [recipes_client.recipe_summary_dict(r) for r in recipes]}
+
+
+@app.get("/api/recipes/categories")
+def recipe_list_categories(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    return {"categories": recipes_client.list_categories(db, user)}
+
+
+@app.get("/api/recipes/recommended")
+def recipe_list_recommended(db: Session = Depends(get_db)):
+    return {"recipes": recipes_client.get_recommended(db, DEMO_USER_ID)}
+
+
+@app.get("/api/recipes/{recipe_id}")
+def recipe_get(recipe_id: int, db: Session = Depends(get_db)):
+    recipe = db.query(models.Recipe).get(recipe_id)
+    if not recipe:
+        raise HTTPException(404, "Recipe not found")
+    return recipes_client.recipe_detail_dict(db, recipe)
+
+
+@app.post("/api/recipes/{recipe_id}/fit-macros")
+def recipe_fit_macros(recipe_id: int, payload: schemas.RecipeFitMacrosIn, db: Session = Depends(get_db)):
+    recipe = db.query(models.Recipe).get(recipe_id)
+    if not recipe:
+        raise HTTPException(404, "Recipe not found")
+    result = recipes_client.fit_macros(db, recipe, payload.target_protein_g)
+    if not result:
+        raise HTTPException(400, "This recipe has no primary protein ingredient to scale")
+    return result
+
+
+@app.post("/api/recipes/{recipe_id}/log")
+def recipe_log(recipe_id: int, payload: schemas.RecipeLogIn, db: Session = Depends(get_db)):
+    recipe = db.query(models.Recipe).get(recipe_id)
+    if not recipe:
+        raise HTTPException(404, "Recipe not found")
+    overrides = [o.dict() for o in payload.overrides]
+    per_serving = recipes_client.compute_logged_macros(db, recipe, overrides)
+    food = models.FoodItem(
+        user_id=DEMO_USER_ID, source="recipe", name=recipe.name,
+        serving_qty=1, serving_unit="serving",
+        calories=per_serving["calories"], protein_g=per_serving["protein_g"],
+        carbs_g=per_serving["carbs_g"], fat_g=per_serving["fat_g"],
+        use_count=1, last_used_at=dt.datetime.utcnow(),
+    )
+    db.add(food)
+    db.flush()
+    entry = models.FoodLogEntry(
+        user_id=DEMO_USER_ID, food_item_id=food.id, date=dt.date.today(),
+        servings=payload.servings, meal_slot=payload.meal_slot,
+    )
+    db.add(entry)
+    db.commit()
+    return {"food_item_id": food.id, "log_entry_id": entry.id}
 
 
 # ---------------------------------------------------------------- spotify ----

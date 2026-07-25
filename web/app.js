@@ -1245,6 +1245,205 @@ document.getElementById("btn-save-new-meal").addEventListener("click", async () 
   loadSavedMeals();
 });
 
+// -- recipe hub --
+
+document.getElementById("btn-open-recipes").addEventListener("click", () => {
+  showView("view-food-recipes");
+  loadRecipeHub();
+});
+
+function recipeCardHtml(r, showWhy) {
+  return (
+    '<div class="recipe-card recipe-gradient-' + r.gradient_key + '" data-recipeid="' + r.id + '">' +
+    '<div><div class="icon">' + r.icon_emoji + '</div><div class="name">' + r.name + '</div></div>' +
+    '<div>' +
+    '<div class="macros">' + Math.round(r.calories) + ' kcal · P' + Math.round(r.protein_g) + 'g</div>' +
+    (showWhy && r.why ? '<div class="why">' + r.why + '</div>' : '') +
+    '</div></div>'
+  );
+}
+
+function wireRecipeCards(container) {
+  container.querySelectorAll("[data-recipeid]").forEach((card) => {
+    card.addEventListener("click", () => openRecipeDetail(parseInt(card.dataset.recipeid, 10)));
+  });
+}
+
+async function loadRecipeHub() {
+  const recRow = document.getElementById("recommended-recipes-row");
+  const catContainer = document.getElementById("recipe-category-rows");
+  recRow.innerHTML = '<div class="empty-note">Loading…</div>';
+  catContainer.innerHTML = '<div class="empty-note">Loading…</div>';
+
+  const [recommended, categories] = await Promise.all([
+    api("/recipes/recommended"),
+    api("/recipes/categories"),
+  ]);
+
+  recRow.innerHTML = recommended.recipes.map((r) => recipeCardHtml(r, true)).join("");
+  wireRecipeCards(recRow);
+
+  const categoryData = await Promise.all(categories.categories.map((c) => api("/recipes?category=" + encodeURIComponent(c.key))));
+  catContainer.innerHTML = categories.categories
+    .map((c, i) => (
+      '<div class="set-group-label">' + c.label + '</div>' +
+      '<div class="recipe-scroll-row" data-category="' + c.key + '">' +
+      categoryData[i].recipes.map((r) => recipeCardHtml(r, false)).join("") +
+      '</div>'
+    ))
+    .join("");
+  catContainer.querySelectorAll(".recipe-scroll-row").forEach(wireRecipeCards);
+}
+
+async function openRecipeDetail(id) {
+  const recipe = await api("/recipes/" + id);
+  state.selectedRecipe = recipe;
+  state.recipeOverrides = {};
+  state.recipeSubIndex = {};
+  state.recipeLogServings = 1;
+  state.recipeLogMealSlot = defaultMealSlot();
+
+  document.getElementById("recipe-detail-hero").className = "recipe-hero recipe-gradient-" + recipe.gradient_key;
+  document.getElementById("recipe-detail-icon").textContent = recipe.icon_emoji;
+  document.getElementById("recipe-detail-name").textContent = recipe.name;
+  document.getElementById("recipe-detail-badges").innerHTML = recipe.diet_tags
+    .map((t) => '<span class="chip" style="pointer-events:none;">' + (t.replace(/_/g, " ")) + '</span>')
+    .join("");
+  document.getElementById("recipe-detail-meta").textContent =
+    recipe.prep_minutes + " min prep · " + recipe.cook_minutes + " min cook · " +
+    titleCase(recipe.difficulty) + " · " + recipe.servings + " serving" + (recipe.servings === 1 ? "" : "s");
+
+  document.getElementById("recipe-detail-instructions").innerHTML =
+    '<ol class="recipe-instructions-list">' + recipe.instructions.map((s) => "<li>" + s + "</li>").join("") + "</ol>";
+
+  document.getElementById("recipe-fit-macros-target").value = "";
+  document.getElementById("recipe-fit-macros-result").classList.add("hidden");
+  document.getElementById("recipe-log-servings").textContent = "1";
+  setActiveChip(document.getElementById("recipe-log-meal-chips"), state.recipeLogMealSlot);
+
+  renderRecipeIngredients();
+  recalcRecipeDetailTotals();
+  showView("view-recipe-detail");
+}
+
+function computeRecipeTotals(recipe, overrides) {
+  const totals = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  recipe.ingredients.forEach((ing) => {
+    const o = overrides[ing.id];
+    let macroSource = ing;
+    if (o && o.alt_name) {
+      const match = ing.substitutions.find((s) => s.name === o.alt_name);
+      if (match) macroSource = match;
+    }
+    const baseQty = ing.quantity || 1;
+    const effQty = o && o.quantity ? o.quantity : baseQty;
+    const scale = effQty / baseQty;
+    ["calories", "protein_g", "carbs_g", "fat_g"].forEach((k) => { totals[k] += macroSource[k] * scale; });
+  });
+  return {
+    calories: totals.calories / recipe.servings,
+    protein_g: totals.protein_g / recipe.servings,
+    carbs_g: totals.carbs_g / recipe.servings,
+    fat_g: totals.fat_g / recipe.servings,
+  };
+}
+
+function recalcRecipeDetailTotals() {
+  const totals = computeRecipeTotals(state.selectedRecipe, state.recipeOverrides);
+  document.getElementById("recipe-detail-calories").textContent = Math.round(totals.calories);
+  document.getElementById("recipe-detail-protein").textContent = Math.round(totals.protein_g) + "g";
+  document.getElementById("recipe-detail-carbs").textContent = Math.round(totals.carbs_g) + "g";
+  document.getElementById("recipe-detail-fat").textContent = Math.round(totals.fat_g) + "g";
+}
+
+function renderRecipeIngredients() {
+  const recipe = state.selectedRecipe;
+  const wrap = document.getElementById("recipe-detail-ingredients");
+  wrap.innerHTML = recipe.ingredients
+    .map((ing) => {
+      const o = state.recipeOverrides[ing.id];
+      const currentName = o && o.alt_name ? o.alt_name : ing.name;
+      const qty = o && o.quantity ? o.quantity : ing.quantity;
+      const swapHint = ing.substitutions.length ? '<div class="swap-hint">Tap to swap' + (o && o.alt_name ? " · using " + currentName : "") + "</div>" : "";
+      return (
+        '<div class="recipe-ingredient-row"' + (ing.substitutions.length ? ' data-swap-id="' + ing.id + '" style="cursor:pointer;"' : "") + '>' +
+        '<div class="top"><span class="name">' + currentName + '</span><span class="qty tnum">' + qty + " " + ing.unit + "</span></div>" +
+        swapHint + "</div>"
+      );
+    })
+    .join("");
+  wrap.querySelectorAll("[data-swap-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const id = parseInt(row.dataset.swapId, 10);
+      const ing = recipe.ingredients.find((i) => i.id === id);
+      const options = [null].concat(ing.substitutions.map((s) => s.name));
+      const idx = state.recipeSubIndex[id] || 0;
+      const nextIdx = (idx + 1) % options.length;
+      state.recipeSubIndex[id] = nextIdx;
+      const alt = options[nextIdx];
+      const existing = state.recipeOverrides[id] || {};
+      if (alt) {
+        state.recipeOverrides[id] = { ...existing, alt_name: alt };
+      } else {
+        delete existing.alt_name;
+        if (Object.keys(existing).length) state.recipeOverrides[id] = existing;
+        else delete state.recipeOverrides[id];
+      }
+      renderRecipeIngredients();
+      recalcRecipeDetailTotals();
+    });
+  });
+}
+
+document.getElementById("btn-fit-macros").addEventListener("click", async () => {
+  const target = parseFloat(document.getElementById("recipe-fit-macros-target").value);
+  if (Number.isNaN(target) || target <= 0) {
+    toast("Enter a target protein amount first");
+    return;
+  }
+  const result = await api("/recipes/" + state.selectedRecipe.id + "/fit-macros", {
+    method: "POST",
+    body: JSON.stringify({ target_protein_g: target }),
+  });
+  const existing = state.recipeOverrides[result.ingredient_id] || {};
+  state.recipeOverrides[result.ingredient_id] = { ...existing, quantity: result.new_quantity };
+  renderRecipeIngredients();
+  recalcRecipeDetailTotals();
+  const resultEl = document.getElementById("recipe-fit-macros-result");
+  resultEl.classList.remove("hidden");
+  resultEl.textContent = result.ingredient_name + " scaled from " + result.old_quantity + " to " + result.new_quantity + " to hit " + target + "g protein.";
+});
+
+document.getElementById("btn-recipe-servings-minus").addEventListener("click", () => {
+  state.recipeLogServings = Math.max(0.25, Math.round((state.recipeLogServings - 0.25) * 100) / 100);
+  document.getElementById("recipe-log-servings").textContent = state.recipeLogServings;
+});
+document.getElementById("btn-recipe-servings-plus").addEventListener("click", () => {
+  state.recipeLogServings = Math.round((state.recipeLogServings + 0.25) * 100) / 100;
+  document.getElementById("recipe-log-servings").textContent = state.recipeLogServings;
+});
+document.getElementById("recipe-log-meal-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.recipeLogMealSlot = chip.dataset.val;
+  setActiveChip(document.getElementById("recipe-log-meal-chips"), state.recipeLogMealSlot);
+});
+
+document.getElementById("btn-log-recipe").addEventListener("click", async () => {
+  const overrides = Object.entries(state.recipeOverrides).map(([id, o]) => ({ ingredient_id: parseInt(id, 10), ...o }));
+  await api("/recipes/" + state.selectedRecipe.id + "/log", {
+    method: "POST",
+    body: JSON.stringify({
+      servings: state.recipeLogServings,
+      meal_slot: state.recipeLogMealSlot || "snack",
+      overrides: overrides,
+    }),
+  });
+  toast(state.selectedRecipe.name + " added");
+  showView("view-food");
+  loadFoodToday();
+});
+
 // -------------------------------------------------------------- progress ----
 
 async function loadProgress() {
@@ -1425,9 +1624,71 @@ async function loadSettings() {
     });
   }
 
+  renderDietPreferenceChips(data.dietary_preferences || []);
+  renderFoodRestrictionChips(data.food_restrictions || []);
+
   await loadSpotifySettings();
   await loadWhoopSettings();
 }
+
+function renderDietPreferenceChips(selected) {
+  document.querySelectorAll("#diet-preference-chips .chip").forEach((c) => {
+    c.classList.toggle("active", selected.includes(c.dataset.val));
+  });
+}
+
+const FIXED_RESTRICTION_VALS = ["shellfish", "peanuts", "dairy", "gluten", "eggs", "pork", "beef"];
+
+function renderFoodRestrictionChips(selected) {
+  const wrap = document.getElementById("food-restriction-chips");
+  wrap.querySelectorAll(".chip").forEach((c) => {
+    if (FIXED_RESTRICTION_VALS.includes(c.dataset.val)) {
+      c.classList.toggle("active", selected.includes(c.dataset.val));
+    } else {
+      c.remove();
+    }
+  });
+  selected.filter((v) => !FIXED_RESTRICTION_VALS.includes(v)).forEach((v) => {
+    wrap.appendChild(makeRestrictionChip(v, true));
+  });
+}
+
+function makeRestrictionChip(val, active) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "chip" + (active ? " active" : "");
+  chip.dataset.val = val;
+  chip.textContent = titleCase(val);
+  chip.addEventListener("click", () => chip.classList.toggle("active"));
+  return chip;
+}
+
+document.querySelectorAll("#diet-preference-chips .chip").forEach((chip) => {
+  chip.addEventListener("click", () => chip.classList.toggle("active"));
+});
+document.querySelectorAll("#food-restriction-chips .chip").forEach((chip) => {
+  chip.addEventListener("click", () => chip.classList.toggle("active"));
+});
+
+document.getElementById("btn-add-custom-restriction").addEventListener("click", () => {
+  const input = document.getElementById("custom-restriction-input");
+  const val = input.value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!val) return;
+  const wrap = document.getElementById("food-restriction-chips");
+  if (wrap.querySelector('[data-val="' + val + '"]')) {
+    toast("Already added");
+    return;
+  }
+  wrap.appendChild(makeRestrictionChip(val, true));
+  input.value = "";
+});
+
+document.getElementById("btn-save-diet-prefs").addEventListener("click", async () => {
+  const dietary_preferences = Array.from(document.querySelectorAll("#diet-preference-chips .chip.active")).map((c) => c.dataset.val);
+  const food_restrictions = Array.from(document.querySelectorAll("#food-restriction-chips .chip.active")).map((c) => c.dataset.val);
+  await api("/settings", { method: "PATCH", body: JSON.stringify({ dietary_preferences, food_restrictions }) });
+  toast("Diet preferences saved");
+});
 
 document.getElementById("btn-add-injury").addEventListener("click", async () => {
   const region = document.getElementById("injury-region").value;
