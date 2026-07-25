@@ -127,6 +127,8 @@
     </div>
   </section>
 
+  <button class="fab-add-food" id="btn-fab-add-food" aria-label="Log food">+</button>
+
   <!-- ============ RECOVERY CHECK-IN ============ -->
   <section class="view" id="view-recovery">
     <button class="back-btn" data-back="view-today">‹ Back</button>
@@ -233,14 +235,18 @@
       <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="food-total-carbs">0g</div></div>
       <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="food-total-fat">0g</div></div>
     </div>
+    <div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin:-0.4rem 0 0.9rem;" id="food-micro-line">Fiber 0g · Sugar 0g · Sodium 0mg</div>
 
-    <div class="btn-row" style="margin-bottom:0.9rem;">
+    <div class="btn-row" style="margin-bottom:0.6rem;">
       <button class="btn primary" id="btn-open-add-food">+ Add Food</button>
       <button class="btn subtle" id="btn-open-saved-meals">Saved Meals</button>
     </div>
+    <div class="btn-row" style="margin-bottom:0.9rem;">
+      <button class="btn outline small" id="btn-copy-yesterday" style="width:auto;">Copy Yesterday</button>
+    </div>
 
     <div class="set-group-label">Today's Log</div>
-    <div class="card tight" id="food-log-list"><div class="empty-note">Nothing logged yet today.</div></div>
+    <div id="food-log-list"><div class="empty-note">Nothing logged yet today.</div></div>
   </section>
 
   <!-- ============ ADD FOOD ============ -->
@@ -252,6 +258,8 @@
     <div class="chip-row" id="food-add-mode-chips" style="margin-bottom:0.9rem;">
       <button class="chip active" data-mode="scan">Scan Barcode</button>
       <button class="chip" data-mode="search">Search</button>
+      <button class="chip" data-mode="restaurants">Restaurants</button>
+      <button class="chip" data-mode="quickadd">Quick Add</button>
       <button class="chip" data-mode="custom">Custom Food</button>
     </div>
 
@@ -270,7 +278,36 @@
 
     <div class="food-add-panel hidden" id="food-panel-search">
       <div class="field"><label>Search foods</label><input type="text" id="food-search-input" placeholder="e.g. chicken breast"></div>
-      <div class="card tight" id="food-search-results"><div class="empty-note">Type to search.</div></div>
+      <div class="set-group-label" id="food-search-results-label">Recent &amp; Frequent</div>
+      <div class="card tight" id="food-search-results"><div class="empty-note">Loading…</div></div>
+    </div>
+
+    <div class="food-add-panel hidden" id="food-panel-restaurants">
+      <div class="field"><label>Restaurant</label>
+        <div class="chip-row" id="restaurant-chips"><div class="empty-note">Loading…</div></div>
+      </div>
+      <div class="card tight hidden" id="restaurant-results"></div>
+    </div>
+
+    <div class="food-add-panel hidden" id="food-panel-quickadd">
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">Only know the numbers? Log by macros directly — no food lookup needed.</div>
+      <div class="field"><label>Label (optional)</label><input type="text" id="quickadd-label" placeholder="e.g. Restaurant meal"></div>
+      <div class="field"><label>Calories</label><input type="number" step="1" id="quickadd-calories"></div>
+      <div style="display:flex;gap:0.5rem;">
+        <div class="field" style="flex:1;"><label>Protein (g)</label><input type="number" step="0.1" id="quickadd-protein"></div>
+        <div class="field" style="flex:1;"><label>Carbs (g)</label><input type="number" step="0.1" id="quickadd-carbs"></div>
+        <div class="field" style="flex:1;"><label>Fat (g)</label><input type="number" step="0.1" id="quickadd-fat"></div>
+      </div>
+      <div class="field">
+        <label>Meal</label>
+        <div class="chip-row" id="quickadd-meal-chips">
+          <button type="button" class="chip" data-val="breakfast">Breakfast</button>
+          <button type="button" class="chip" data-val="lunch">Lunch</button>
+          <button type="button" class="chip" data-val="dinner">Dinner</button>
+          <button type="button" class="chip active" data-val="snack">Snack</button>
+        </div>
+      </div>
+      <button class="btn primary" id="btn-quick-add">Add to Today</button>
     </div>
 
     <div class="food-add-panel hidden" id="food-panel-custom">
@@ -286,11 +323,19 @@
         <div class="field" style="flex:1;"><label>Carbs (g)</label><input type="number" step="0.1" id="custom-food-carbs"></div>
         <div class="field" style="flex:1;"><label>Fat (g)</label><input type="number" step="0.1" id="custom-food-fat"></div>
       </div>
+      <div style="display:flex;gap:0.5rem;">
+        <div class="field" style="flex:1;"><label>Fiber (g)</label><input type="number" step="0.1" id="custom-food-fiber"></div>
+        <div class="field" style="flex:1;"><label>Sugar (g)</label><input type="number" step="0.1" id="custom-food-sugar"></div>
+        <div class="field" style="flex:1;"><label>Sodium (mg)</label><input type="number" step="1" id="custom-food-sodium"></div>
+      </div>
       <button class="btn primary" id="btn-create-custom-food">Create Food</button>
     </div>
 
     <div class="card hidden" id="food-selected-card">
-      <span class="kicker">Selected</span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <span class="kicker">Selected</span>
+        <button type="button" class="favorite-star" id="btn-toggle-selected-favorite" aria-label="Favorite">☆</button>
+      </div>
       <div style="font-weight:700;font-size:1rem;" id="food-selected-name">—</div>
       <div class="tnum" style="font-size:0.82rem;color:var(--neutral-2);margin-bottom:0.7rem;" id="food-selected-sub">—</div>
       <div class="servings-stepper" style="margin-bottom:0.8rem;">
@@ -298,7 +343,17 @@
         <span class="val tnum" id="food-selected-servings">1</span>
         <button type="button" id="btn-servings-plus">+</button>
       </div>
-      <div class="tnum" style="font-size:0.85rem;margin-bottom:0.8rem;" id="food-selected-macros">—</div>
+      <div class="tnum" style="font-size:0.85rem;" id="food-selected-macros">—</div>
+      <div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;" id="food-selected-micros">—</div>
+      <div class="field">
+        <label>Meal</label>
+        <div class="chip-row" id="food-selected-meal-chips">
+          <button type="button" class="chip" data-val="breakfast">Breakfast</button>
+          <button type="button" class="chip" data-val="lunch">Lunch</button>
+          <button type="button" class="chip" data-val="dinner">Dinner</button>
+          <button type="button" class="chip" data-val="snack">Snack</button>
+        </div>
+      </div>
       <button class="btn primary" id="btn-add-to-today">Add to Today</button>
     </div>
   </section>

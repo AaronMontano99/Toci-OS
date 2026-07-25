@@ -587,15 +587,31 @@ def remove_injury(injury_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/nutrition/today")
 def nutrition_today(db: Session = Depends(get_db)):
-    return nutrition_client.today_summary(db, DEMO_USER_ID, dt.date.today())
+    user = db.query(models.User).get(DEMO_USER_ID)
+    summary = nutrition_client.today_summary(db, DEMO_USER_ID, dt.date.today())
+    summary["coaching"] = nutrition_client.generate_coaching_messages(summary["totals"], user.daily_calorie_goal_kcal)
+    return summary
 
 
 @app.get("/api/nutrition/foods")
-def nutrition_search_foods(q: str = "", db: Session = Depends(get_db)):
+def nutrition_search_foods(q: str = "", restaurant: str = "", db: Session = Depends(get_db)):
     query = db.query(models.FoodItem).filter(models.FoodItem.user_id == DEMO_USER_ID)
     if q:
         query = query.filter(models.FoodItem.name.ilike(f"%{q}%"))
-    rows = query.order_by(models.FoodItem.name).limit(25).all()
+    if restaurant:
+        query = query.filter(models.FoodItem.restaurant == restaurant)
+    # Favorites first, then most-frequently-logged, then most-recently-used --
+    # only falls back to name order once all three are tied (e.g. never logged).
+    rows = (
+        query.order_by(
+            models.FoodItem.is_favorite.desc(),
+            models.FoodItem.use_count.desc(),
+            models.FoodItem.last_used_at.desc().nullslast(),
+            models.FoodItem.name,
+        )
+        .limit(25)
+        .all()
+    )
     return {"foods": [nutrition_client.food_dict(f) for f in rows]}
 
 
@@ -606,6 +622,28 @@ def nutrition_create_food(payload: schemas.FoodItemIn, db: Session = Depends(get
     db.commit()
     db.refresh(row)
     return nutrition_client.food_dict(row)
+
+
+@app.get("/api/nutrition/restaurants")
+def nutrition_list_restaurants(db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.FoodItem.restaurant)
+        .filter(models.FoodItem.user_id == DEMO_USER_ID, models.FoodItem.restaurant.isnot(None))
+        .distinct()
+        .order_by(models.FoodItem.restaurant)
+        .all()
+    )
+    return {"restaurants": [r[0] for r in rows]}
+
+
+@app.post("/api/nutrition/foods/{food_id}/favorite")
+def nutrition_toggle_favorite(food_id: int, db: Session = Depends(get_db)):
+    food = db.query(models.FoodItem).get(food_id)
+    if not food:
+        raise HTTPException(404, "Food not found")
+    food.is_favorite = not food.is_favorite
+    db.commit()
+    return {"is_favorite": food.is_favorite}
 
 
 @app.get("/api/nutrition/lookup/{barcode}")
@@ -626,11 +664,57 @@ def nutrition_log_food(payload: schemas.FoodLogIn, db: Session = Depends(get_db)
         food_item_id=payload.food_item_id,
         date=dt.date.today(),
         servings=payload.servings,
+        meal_slot=payload.meal_slot,
     )
     db.add(row)
+    food.use_count += 1
+    food.last_used_at = dt.datetime.utcnow()
     db.commit()
     db.refresh(row)
     return {"id": row.id}
+
+
+@app.post("/api/nutrition/quick-add")
+def nutrition_quick_add(payload: schemas.QuickAddIn, db: Session = Depends(get_db)):
+    food = models.FoodItem(
+        user_id=DEMO_USER_ID, source="quick_add", name=payload.label,
+        serving_qty=1.0, serving_unit="serving",
+        calories=payload.calories, protein_g=payload.protein_g, carbs_g=payload.carbs_g, fat_g=payload.fat_g,
+        use_count=1, last_used_at=dt.datetime.utcnow(),
+    )
+    db.add(food)
+    db.flush()
+    entry = models.FoodLogEntry(
+        user_id=DEMO_USER_ID, food_item_id=food.id, date=dt.date.today(),
+        servings=1.0, meal_slot=payload.meal_slot,
+    )
+    db.add(entry)
+    db.commit()
+    return {"food_item_id": food.id, "log_entry_id": entry.id}
+
+
+@app.post("/api/nutrition/copy")
+def nutrition_copy_day(payload: schemas.CopyDayIn, db: Session = Depends(get_db)):
+    if payload.from_date == "yesterday":
+        source_date = dt.date.today() - dt.timedelta(days=1)
+    else:
+        source_date = dt.date.fromisoformat(payload.from_date)
+
+    query = db.query(models.FoodLogEntry).filter_by(user_id=DEMO_USER_ID, date=source_date)
+    if payload.meal_slot:
+        query = query.filter_by(meal_slot=payload.meal_slot)
+    source_entries = query.all()
+    if not source_entries:
+        return {"copied": 0}
+
+    today = dt.date.today()
+    for entry in source_entries:
+        db.add(models.FoodLogEntry(
+            user_id=DEMO_USER_ID, food_item_id=entry.food_item_id, date=today,
+            servings=entry.servings, meal_slot=entry.meal_slot,
+        ))
+    db.commit()
+    return {"copied": len(source_entries)}
 
 
 @app.patch("/api/nutrition/log/{entry_id}")
@@ -638,7 +722,8 @@ def nutrition_update_log_entry(entry_id: int, payload: schemas.FoodLogUpdateIn, 
     row = db.query(models.FoodLogEntry).get(entry_id)
     if not row:
         raise HTTPException(404, "Log entry not found")
-    row.servings = payload.servings
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
     db.commit()
     return {"ok": True}
 

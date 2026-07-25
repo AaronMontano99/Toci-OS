@@ -7,6 +7,7 @@ const state = {
   units: "imperial", // "imperial" (lb/in) | "metric" (kg/cm) -- loaded from /api/settings at boot
   selectedFood: null,
   selectedServings: 1,
+  selectedMealSlot: "snack",
   settings: null,
   onboardingPace: "lose_1",
   onboardingActivity: "active",
@@ -76,6 +77,7 @@ function showView(id) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === id));
   document.querySelectorAll(".tab-bar .tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
   document.querySelector(".app").scrollTop = 0;
+  document.getElementById("btn-fab-add-food").classList.toggle("hidden", id !== "view-today");
 }
 
 function titleCase(s) {
@@ -666,6 +668,29 @@ document.getElementById("btn-save-run").addEventListener("click", async () => {
 
 const inputRowStyle = "width:3.4rem;padding:0.3rem 0.35rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--ink);text-align:center;";
 
+const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+const MEAL_SLOT_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
+
+function defaultMealSlot() {
+  const h = new Date().getHours();
+  if (h < 11) return "breakfast";
+  if (h < 15) return "lunch";
+  if (h < 21) return "dinner";
+  return "snack";
+}
+
+function renderFoodEntryRow(e) {
+  return (
+    '<div class="pr-row"><div style="min-width:0;flex:1;">' +
+    '<div class="name">' + e.name + (e.brand ? " — " + e.brand : "") + "</div>" +
+    '<div class="date tnum">' + e.serving_qty + e.serving_unit + " × " + e.servings + " · " + Math.round(e.calories) +
+    " kcal · P" + Math.round(e.protein_g) + " C" + Math.round(e.carbs_g) + " F" + Math.round(e.fat_g) + "</div></div>" +
+    '<div style="display:flex;align-items:center;gap:0.4rem;flex:none;">' +
+    '<input type="number" step="0.25" min="0.25" value="' + e.servings + '" class="food-servings-input tnum" data-entry="' + e.id + '" style="' + inputRowStyle + '">' +
+    '<button class="set-delete-btn" data-entry="' + e.id + '" aria-label="Delete entry">×</button></div></div>'
+  );
+}
+
 async function loadFoodToday() {
   const data = await api("/nutrition/today");
   const d = new Date(data.date + "T00:00:00");
@@ -675,21 +700,25 @@ async function loadFoodToday() {
   document.getElementById("food-total-protein").textContent = Math.round(data.totals.protein_g) + "g";
   document.getElementById("food-total-carbs").textContent = Math.round(data.totals.carbs_g) + "g";
   document.getElementById("food-total-fat").textContent = Math.round(data.totals.fat_g) + "g";
+  document.getElementById("food-micro-line").textContent =
+    "Fiber " + Math.round(data.totals.fiber_g) + "g · Sugar " + Math.round(data.totals.sugar_g) +
+    "g · Sodium " + Math.round(data.totals.sodium_mg) + "mg";
 
   const list = document.getElementById("food-log-list");
   if (!data.entries.length) {
     list.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
     return;
   }
-  list.innerHTML = data.entries
-    .map((e) => (
-      '<div class="pr-row"><div style="min-width:0;flex:1;">' +
-      '<div class="name">' + e.name + (e.brand ? " — " + e.brand : "") + "</div>" +
-      '<div class="date tnum">' + e.serving_qty + e.serving_unit + " × " + e.servings + " · " + Math.round(e.calories) +
-      " kcal · P" + Math.round(e.protein_g) + " C" + Math.round(e.carbs_g) + " F" + Math.round(e.fat_g) + "</div></div>" +
-      '<div style="display:flex;align-items:center;gap:0.4rem;flex:none;">' +
-      '<input type="number" step="0.25" min="0.25" value="' + e.servings + '" class="food-servings-input tnum" data-entry="' + e.id + '" style="' + inputRowStyle + '">' +
-      '<button class="set-delete-btn" data-entry="' + e.id + '" aria-label="Delete entry">×</button></div></div>'
+
+  const groups = {};
+  data.entries.forEach((e) => {
+    const slot = MEAL_SLOTS.includes(e.meal_slot) ? e.meal_slot : "snack";
+    (groups[slot] = groups[slot] || []).push(e);
+  });
+  list.innerHTML = MEAL_SLOTS.filter((slot) => groups[slot] && groups[slot].length)
+    .map((slot) => (
+      '<div class="set-group-label">' + MEAL_SLOT_LABELS[slot] + '</div>' +
+      '<div class="card tight">' + groups[slot].map(renderFoodEntryRow).join("") + '</div>'
     ))
     .join("");
 
@@ -719,28 +748,55 @@ document.getElementById("btn-open-add-food").addEventListener("click", () => {
   resetFoodAddView();
   showView("view-food-add");
 });
+document.getElementById("btn-fab-add-food").addEventListener("click", () => {
+  resetFoodAddView();
+  showView("view-food-add");
+});
 document.querySelector("#view-food-add [data-back]").addEventListener("click", () => stopBarcodeScan());
+
+document.getElementById("btn-copy-yesterday").addEventListener("click", async () => {
+  const result = await api("/nutrition/copy", { method: "POST", body: JSON.stringify({ from_date: "yesterday" }) });
+  if (!result.copied) {
+    toast("Nothing logged yesterday to copy");
+    return;
+  }
+  toast("Copied " + result.copied + " item" + (result.copied === 1 ? "" : "s") + " from yesterday");
+  loadFoodToday();
+});
+
+function setActiveChip(container, val) {
+  container.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.val === val));
+}
 
 function resetFoodAddView() {
   stopBarcodeScan();
   state.selectedFood = null;
   state.selectedServings = 1;
+  state.selectedMealSlot = defaultMealSlot();
   document.getElementById("food-selected-card").classList.add("hidden");
   document.getElementById("scan-status").textContent = "";
   document.getElementById("manual-barcode-input").value = "";
   document.getElementById("food-search-input").value = "";
-  document.getElementById("food-search-results").innerHTML = '<div class="empty-note">Type to search.</div>';
+  document.getElementById("food-search-results").innerHTML = '<div class="empty-note">Loading…</div>';
+  document.getElementById("restaurant-chips").innerHTML = '<div class="empty-note">Loading…</div>';
+  document.getElementById("restaurant-results").innerHTML = "";
+  document.getElementById("restaurant-results").classList.add("hidden");
+  document.getElementById("quickadd-label").value = "";
+  ["quickadd-calories", "quickadd-protein", "quickadd-carbs", "quickadd-fat"].forEach((id) => {
+    document.getElementById(id).value = "";
+  });
+  setActiveChip(document.getElementById("quickadd-meal-chips"), state.selectedMealSlot);
   document.getElementById("custom-food-name").value = "";
   document.getElementById("custom-food-brand").value = "";
   document.getElementById("custom-food-serving-qty").value = "1";
   document.getElementById("custom-food-serving-unit").value = "serving";
-  ["custom-food-calories", "custom-food-protein", "custom-food-carbs", "custom-food-fat"].forEach((id) => {
+  ["custom-food-calories", "custom-food-protein", "custom-food-carbs", "custom-food-fat", "custom-food-fiber", "custom-food-sugar", "custom-food-sodium"].forEach((id) => {
     document.getElementById(id).value = "";
   });
   document.querySelectorAll("#food-add-mode-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.mode === "scan"));
-  document.getElementById("food-panel-scan").classList.remove("hidden");
-  document.getElementById("food-panel-search").classList.add("hidden");
-  document.getElementById("food-panel-custom").classList.add("hidden");
+  ["scan", "search", "restaurants", "quickadd", "custom"].forEach((m) => {
+    document.getElementById("food-panel-" + m).classList.toggle("hidden", m !== "scan");
+  });
 }
 
 document.querySelectorAll("#food-add-mode-chips .chip").forEach((chip) => {
@@ -748,11 +804,224 @@ document.querySelectorAll("#food-add-mode-chips .chip").forEach((chip) => {
     document.querySelectorAll("#food-add-mode-chips .chip").forEach((c) => c.classList.remove("active"));
     chip.classList.add("active");
     const mode = chip.dataset.mode;
-    ["scan", "search", "custom"].forEach((m) => {
+    ["scan", "search", "restaurants", "quickadd", "custom"].forEach((m) => {
       document.getElementById("food-panel-" + m).classList.toggle("hidden", m !== mode);
     });
     if (mode !== "scan") stopBarcodeScan();
+    if (mode === "search" && !document.getElementById("food-search-input").value.trim()) {
+      runFoodSearch("");
+    }
+    if (mode === "restaurants") loadRestaurantChips();
   });
+});
+
+document.getElementById("quickadd-meal-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  setActiveChip(document.getElementById("quickadd-meal-chips"), chip.dataset.val);
+});
+
+document.getElementById("btn-quick-add").addEventListener("click", async () => {
+  const calories = parseFloat(document.getElementById("quickadd-calories").value);
+  if (Number.isNaN(calories)) {
+    toast("Enter calories first");
+    return;
+  }
+  const mealChip = document.querySelector("#quickadd-meal-chips .chip.active");
+  await api("/nutrition/quick-add", {
+    method: "POST",
+    body: JSON.stringify({
+      label: document.getElementById("quickadd-label").value.trim() || "Quick Add",
+      calories: calories,
+      protein_g: parseFloat(document.getElementById("quickadd-protein").value) || 0,
+      carbs_g: parseFloat(document.getElementById("quickadd-carbs").value) || 0,
+      fat_g: parseFloat(document.getElementById("quickadd-fat").value) || 0,
+      meal_slot: mealChip ? mealChip.dataset.val : "snack",
+    }),
+  });
+  toast("Added");
+  showView("view-food");
+  loadFoodToday();
+});
+
+// -- restaurants --
+
+let restaurantFoodsCache = [];
+
+async function loadRestaurantChips() {
+  const chipWrap = document.getElementById("restaurant-chips");
+  const data = await api("/nutrition/restaurants");
+  if (!data.restaurants.length) {
+    chipWrap.innerHTML = '<div class="empty-note">No restaurants available.</div>';
+    return;
+  }
+  chipWrap.innerHTML = data.restaurants
+    .map((r) => '<button class="chip" data-restaurant="' + r + '">' + r + "</button>")
+    .join("");
+  chipWrap.querySelectorAll("[data-restaurant]").forEach((chip) => {
+    chip.addEventListener("click", async () => {
+      chipWrap.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      const results = document.getElementById("restaurant-results");
+      results.classList.remove("hidden");
+      results.innerHTML = '<div class="empty-note">Loading…</div>';
+      const data = await api("/nutrition/foods?restaurant=" + encodeURIComponent(chip.dataset.restaurant));
+      restaurantFoodsCache = data.foods;
+      if (!data.foods.length) {
+        results.innerHTML = '<div class="empty-note">No items found.</div>';
+        return;
+      }
+      results.innerHTML = data.foods
+        .map((f) => (
+          '<div class="food-result-row" data-foodid="' + f.id + '"><div><div class="name">' + f.name +
+          '</div><div class="sub">' + f.serving_qty + f.serving_unit + " · " + f.calories + ' kcal</div></div>' +
+          '<span style="color:var(--brand);font-weight:700;">+</span></div>'
+        ))
+        .join("");
+      results.querySelectorAll("[data-foodid]").forEach((row) => {
+        row.addEventListener("click", () => {
+          const food = restaurantFoodsCache.find((f) => f.id === parseInt(row.dataset.foodid, 10));
+          selectFoodForLogging(food);
+        });
+      });
+    });
+  });
+}
+
+// -- search --
+
+let foodSearchDebounce;
+let foodSearchCache = [];
+document.getElementById("food-search-input").addEventListener("input", (e) => {
+  clearTimeout(foodSearchDebounce);
+  const q = e.target.value.trim();
+  foodSearchDebounce = setTimeout(() => runFoodSearch(q), 300);
+});
+
+async function runFoodSearch(q) {
+  const results = document.getElementById("food-search-results");
+  const label = document.getElementById("food-search-results-label");
+  label.textContent = q ? "Results" : "Recent & Frequent";
+  const data = await api("/nutrition/foods" + (q ? "?q=" + encodeURIComponent(q) : ""));
+  foodSearchCache = data.foods;
+  if (!data.foods.length) {
+    results.innerHTML = '<div class="empty-note">' + (q ? "No matches — try Custom Food." : "No foods logged yet.") + '</div>';
+    return;
+  }
+  results.innerHTML = data.foods
+    .map((f) => (
+      '<div class="food-result-row" data-foodid="' + f.id + '"><div><div class="name">' + (f.is_favorite ? "★ " : "") + f.name +
+      '</div><div class="sub">' + f.serving_qty + f.serving_unit + " · " + f.calories + ' kcal</div></div>' +
+      '<span style="color:var(--brand);font-weight:700;">+</span></div>'
+    ))
+    .join("");
+  results.querySelectorAll("[data-foodid]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const food = foodSearchCache.find((f) => f.id === parseInt(row.dataset.foodid, 10));
+      selectFoodForLogging(food);
+    });
+  });
+}
+
+// -- custom food --
+
+document.getElementById("btn-create-custom-food").addEventListener("click", async () => {
+  const name = document.getElementById("custom-food-name").value.trim();
+  if (!name) {
+    toast("Enter a food name first");
+    return;
+  }
+  const calories = parseFloat(document.getElementById("custom-food-calories").value);
+  if (Number.isNaN(calories)) {
+    toast("Enter calories first");
+    return;
+  }
+  const food = await api("/nutrition/foods", {
+    method: "POST",
+    body: JSON.stringify({
+      name: name,
+      brand: document.getElementById("custom-food-brand").value.trim() || null,
+      serving_qty: parseFloat(document.getElementById("custom-food-serving-qty").value) || 1,
+      serving_unit: document.getElementById("custom-food-serving-unit").value.trim() || "serving",
+      calories: calories,
+      protein_g: parseFloat(document.getElementById("custom-food-protein").value) || 0,
+      carbs_g: parseFloat(document.getElementById("custom-food-carbs").value) || 0,
+      fat_g: parseFloat(document.getElementById("custom-food-fat").value) || 0,
+      fiber_g: parseFloat(document.getElementById("custom-food-fiber").value) || 0,
+      sugar_g: parseFloat(document.getElementById("custom-food-sugar").value) || 0,
+      sodium_mg: parseFloat(document.getElementById("custom-food-sodium").value) || 0,
+    }),
+  });
+  toast("Food created");
+  selectFoodForLogging(food);
+});
+
+// -- selected food -> add to today --
+
+function selectFoodForLogging(food) {
+  state.selectedFood = food;
+  state.selectedServings = 1;
+  if (!state.selectedMealSlot) state.selectedMealSlot = defaultMealSlot();
+  setActiveChip(document.getElementById("food-selected-meal-chips"), state.selectedMealSlot);
+  renderSelectedFood();
+  document.getElementById("food-selected-card").classList.remove("hidden");
+}
+
+function renderSelectedFood() {
+  const food = state.selectedFood;
+  if (!food) return;
+  const s = state.selectedServings;
+  document.getElementById("food-selected-name").textContent = food.name + (food.brand ? " — " + food.brand : "");
+  document.getElementById("food-selected-sub").textContent = food.serving_qty + food.serving_unit + " per serving";
+  document.getElementById("food-selected-servings").textContent = s;
+  document.getElementById("food-selected-macros").textContent =
+    Math.round(food.calories * s) + " kcal · P" + Math.round(food.protein_g * s) + "g C" +
+    Math.round(food.carbs_g * s) + "g F" + Math.round(food.fat_g * s) + "g";
+  document.getElementById("food-selected-micros").textContent =
+    "Fiber " + Math.round((food.fiber_g || 0) * s) + "g · Sugar " + Math.round((food.sugar_g || 0) * s) +
+    "g · Sodium " + Math.round((food.sodium_mg || 0) * s) + "mg";
+  const star = document.getElementById("btn-toggle-selected-favorite");
+  star.textContent = food.is_favorite ? "★" : "☆";
+  star.classList.toggle("active", !!food.is_favorite);
+}
+
+document.getElementById("btn-servings-minus").addEventListener("click", () => {
+  state.selectedServings = Math.max(0.25, Math.round((state.selectedServings - 0.25) * 100) / 100);
+  renderSelectedFood();
+});
+document.getElementById("btn-servings-plus").addEventListener("click", () => {
+  state.selectedServings = Math.round((state.selectedServings + 0.25) * 100) / 100;
+  renderSelectedFood();
+});
+
+document.getElementById("btn-toggle-selected-favorite").addEventListener("click", async () => {
+  const food = state.selectedFood;
+  if (!food) return;
+  const result = await api("/nutrition/foods/" + food.id + "/favorite", { method: "POST" });
+  food.is_favorite = result.is_favorite;
+  renderSelectedFood();
+});
+
+document.getElementById("food-selected-meal-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.selectedMealSlot = chip.dataset.val;
+  setActiveChip(document.getElementById("food-selected-meal-chips"), state.selectedMealSlot);
+});
+
+document.getElementById("btn-add-to-today").addEventListener("click", async () => {
+  if (!state.selectedFood) return;
+  await api("/nutrition/log", {
+    method: "POST",
+    body: JSON.stringify({
+      food_item_id: state.selectedFood.id,
+      servings: state.selectedServings,
+      meal_slot: state.selectedMealSlot || "snack",
+    }),
+  });
+  toast(state.selectedFood.name + " added");
+  showView("view-food");
+  loadFoodToday();
 });
 
 // -- barcode scanning: native BarcodeDetector API (Chrome/Edge/Android) over
@@ -829,112 +1098,6 @@ document.getElementById("btn-lookup-manual-barcode").addEventListener("click", (
     return;
   }
   handleBarcodeDetected(code);
-});
-
-// -- search --
-
-let foodSearchDebounce;
-document.getElementById("food-search-input").addEventListener("input", (e) => {
-  clearTimeout(foodSearchDebounce);
-  const q = e.target.value.trim();
-  foodSearchDebounce = setTimeout(() => runFoodSearch(q), 300);
-});
-
-async function runFoodSearch(q) {
-  const results = document.getElementById("food-search-results");
-  if (!q) {
-    results.innerHTML = '<div class="empty-note">Type to search.</div>';
-    return;
-  }
-  const data = await api("/nutrition/foods?q=" + encodeURIComponent(q));
-  if (!data.foods.length) {
-    results.innerHTML = '<div class="empty-note">No matches — try Custom Food.</div>';
-    return;
-  }
-  results.innerHTML = data.foods
-    .map((f) => (
-      '<div class="food-result-row" data-foodid="' + f.id + '"><div><div class="name">' + f.name +
-      '</div><div class="sub">' + f.serving_qty + f.serving_unit + " · " + f.calories + ' kcal</div></div>' +
-      '<span style="color:var(--brand);font-weight:700;">+</span></div>'
-    ))
-    .join("");
-  results.querySelectorAll("[data-foodid]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const food = data.foods.find((f) => f.id === parseInt(row.dataset.foodid, 10));
-      selectFoodForLogging(food);
-    });
-  });
-}
-
-// -- custom food --
-
-document.getElementById("btn-create-custom-food").addEventListener("click", async () => {
-  const name = document.getElementById("custom-food-name").value.trim();
-  if (!name) {
-    toast("Enter a food name first");
-    return;
-  }
-  const calories = parseFloat(document.getElementById("custom-food-calories").value);
-  if (Number.isNaN(calories)) {
-    toast("Enter calories first");
-    return;
-  }
-  const food = await api("/nutrition/foods", {
-    method: "POST",
-    body: JSON.stringify({
-      name: name,
-      brand: document.getElementById("custom-food-brand").value.trim() || null,
-      serving_qty: parseFloat(document.getElementById("custom-food-serving-qty").value) || 1,
-      serving_unit: document.getElementById("custom-food-serving-unit").value.trim() || "serving",
-      calories: calories,
-      protein_g: parseFloat(document.getElementById("custom-food-protein").value) || 0,
-      carbs_g: parseFloat(document.getElementById("custom-food-carbs").value) || 0,
-      fat_g: parseFloat(document.getElementById("custom-food-fat").value) || 0,
-    }),
-  });
-  toast("Food created");
-  selectFoodForLogging(food);
-});
-
-// -- selected food -> add to today --
-
-function selectFoodForLogging(food) {
-  state.selectedFood = food;
-  state.selectedServings = 1;
-  renderSelectedFood();
-  document.getElementById("food-selected-card").classList.remove("hidden");
-}
-
-function renderSelectedFood() {
-  const food = state.selectedFood;
-  if (!food) return;
-  const s = state.selectedServings;
-  document.getElementById("food-selected-name").textContent = food.name + (food.brand ? " — " + food.brand : "");
-  document.getElementById("food-selected-sub").textContent = food.serving_qty + food.serving_unit + " per serving";
-  document.getElementById("food-selected-servings").textContent = s;
-  document.getElementById("food-selected-macros").textContent =
-    Math.round(food.calories * s) + " kcal · P" + Math.round(food.protein_g * s) + "g C" +
-    Math.round(food.carbs_g * s) + "g F" + Math.round(food.fat_g * s) + "g";
-}
-
-document.getElementById("btn-servings-minus").addEventListener("click", () => {
-  state.selectedServings = Math.max(0.25, Math.round((state.selectedServings - 0.25) * 100) / 100);
-  renderSelectedFood();
-});
-document.getElementById("btn-servings-plus").addEventListener("click", () => {
-  state.selectedServings = Math.round((state.selectedServings + 0.25) * 100) / 100;
-  renderSelectedFood();
-});
-
-document.getElementById("btn-add-to-today").addEventListener("click", async () => {
-  if (!state.selectedFood) return;
-  await api("/nutrition/log", {
-    method: "POST",
-    body: JSON.stringify({ food_item_id: state.selectedFood.id, servings: state.selectedServings }),
-  });
-  toast(state.selectedFood.name + " added");
-  showView("view-food");
-  loadFoodToday();
 });
 
 // -- saved meals --
@@ -1532,6 +1695,9 @@ async function loadCalorieBudgetCard() {
     '<span class="v tnum"' + (big ? ' style="font-weight:800;font-size:1rem;color:var(--brand-dark);"' : "") + '>' + value + "</span></div>";
 
   const foodLink = !nutrition.entries.length ? ' · <a href="#" id="calorie-goto-food">log a meal</a>' : "";
+  const coaching = (nutrition.coaching || [])
+    .map((msg) => '<div class="tnum" style="font-size:0.78rem;color:var(--brand-dark);margin-top:0.35rem;">' + msg + "</div>")
+    .join("");
   body.innerHTML =
     row("Goal", Math.round(goal).toLocaleString()) +
     row("Food", Math.round(food).toLocaleString()) +
@@ -1539,7 +1705,7 @@ async function loadCalorieBudgetCard() {
     row("Remaining", remaining.toLocaleString(), true) +
     '<div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.5rem;">P ' +
     Math.round(nutrition.totals.protein_g) + "g · C " + Math.round(nutrition.totals.carbs_g) + "g · F " +
-    Math.round(nutrition.totals.fat_g) + "g" + foodLink + "</div>";
+    Math.round(nutrition.totals.fat_g) + "g" + foodLink + "</div>" + coaching;
 
   if (!nutrition.entries.length) {
     document.getElementById("calorie-goto-food").addEventListener("click", (e) => {

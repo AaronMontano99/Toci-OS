@@ -169,6 +169,35 @@ def seed(reset: bool = False):
             ))
         db.commit()
 
+        # a small curated restaurant library (real published nutrition figures,
+        # not a comprehensive database) so the restaurant browser isn't empty --
+        # name, restaurant, calories, protein_g, carbs_g, fat_g
+        restaurant_defs = [
+            ("Chicken (4oz)", "Chipotle", 180, 32.0, 0.0, 4.5),
+            ("White Rice", "Chipotle", 210, 4.0, 40.0, 4.0),
+            ("Black Beans", "Chipotle", 130, 8.0, 22.0, 1.5),
+            ("Guacamole", "Chipotle", 230, 2.0, 8.0, 22.0),
+            ("Big Mac", "McDonald's", 550, 25.0, 45.0, 30.0),
+            ("McChicken", "McDonald's", 400, 14.0, 40.0, 21.0),
+            ("Medium Fries", "McDonald's", 340, 4.0, 44.0, 16.0),
+            ("10pc Chicken McNuggets", "McDonald's", 420, 23.0, 26.0, 25.0),
+            ("Grande Caffe Latte (2% milk)", "Starbucks", 190, 13.0, 19.0, 7.0),
+            ("Venti Cold Brew, Black", "Starbucks", 5, 0.0, 0.0, 0.0),
+            ("Bacon, Gouda & Egg Sandwich", "Starbucks", 370, 18.0, 33.0, 18.0),
+            ("Blueberry Muffin", "Starbucks", 350, 5.0, 51.0, 14.0),
+            ("6\" Turkey Breast on Wheat", "Subway", 280, 18.0, 46.0, 3.5),
+            ("6\" Italian B.M.T.", "Subway", 410, 19.0, 41.0, 18.0),
+            ("6\" Veggie Delite", "Subway", 230, 9.0, 45.0, 3.0),
+            ("Chocolate Chip Cookie", "Subway", 220, 2.0, 30.0, 10.0),
+        ]
+        for name, restaurant, calories, protein, carbs, fat in restaurant_defs:
+            db.add(models.FoodItem(
+                user_id=1, source="restaurant", name=name, restaurant=restaurant,
+                serving_qty=1, serving_unit="serving",
+                calories=calories, protein_g=protein, carbs_g=carbs, fat_g=fat,
+            ))
+        db.commit()
+
         print("Seeded demo data for user 'Aaron'.")
     finally:
         db.close()

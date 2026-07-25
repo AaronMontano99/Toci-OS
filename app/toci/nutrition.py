@@ -60,6 +60,9 @@ def fetch_off_product(barcode: str):
     if not calories:
         return None  # no usable energy data at all -- not worth caching
 
+    # OFF reports sodium in grams (sodium_100g/sodium_serving), not mg -- convert.
+    sodium_g = _nutrient(nutriments, "sodium", effective_grams)
+
     return {
         "name": name,
         "brand": (product.get("brands") or "").split(",")[0].strip() or None,
@@ -69,6 +72,9 @@ def fetch_off_product(barcode: str):
         "protein_g": round(_nutrient(nutriments, "proteins", effective_grams), 1),
         "carbs_g": round(_nutrient(nutriments, "carbohydrates", effective_grams), 1),
         "fat_g": round(_nutrient(nutriments, "fat", effective_grams), 1),
+        "fiber_g": round(_nutrient(nutriments, "fiber", effective_grams), 1),
+        "sugar_g": round(_nutrient(nutriments, "sugars", effective_grams), 1),
+        "sodium_mg": round(sodium_g * 1000, 1),
     }
 
 
@@ -99,8 +105,13 @@ def food_dict(food: models.FoodItem):
         "protein_g": food.protein_g,
         "carbs_g": food.carbs_g,
         "fat_g": food.fat_g,
+        "fiber_g": food.fiber_g,
+        "sugar_g": food.sugar_g,
+        "sodium_mg": food.sodium_mg,
         "source": food.source,
         "barcode": food.barcode,
+        "restaurant": food.restaurant,
+        "is_favorite": food.is_favorite,
     }
 
 
@@ -112,18 +123,21 @@ def today_summary(db: Session, user_id: int, date: dt.date):
         .order_by(models.FoodLogEntry.logged_at)
         .all()
     )
-    totals = {"calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0}
+    totals = {"calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "fiber_g": 0.0, "sugar_g": 0.0, "sodium_mg": 0.0}
     entries = []
     for entry, food in rows:
         scale = entry.servings
-        calories = round(food.calories * scale, 1)
-        protein = round(food.protein_g * scale, 1)
-        carbs = round(food.carbs_g * scale, 1)
-        fat = round(food.fat_g * scale, 1)
-        totals["calories"] += calories
-        totals["protein_g"] += protein
-        totals["carbs_g"] += carbs
-        totals["fat_g"] += fat
+        row = {
+            "calories": round(food.calories * scale, 1),
+            "protein_g": round(food.protein_g * scale, 1),
+            "carbs_g": round(food.carbs_g * scale, 1),
+            "fat_g": round(food.fat_g * scale, 1),
+            "fiber_g": round(food.fiber_g * scale, 1),
+            "sugar_g": round(food.sugar_g * scale, 1),
+            "sodium_mg": round(food.sodium_mg * scale, 1),
+        }
+        for key, value in row.items():
+            totals[key] += value
         entries.append({
             "id": entry.id,
             "food_item_id": food.id,
@@ -132,16 +146,49 @@ def today_summary(db: Session, user_id: int, date: dt.date):
             "servings": entry.servings,
             "serving_qty": food.serving_qty,
             "serving_unit": food.serving_unit,
-            "calories": calories,
-            "protein_g": protein,
-            "carbs_g": carbs,
-            "fat_g": fat,
+            "meal_slot": entry.meal_slot,
+            "notes": entry.notes,
+            **row,
         })
     return {
         "date": date.isoformat(),
         "entries": entries,
         "totals": {k: round(v, 1) for k, v in totals.items()},
     }
+
+
+# Rule-based coaching, matching engine.py's deterministic, transparent style --
+# not an LLM call. A macro split (protein/carbs/fat as a % of the calorie goal)
+# derived from the goal itself, since this app has no separate macro-target field.
+MACRO_SPLIT = {"protein": 0.30, "carbs": 0.40, "fat": 0.30}
+PROTEIN_KCAL_PER_G = 4
+CARBS_KCAL_PER_G = 4
+FAT_KCAL_PER_G = 9
+FIBER_TARGET_G = 30
+
+
+def generate_coaching_messages(totals: dict, goal_kcal: float | None):
+    if not goal_kcal:
+        return []
+
+    messages = []
+    remaining = goal_kcal - totals["calories"]
+    if remaining < -50:
+        messages.append(f"You've exceeded your calorie goal by {abs(round(remaining))} calories today.")
+    elif remaining < 100:
+        messages.append(f"Only {max(0, round(remaining))} calories remaining today — plan your next meal accordingly.")
+    else:
+        messages.append(f"{round(remaining)} calories remaining today.")
+
+    protein_target_g = (goal_kcal * MACRO_SPLIT["protein"]) / PROTEIN_KCAL_PER_G
+    protein_gap = protein_target_g - totals["protein_g"]
+    if protein_gap > 15:
+        messages.append(f"You're {round(protein_gap)}g short on protein — prioritize a lean protein source.")
+
+    if totals["fiber_g"] < FIBER_TARGET_G * 0.5 and totals["calories"] > 300:
+        messages.append("Fiber is low today — consider fruit or vegetables with your next meal.")
+
+    return messages
 
 
 def list_saved_meals(db: Session, user_id: int):
@@ -184,6 +231,10 @@ def log_saved_meal(db: Session, user_id: int, meal: models.SavedMeal, multiplier
         )
         db.add(entry)
         created.append(entry)
+        food = db.query(models.FoodItem).get(item.food_item_id)
+        if food:
+            food.use_count += 1
+            food.last_used_at = dt.datetime.utcnow()
     db.commit()
     for entry in created:
         db.refresh(entry)

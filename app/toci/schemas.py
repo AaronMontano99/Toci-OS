@@ -91,15 +91,35 @@ class FoodItemIn(BaseModel):
     protein_g: float = 0.0
     carbs_g: float = 0.0
     fat_g: float = 0.0
+    fiber_g: float = 0.0
+    sugar_g: float = 0.0
+    sodium_mg: float = 0.0
 
 
 class FoodLogIn(BaseModel):
     food_item_id: int
     servings: float = 1.0
+    meal_slot: str = "snack"
 
 
 class FoodLogUpdateIn(BaseModel):
-    servings: float
+    servings: Optional[float] = None
+    meal_slot: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class QuickAddIn(BaseModel):
+    label: str = "Quick Add"
+    calories: float
+    protein_g: float = 0.0
+    carbs_g: float = 0.0
+    fat_g: float = 0.0
+    meal_slot: str = "snack"
+
+
+class CopyDayIn(BaseModel):
+    from_date: str  # "yesterday" or an ISO date "YYYY-MM-DD"
+    meal_slot: Optional[str] = None  # copy only this meal slot, or the whole day if omitted
 
 
 class SavedMealItemIn(BaseModel):

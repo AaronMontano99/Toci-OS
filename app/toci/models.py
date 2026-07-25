@@ -216,7 +216,14 @@ class FoodItem(Base):
     protein_g = Column(Float, nullable=False, default=0.0)
     carbs_g = Column(Float, nullable=False, default=0.0)
     fat_g = Column(Float, nullable=False, default=0.0)
-    source = Column(String, nullable=False, default="custom")  # "custom" | "barcode"
+    fiber_g = Column(Float, nullable=False, default=0.0)
+    sugar_g = Column(Float, nullable=False, default=0.0)
+    sodium_mg = Column(Float, nullable=False, default=0.0)
+    source = Column(String, nullable=False, default="custom")  # "custom" | "barcode" | "quick_add" | "restaurant" | "recipe"
+    restaurant = Column(String)  # set for source="restaurant" items
+    is_favorite = Column(Boolean, nullable=False, default=False)
+    use_count = Column(Integer, nullable=False, default=0)  # incremented on each log; powers "frequently logged"
+    last_used_at = Column(DateTime)  # powers "recent foods"
 
 
 class FoodLogEntry(Base):
@@ -226,6 +233,8 @@ class FoodLogEntry(Base):
     food_item_id = Column(Integer, ForeignKey("food_items.id"), nullable=False)
     date = Column(Date, nullable=False, default=dt.date.today)
     servings = Column(Float, nullable=False, default=1.0)  # multiplier on the food item's serving
+    meal_slot = Column(String, nullable=False, default="snack")  # "breakfast" | "lunch" | "dinner" | "snack"
+    notes = Column(String)
     logged_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
