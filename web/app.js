@@ -102,7 +102,7 @@ document.querySelectorAll(".tab-bar .tab").forEach((t) => {
   t.addEventListener("click", () => {
     const id = t.dataset.tab;
     showView(id);
-    if (id === "view-today") loadMusicCard();
+    if (id === "view-today") { loadNutritionSummaryCard(); loadMusicCard(); loadWearableCard(); }
     if (id === "view-food") loadFoodToday();
     if (id === "view-progress") loadProgress();
     if (id === "view-program") loadProgram();
@@ -139,11 +139,7 @@ async function loadToday() {
   ringFill.style.stroke = strokeVar;
   ringFill.setAttribute("stroke-dashoffset", String(circumference * (1 - score / 100)));
 
-  document.getElementById("readiness-summary").textContent =
-    "HRV " + (data.recovery.hrv_ms ?? "—") + "ms · Sleep " + fmtHours(data.recovery.sleep_duration_min) +
-    " · RHR " + (data.recovery.resting_hr_bpm ?? "—") + "bpm";
-
-  document.getElementById("checkin-prompt").classList.toggle("hidden", data.checked_in);
+  document.getElementById("btn-goto-checkin").classList.toggle("hidden", data.checked_in);
 
   renderRecommendation(data.recommendation);
   renderWeekStrip(data.week);
@@ -1180,6 +1176,7 @@ async function loadSettings() {
   }
 
   await loadSpotifySettings();
+  await loadWhoopSettings();
 }
 
 document.getElementById("btn-add-injury").addEventListener("click", async () => {
@@ -1321,12 +1318,13 @@ async function connectSpotify(clientId, redirectUri) {
 }
 
 async function handleSpotifyRedirectIfPresent() {
+  if (!window.location.pathname.startsWith("/spotify")) return; // Whoop's callback lands on a different path
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const authError = params.get("error");
   if (!code && !authError) return;
 
-  history.replaceState({}, "", window.location.pathname.startsWith("/spotify") ? "/" : window.location.pathname);
+  history.replaceState({}, "", "/");
 
   if (authError) {
     toast("Spotify: " + authError);
@@ -1388,6 +1386,25 @@ document.querySelectorAll("[data-stub-note]").forEach((btn) => {
   btn.addEventListener("click", () => toast(btn.dataset.stubNote));
 });
 
+async function loadNutritionSummaryCard() {
+  const body = document.getElementById("nutrition-card-body");
+  const data = await api("/nutrition/today");
+  if (!data.entries.length) {
+    body.innerHTML = '<div style="font-size:0.85rem;color:var(--neutral-2);">Nothing logged yet — <a href="#" id="nutrition-goto-food">log a meal</a>.</div>';
+    document.getElementById("nutrition-goto-food").addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelector('.tab-bar [data-tab="view-food"]').click();
+    });
+    return;
+  }
+  body.innerHTML =
+    '<div style="display:flex;align-items:baseline;gap:0.4rem;">' +
+    '<span class="hero-number tnum" style="font-size:1.6rem;">' + Math.round(data.totals.calories) + '</span>' +
+    '<span style="font-size:0.8rem;color:var(--neutral-2);">kcal consumed</span></div>' +
+    '<div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.2rem;">P ' +
+    Math.round(data.totals.protein_g) + 'g · C ' + Math.round(data.totals.carbs_g) + 'g · F ' + Math.round(data.totals.fat_g) + 'g</div>';
+}
+
 async function loadMusicCard() {
   const body = document.getElementById("music-body");
   const status = await api("/spotify/status");
@@ -1421,11 +1438,166 @@ async function loadMusicCard() {
   });
 }
 
+// ---------------------------------------------------------------- wearable ----
+// Real OAuth against Whoop -- Authorization Code, confidential client (Whoop
+// requires a client secret, unlike Spotify's PKCE-only flow). A random
+// `state` nonce stands in for PKCE's verifier as CSRF protection.
+
+function randomState(length) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const random = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(random).map((b) => chars[b % chars.length]).join("");
+}
+
+function connectWhoop(clientId, redirectUri, scopes) {
+  if (!clientId) {
+    toast("Save a Client ID and Secret first");
+    return;
+  }
+  const state = randomState(16);
+  sessionStorage.setItem("whoop_oauth_state", state);
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: scopes,
+    state: state,
+  });
+  window.location.href = "https://api.prod.whoop.com/oauth/oauth2/auth?" + params.toString();
+}
+
+async function handleWhoopRedirectIfPresent() {
+  if (!window.location.pathname.startsWith("/whoop")) return; // Spotify's callback lands on a different path
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const authError = params.get("error");
+  if (!code && !authError) return;
+
+  history.replaceState({}, "", "/");
+
+  if (authError) {
+    toast("Whoop: " + authError);
+    return;
+  }
+  const savedState = sessionStorage.getItem("whoop_oauth_state");
+  const returnedState = params.get("state");
+  sessionStorage.removeItem("whoop_oauth_state");
+  if (!savedState || savedState !== returnedState) {
+    toast("Whoop connection expired — try connecting again");
+    return;
+  }
+  try {
+    const status = await api("/wearable/status"); // canonical redirect_uri, same one used to open the auth request
+    await api("/wearable/whoop/callback", {
+      method: "POST",
+      body: JSON.stringify({ code: code, redirect_uri: status.redirect_uri, state: returnedState }),
+    });
+    toast("Whoop connected");
+  } catch (e) {
+    toast("Whoop connection failed");
+  }
+}
+
+function renderWhoopStatsPicker(status) {
+  const card = document.getElementById("whoop-stats-card");
+  card.classList.toggle("hidden", !status.connected);
+  if (!status.connected) return;
+
+  const chips = document.getElementById("whoop-stats-chips");
+  const selected = new Set(status.display_stats || []);
+  chips.innerHTML = Object.entries(status.catalog)
+    .map(([key, meta]) => '<button type="button" class="chip' + (selected.has(key) ? " active" : "") + '" data-stat="' + key + '">' + meta.label + "</button>")
+    .join("");
+
+  chips.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", async () => {
+      const key = chip.dataset.stat;
+      if (selected.has(key)) {
+        selected.delete(key);
+        chip.classList.remove("active");
+      } else {
+        if (selected.size >= 3) {
+          toast("Pick at most 3 stats");
+          return;
+        }
+        selected.add(key);
+        chip.classList.add("active");
+      }
+      await api("/wearable/display-stats", { method: "POST", body: JSON.stringify({ stats: Array.from(selected) }) });
+      loadWearableCard();
+    });
+  });
+}
+
+async function loadWhoopSettings() {
+  const status = await api("/wearable/status");
+  document.getElementById("whoop-redirect-display").textContent = status.redirect_uri;
+  document.getElementById("whoop-client-id-input").value = status.client_id;
+
+  const area = document.getElementById("whoop-connect-area");
+  if (!status.client_id_configured) {
+    area.innerHTML = '<div class="empty-note">Save a Client ID and Secret above first.</div>';
+  } else if (status.connected) {
+    area.innerHTML = '<button class="btn outline" id="btn-disconnect-whoop">Disconnect Whoop</button>';
+    document.getElementById("btn-disconnect-whoop").addEventListener("click", async () => {
+      await api("/wearable/whoop/disconnect", { method: "POST" });
+      toast("Whoop disconnected");
+      loadWhoopSettings();
+      loadWearableCard();
+    });
+  } else {
+    area.innerHTML = '<button class="btn primary" id="btn-connect-whoop">Connect Whoop</button>';
+    document.getElementById("btn-connect-whoop").addEventListener("click", () => connectWhoop(status.client_id, status.redirect_uri, status.scopes));
+  }
+
+  renderWhoopStatsPicker(status);
+}
+
+document.getElementById("btn-save-whoop-credentials").addEventListener("click", async () => {
+  const clientId = document.getElementById("whoop-client-id-input").value.trim();
+  const clientSecret = document.getElementById("whoop-client-secret-input").value.trim();
+  if (!clientId || !clientSecret) {
+    toast("Paste both a Client ID and Client Secret first");
+    return;
+  }
+  await api("/wearable/whoop/credentials", {
+    method: "POST",
+    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+  });
+  document.getElementById("whoop-client-secret-input").value = "";
+  toast("Whoop credentials saved");
+  loadWhoopSettings();
+});
+
+async function loadWearableCard() {
+  const el = document.getElementById("readiness-summary");
+  const data = await api("/wearable/today");
+  if (!data.connected) {
+    el.innerHTML = 'Connect a wearable in <a href="#" id="wearable-goto-settings">Settings</a> for live stats.';
+    const link = document.getElementById("wearable-goto-settings");
+    if (link) {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        document.querySelector('.tab-bar [data-tab="view-settings"]').click();
+      });
+    }
+    return;
+  }
+  if (!data.stats.length) {
+    el.textContent = "Connected — pick stats to show in Settings.";
+    return;
+  }
+  el.textContent = data.stats.map((s) => s.label + " " + s.value + s.unit).join(" · ");
+}
+
 // ------------------------------------------------------------------- boot ----
 
 (async function boot() {
   await handleSpotifyRedirectIfPresent(); // must run before the settings/today fetches below
+  await handleWhoopRedirectIfPresent();
   await loadSettings(); // populates state.units before anything renders a weight
   await loadToday();
+  await loadNutritionSummaryCard();
   await loadMusicCard();
+  await loadWearableCard();
 })();

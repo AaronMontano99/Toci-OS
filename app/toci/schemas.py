@@ -107,3 +107,18 @@ class SavedMealIn(BaseModel):
 
 class LogSavedMealIn(BaseModel):
     multiplier: float = 1.0
+
+
+class WhoopCredentialsIn(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+class WhoopCallbackIn(BaseModel):
+    code: str
+    redirect_uri: str
+    state: str
+
+
+class WearableDisplayStatsIn(BaseModel):
+    stats: List[str]

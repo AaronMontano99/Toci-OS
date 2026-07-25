@@ -14,6 +14,7 @@ from . import engine as reco_engine
 from . import models, schemas
 from . import nutrition as nutrition_client
 from . import spotify as spotify_client
+from . import whoop as whoop_client
 from .database import Base
 from .database import engine as db_engine
 from .database import get_db
@@ -28,6 +29,11 @@ WEB_DIR = REPO_ROOT / "web"
 # Use 127.0.0.1, not localhost, to open the app -- Spotify's own recommendation
 # for loopback redirect URIs, and it's what this string is fixed to.
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/spotify/callback"
+# Whoop's docs only document https:// or custom-scheme redirect URIs for their
+# dashboard -- this loopback URI matches the app's existing convention, but
+# testing against a real Whoop account will likely need an HTTPS tunnel (e.g.
+# ngrok) pointed at this server rather than using this URI verbatim.
+WHOOP_REDIRECT_URI = "http://127.0.0.1:8000/whoop/callback"
 
 app = FastAPI(title="Toci OS API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -550,6 +556,94 @@ def spotify_callback_page():
     # approves. This isn't a real page -- it just serves the SPA shell so the
     # frontend's own JS can read `?code=` from the URL and complete the
     # exchange. Without this route, StaticFiles would 404 on this exact path.
+    return FileResponse(str(WEB_DIR / "index.html"))
+
+
+# ---------------------------------------------------------------- wearable ----
+# Real OAuth against Whoop -- see toci/whoop.py for the "why" and the field
+# names verified against Whoop's actual API docs. Other providers (Oura,
+# Garmin, Fitbit) are frontend-only stubs for now; Apple Watch/HealthKit has
+# no web-reachable API at all, so it isn't represented here.
+
+@app.get("/api/wearable/status")
+def wearable_status(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    return {
+        "connected": bool(user.whoop_access_token),
+        "client_id_configured": bool(user.whoop_client_id),
+        "client_id": user.whoop_client_id or "",
+        "redirect_uri": WHOOP_REDIRECT_URI,
+        "auth_url": whoop_client.AUTH_URL,
+        "scopes": whoop_client.SCOPES,
+        "catalog": whoop_client.STAT_CATALOG,
+        "display_stats": user.wearable_display_stats or whoop_client.DEFAULT_DISPLAY_STATS,
+    }
+
+
+@app.post("/api/wearable/whoop/credentials")
+def wearable_whoop_credentials(payload: schemas.WhoopCredentialsIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.whoop_client_id = payload.client_id.strip()
+    user.whoop_client_secret = payload.client_secret.strip()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/wearable/whoop/callback")
+def wearable_whoop_callback(payload: schemas.WhoopCallbackIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    if not user.whoop_client_id or not user.whoop_client_secret:
+        raise HTTPException(400, "No Whoop Client ID/Secret configured yet — add them in Settings first")
+    try:
+        whoop_client.exchange_code(db, user, payload.code, payload.redirect_uri)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(400, "Whoop token exchange failed: " + e.response.text)
+    return {"ok": True}
+
+
+@app.post("/api/wearable/whoop/disconnect")
+def wearable_whoop_disconnect(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.whoop_access_token = None
+    user.whoop_refresh_token = None
+    user.whoop_token_expires_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/wearable/today")
+def wearable_today(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    if not user.whoop_access_token:
+        return {"connected": False}
+    raw_stats = whoop_client.fetch_today_stats(db, user, dt.date.today())
+    display_keys = user.wearable_display_stats or whoop_client.DEFAULT_DISPLAY_STATS
+    stats = []
+    for key in display_keys:
+        meta = whoop_client.STAT_CATALOG.get(key)
+        if not meta or key not in raw_stats:
+            continue
+        stats.append({"key": key, "label": meta["label"], "unit": meta["unit"], "value": raw_stats[key]})
+    return {"connected": True, "stats": stats}
+
+
+@app.post("/api/wearable/display-stats")
+def wearable_set_display_stats(payload: schemas.WearableDisplayStatsIn, db: Session = Depends(get_db)):
+    if len(payload.stats) > 3:
+        raise HTTPException(400, "Choose at most 3 stats")
+    unknown = [k for k in payload.stats if k not in whoop_client.STAT_CATALOG]
+    if unknown:
+        raise HTTPException(400, "Unknown stat key(s): " + ", ".join(unknown))
+    user = db.query(models.User).get(DEMO_USER_ID)
+    user.wearable_display_stats = payload.stats
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/whoop/callback")
+def whoop_callback_page():
+    # Same reasoning as spotify_callback_page() -- serves the SPA shell so the
+    # frontend can read `?code=&state=` and complete the exchange itself.
     return FileResponse(str(WEB_DIR / "index.html"))
 
 

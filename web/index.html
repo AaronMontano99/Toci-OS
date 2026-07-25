@@ -17,7 +17,8 @@
     </div>
     <h1 class="h1">Today</h1>
 
-    <div class="card" style="display:flex;align-items:center;gap:0.9rem;">
+    <div class="card" style="position:relative;display:flex;align-items:center;gap:0.9rem;">
+      <button class="btn small subtle hidden" id="btn-goto-checkin" style="position:absolute;top:0.7rem;right:0.7rem;width:auto;">Check In</button>
       <div class="ring-wrap">
         <svg width="74" height="74" viewBox="0 0 74 74">
           <circle cx="37" cy="37" r="31" fill="none" stroke="var(--border)" stroke-width="7"/>
@@ -32,12 +33,6 @@
       </div>
     </div>
 
-    <div class="card hidden" id="checkin-prompt">
-      <span class="kicker">Not checked in yet</span>
-      <div style="font-size:0.85rem;color:var(--neutral);margin-bottom:0.7rem;">HRV, resting HR, and sleep are simulated until you check in — today's readiness is a placeholder until then.</div>
-      <button class="btn primary" id="btn-goto-checkin">Do Recovery Check-in</button>
-    </div>
-
     <div class="card" id="reco-card">
       <div class="reco-header">
         <div class="reco-ico" id="reco-ico"></div>
@@ -47,6 +42,11 @@
         </div>
       </div>
       <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.8rem;">Start</button>
+    </div>
+
+    <div class="card tight" id="nutrition-card">
+      <span class="kicker">Nutrition Today</span>
+      <div id="nutrition-card-body">Loading…</div>
     </div>
 
     <div class="card tight" id="music-card">
@@ -361,12 +361,34 @@
       <button class="btn subtle" id="btn-add-injury">Add Injury</button>
     </div>
 
-    <div class="set-group-label">Connected Data</div>
-    <div class="card tight">
-      <div class="set-row"><span class="k">Apple HealthKit</span><span class="v"><span class="badge neutral">Simulated on laptop</span></span></div>
-      <div class="set-row"><span class="k">Health Connect</span><span class="v"><span class="badge neutral">Simulated on laptop</span></span></div>
+    <div class="set-group-label">Connected Wearables</div>
+    <div class="card">
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
+        This is a real Whoop connection, not a mock. Create a free app at
+        <a href="https://developer.whoop.com" target="_blank" rel="noopener">developer.whoop.com</a>,
+        add this exact Redirect URI to it, then paste the app's Client ID and Client Secret below:
+      </div>
+      <div class="tnum" id="whoop-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
+      <div class="field"><label>Whoop Client ID</label><input type="text" id="whoop-client-id-input" placeholder="paste from your Whoop app"></div>
+      <div class="field"><label>Whoop Client Secret</label><input type="password" id="whoop-client-secret-input" placeholder="paste from your Whoop app" autocomplete="off"></div>
+      <button class="btn subtle" id="btn-save-whoop-credentials">Save Credentials</button>
+      <hr class="hair">
+      <div id="whoop-connect-area"><div class="empty-note">Loading…</div></div>
     </div>
-    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Recovery data is simulated for this demo — adjust it from the Recovery Check-in screen.</div>
+
+    <div class="card tight hidden" id="whoop-stats-card">
+      <span class="kicker">Today's Stats — pick up to 3</span>
+      <div class="chip-row" id="whoop-stats-chips"></div>
+    </div>
+
+    <div class="card tight">
+      <div class="set-row"><span class="k">Oura</span><span class="v"><button class="btn small gray" data-stub-note="Oura has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
+      <div class="set-row"><span class="k">Garmin</span><span class="v"><button class="btn small gray" data-stub-note="Garmin's Connect API requires an approved partner application — not available for a hobby project yet.">Connect</button></span></div>
+      <div class="set-row"><span class="k">Fitbit</span><span class="v"><button class="btn small gray" data-stub-note="Fitbit has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
+      <div class="set-row"><span class="k">Apple Watch</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
+      <div class="set-row"><span class="k">Health Connect</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Apple Watch and Health Connect only expose data to native on-device apps — not reachable from this web demo until the native app exists. The Recovery Check-in screen remains the manual fallback either way.</div>
 
     <div class="set-group-label">Connected Music</div>
     <div class="card">

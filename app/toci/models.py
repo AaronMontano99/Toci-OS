@@ -38,6 +38,16 @@ class User(Base):
     spotify_refresh_token = Column(String)
     spotify_token_expires_at = Column(DateTime)
 
+    # Whoop: real OAuth (Authorization Code, confidential client -- Whoop requires
+    # a client secret, unlike Spotify's PKCE-only flow). User supplies their own
+    # client_id/secret from developer.whoop.com.
+    whoop_client_id = Column(String)
+    whoop_client_secret = Column(String)
+    whoop_access_token = Column(String)
+    whoop_refresh_token = Column(String)
+    whoop_token_expires_at = Column(DateTime)
+    wearable_display_stats = Column(JSON)  # up to 3 keys from whoop.STAT_CATALOG, e.g. ["recovery_score","hrv_rmssd_milli","strain"]
+
 
 class Injury(Base):
     __tablename__ = "injuries"
@@ -222,3 +232,14 @@ class SavedMealItem(Base):
     saved_meal_id = Column(Integer, ForeignKey("saved_meals.id"), nullable=False)
     food_item_id = Column(Integer, ForeignKey("food_items.id"), nullable=False)
     servings = Column(Float, nullable=False, default=1.0)
+
+
+class WearableDayStats(Base):
+    __tablename__ = "wearable_day_stats"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    provider = Column(String, nullable=False, default="whoop")
+    stats = Column(JSON, nullable=False)  # {"recovery_score": 82, "hrv_rmssd_milli": 61.2, ...}
+    fetched_at = Column(DateTime, default=dt.datetime.utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "date", "provider", name="uq_wearable_day"),)
