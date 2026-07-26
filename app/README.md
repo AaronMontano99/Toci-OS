@@ -20,6 +20,22 @@ Open **http://localhost:8000** — that's the whole app, frontend and API on one
 
 To start over with fresh seed data: `python -m toci.seed --reset`.
 
+### Optional: real coach narration via a local LLM
+
+The Program tab's "Coach Observations" are computed deterministically (same
+"explainable, no hallucination" philosophy as the readiness/progression engine —
+see `toci/coach.py`), then optionally rephrased in a warmer voice by a **local**
+Ollama model — free, no API key, no cloud calls:
+
+```
+brew install ollama
+ollama pull llama3.2
+ollama serve                     # leave running in a separate terminal
+```
+
+If Ollama isn't installed or running, `coach.narrate()` automatically falls back
+to plain deterministic template sentences — the dashboard works either way.
+
 ## What's real here
 
 - **Readiness scoring** — HRV/RHR z-scores against a rolling baseline, sleep vs.
@@ -60,6 +76,7 @@ app/
     models.py     ORM models (subset of docs/architecture.md §06)
     schemas.py    Pydantic request/response shapes
     engine.py     the recommendation engine (docs/architecture.md §07, as code)
+    coach.py      Program-tab coach observations: deterministic facts + optional local-LLM narration
     seed.py       demo user, exercise library, program, seed history
     main.py       FastAPI routes + serves web/ as static files
 web/

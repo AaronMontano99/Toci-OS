@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from . import coach
 from . import engine as reco_engine
 from . import models, schemas
 from . import nutrition as nutrition_client
@@ -96,20 +97,23 @@ def _week_strip(db: Session, today: dt.date):
     return out
 
 
+def _get_or_generate_recommendation(db: Session, date: dt.date):
+    _ensure_recovery_reading(db, date)
+    readiness = db.query(models.ReadinessScore).filter_by(user_id=DEMO_USER_ID, date=date).first()
+    if not readiness:
+        readiness = reco_engine.compute_readiness(db, DEMO_USER_ID, date)
+    reco = db.query(models.Recommendation).filter_by(user_id=DEMO_USER_ID, date=date).first()
+    if not reco:
+        reco = reco_engine.generate_recommendation(db, DEMO_USER_ID, date, readiness)
+    return reco, readiness
+
+
 # ---------------------------------------------------------------- today ----
 
 @app.get("/api/today")
 def get_today(db: Session = Depends(get_db)):
     today = dt.date.today()
-    _ensure_recovery_reading(db, today)
-
-    readiness = db.query(models.ReadinessScore).filter_by(user_id=DEMO_USER_ID, date=today).first()
-    if not readiness:
-        readiness = reco_engine.compute_readiness(db, DEMO_USER_ID, today)
-
-    reco = db.query(models.Recommendation).filter_by(user_id=DEMO_USER_ID, date=today).first()
-    if not reco:
-        reco = reco_engine.generate_recommendation(db, DEMO_USER_ID, today, readiness)
+    reco, readiness = _get_or_generate_recommendation(db, today)
 
     recovery = db.query(models.DailyRecoveryMetric).filter_by(user_id=DEMO_USER_ID, date=today).first()
     checkin = db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=today).first()
@@ -434,19 +438,207 @@ def last_session_for_split(label: str, day_type: str, db: Session = Depends(get_
 
 # --------------------------------------------------------------- program ----
 
+def _goal_out(g: models.Goal):
+    pct = None
+    if g.start_value is not None and g.target_value is not None and g.current_value is not None and g.target_value != g.start_value:
+        pct = round(100 * max(0.0, min(1.0, (g.current_value - g.start_value) / (g.target_value - g.start_value))))
+    return {
+        "id": g.id, "title": g.title, "kind": g.kind, "unit": g.unit,
+        "start_value": g.start_value, "current_value": g.current_value, "target_value": g.target_value,
+        "is_secondary": g.is_secondary, "status": g.status, "progress_pct": pct,
+        "target_date": g.target_date.isoformat() if g.target_date else None,
+    }
+
+
+def _week_detail(db: Session, meso, today: dt.date):
+    monday = today - dt.timedelta(days=today.weekday())
+    days = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()
+    by_weekday = {d.weekday: d for d in days}
+    exercise_ids = {
+        item["exercise_id"]
+        for d in days if d.day_type == "lift"
+        for item in d.template.get("exercises", [])
+    }
+    exercises_by_id = {e.id: e for e in db.query(models.Exercise).filter(models.Exercise.id.in_(exercise_ids)).all()} if exercise_ids else {}
+
+    out = []
+    for i in range(7):
+        d = monday + dt.timedelta(days=i)
+        pd = by_weekday.get(i)
+        entry = {
+            "date": d.isoformat(), "weekday": i,
+            "day_type": pd.day_type if pd else "rest",
+            "label": pd.label if pd else "Rest",
+            "is_today": d == today,
+            "exercises": [],
+            "run": None,
+        }
+        if pd and pd.day_type == "lift":
+            entry["exercises"] = [
+                {
+                    "exercise_id": item["exercise_id"],
+                    "name": exercises_by_id[item["exercise_id"]].name if item["exercise_id"] in exercises_by_id else "Unknown exercise",
+                    "sets": item["sets"], "reps": item["reps"], "target_rir": item["target_rir"],
+                }
+                for item in pd.template.get("exercises", [])
+            ]
+        elif pd and pd.day_type == "run":
+            entry["run"] = {
+                "run_type": pd.template.get("run_type"),
+                "duration_min": pd.template.get("duration_min"),
+                "zone": pd.template.get("zone"),
+            }
+        out.append(entry)
+    return out
+
+
+def _program_progress(db: Session, program, meso, by_weekday, today: dt.date):
+    days_elapsed = (today - program.started_at).days
+    planned_per_week = sum(1 for d in by_weekday.values() if d.day_type in ("lift", "run"))
+
+    workouts_completed = (
+        db.query(models.WorkoutSession)
+        .filter(models.WorkoutSession.user_id == DEMO_USER_ID, models.WorkoutSession.date >= program.started_at, models.WorkoutSession.date <= today)
+        .count()
+        + db.query(models.CardioSession)
+        .filter(models.CardioSession.user_id == DEMO_USER_ID, models.CardioSession.date >= program.started_at, models.CardioSession.date <= today)
+        .count()
+    )
+    workouts_planned_to_date = max(1, round(planned_per_week * (days_elapsed + 1) / 7)) if planned_per_week else 0
+    completion_pct = round(100 * min(1.0, workouts_completed / workouts_planned_to_date)) if workouts_planned_to_date else 100
+
+    week_start = today - dt.timedelta(days=6)
+    week_planned = week_matched = 0
+    for i in range(7):
+        d = week_start + dt.timedelta(days=i)
+        if d > today:
+            break
+        pd = by_weekday.get(d.weekday())
+        if pd and pd.day_type in ("lift", "run"):
+            week_planned += 1
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
+                week_matched += 1
+    weekly_adherence_pct = round(100 * week_matched / week_planned) if week_planned else 100
+
+    streak = 0
+    d = today - dt.timedelta(days=1)  # today may not be logged yet -- don't penalize the streak for that
+    for _ in range(30):
+        pd = by_weekday.get(d.weekday())
+        if pd and pd.day_type in ("lift", "run"):
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
+                streak += 1
+            else:
+                break
+        d -= dt.timedelta(days=1)
+
+    if workouts_planned_to_date and workouts_completed >= workouts_planned_to_date:
+        status = "ahead" if workouts_completed > workouts_planned_to_date else "on_track"
+    elif workouts_planned_to_date and workouts_completed < workouts_planned_to_date * 0.7:
+        status = "behind"
+    else:
+        status = "on_track"
+
+    return {
+        "completion_pct": completion_pct,
+        "workouts_completed": workouts_completed,
+        "workouts_planned_to_date": workouts_planned_to_date,
+        "weekly_adherence_pct": weekly_adherence_pct,
+        "streak": streak,
+        "status": status,
+    }
+
+
 @app.get("/api/program")
 def get_program(db: Session = Depends(get_db)):
+    today = dt.date.today()
     program, meso = _active_mesocycle(db)
-    days_elapsed = (dt.date.today() - program.started_at).days
+    days_elapsed = (today - program.started_at).days
     current_week = max(1, min(meso.weeks, days_elapsed // 7 + 1))
+    by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
+
+    user = db.query(models.User).get(DEMO_USER_ID)
+    goals = db.query(models.Goal).filter_by(user_id=DEMO_USER_ID).order_by(models.Goal.is_secondary, models.Goal.id).all()
+    reassessment_date = program.started_at + dt.timedelta(weeks=meso.weeks)
+
+    reco, _ = _get_or_generate_recommendation(db, today)
+
+    facts = coach.compute_observations(db, DEMO_USER_ID)
+
     return {
-        "program_name": program.name,
-        "focus": meso.focus,
-        "current_week": current_week,
-        "total_weeks": meso.weeks,
-        "deload_week": meso.deload_week_index,
-        "week": _week_strip(db, dt.date.today()),
+        "identity": {
+            "program_name": program.name,
+            "focus": meso.focus,
+            "current_week": current_week,
+            "total_weeks": meso.weeks,
+            "deload_week": meso.deload_week_index,
+            "primary_goal": user.goal,
+            "secondary_goals": [g.title for g in goals if g.is_secondary],
+            "started_at": program.started_at.isoformat(),
+            "next_reassessment_date": reassessment_date.isoformat(),
+            "days_to_reassessment": (reassessment_date - today).days,
+        },
+        "progress": _program_progress(db, program, meso, by_weekday, today),
+        "today": {
+            "session_type": reco.session_type,
+            "prescription": reco.prescription,
+            "reasoning": reco.reasoning,
+        },
+        "week": _week_detail(db, meso, today),
+        "goals": [_goal_out(g) for g in goals],
+        "coach_observations": coach.narrate(facts),
     }
+
+
+@app.get("/api/exercises/{exercise_id}/decision")
+def exercise_decision(exercise_id: int, db: Session = Depends(get_db)):
+    """The Progression Decision Card: a few reasonable next-session options for
+    this exercise, sourced from the same logic that drives the daily recommendation."""
+    today = dt.date.today()
+    _, meso = _active_mesocycle(db)
+    day = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id, weekday=today.weekday()).first()
+
+    target_rir, target_reps, starting_load_kg = 2.0, 8, 20.0
+    if day and day.day_type == "lift":
+        for item in day.template.get("exercises", []):
+            if item["exercise_id"] == exercise_id:
+                target_rir, target_reps, starting_load_kg = item["target_rir"], item["reps"], item["starting_load_kg"]
+                break
+
+    return reco_engine.progression_options(db, DEMO_USER_ID, exercise_id, target_rir, target_reps, starting_load_kg)
+
+
+@app.get("/api/goals")
+def list_goals(db: Session = Depends(get_db)):
+    goals = db.query(models.Goal).filter_by(user_id=DEMO_USER_ID).order_by(models.Goal.is_secondary, models.Goal.id).all()
+    return [_goal_out(g) for g in goals]
+
+
+@app.post("/api/goals")
+def create_goal(payload: schemas.GoalIn, db: Session = Depends(get_db)):
+    goal = models.Goal(user_id=DEMO_USER_ID, **payload.model_dump(exclude={"target_date"}))
+    if payload.target_date:
+        goal.target_date = dt.date.fromisoformat(payload.target_date)
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return _goal_out(goal)
+
+
+@app.patch("/api/goals/{goal_id}")
+def update_goal(goal_id: int, payload: schemas.GoalUpdateIn, db: Session = Depends(get_db)):
+    goal = db.query(models.Goal).filter_by(id=goal_id, user_id=DEMO_USER_ID).first()
+    if not goal:
+        raise HTTPException(404, "Goal not found")
+    updates = payload.model_dump(exclude_unset=True, exclude={"target_date"})
+    for field, value in updates.items():
+        setattr(goal, field, value)
+    if "target_date" in payload.model_fields_set:
+        goal.target_date = dt.date.fromisoformat(payload.target_date) if payload.target_date else None
+    db.commit()
+    db.refresh(goal)
+    return _goal_out(goal)
 
 
 # -------------------------------------------------------------- settings ----

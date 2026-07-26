@@ -137,6 +137,8 @@ class WorkoutSet(Base):
     actual_load_kg = Column(Float)
     rir = Column(Float)
     rest_seconds = Column(Integer)  # rest taken before this set (no cap -- log as many sets as you did)
+    feel = Column(String)  # "clean" | "difficult" | "sloppy" | "partial" | "assisted" | "pain" | "unsure"
+    confidence_next = Column(String)  # "yes" | "maybe" | "no" -- feeling about increasing load next time
 
 
 class CardioSession(Base):
@@ -199,6 +201,22 @@ class Recommendation(Base):
     band = Column(String)
     status = Column(String, default="pending")
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_reco_user_date"),)
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    kind = Column(String, nullable=False, default="custom")  # "strength" | "endurance" | "consistency" | "custom"
+    unit = Column(String, nullable=False, default="")  # e.g. "kg", "reps", "mi" -- "" for unit-less (e.g. consistency %)
+    start_value = Column(Float)
+    current_value = Column(Float)
+    target_value = Column(Float)
+    is_secondary = Column(Boolean, nullable=False, default=False)  # False = primary goal
+    status = Column(String, default="stable")  # "improving" | "stable" | "declining", recomputed on read
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    target_date = Column(Date)
 
 
 class BodyMetric(Base):

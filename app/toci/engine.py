@@ -121,21 +121,66 @@ def _last_top_set(db: Session, user_id: int, exercise_id: int):
     )
 
 
-def _progressed_load(db: Session, user_id: int, exercise_id: int, target_rir: float, starting_load_kg: float):
+# feel ratings that mean "don't add load yet, even if reps were technically hit"
+FEEL_BLOCKS_INCREASE = {"sloppy", "partial", "assisted", "pain"}
+
+
+def progression_options(db: Session, user_id: int, exercise_id: int, target_rir: float, target_reps, starting_load_kg: float):
+    """Returns {options: [...], recommended_type, why} -- a few reasonable next-session
+    choices instead of one auto-picked number, in the spirit of a coach offering options
+    rather than issuing an order. Each option: {type, load_kg, reps, label, detail}."""
     last = _last_top_set(db, user_id, exercise_id)
     if not last:
-        return starting_load_kg, "No prior data — starting weight"
+        load = round(starting_load_kg, 1)
+        return {
+            "options": [{
+                "type": "repeat", "load_kg": load, "reps": target_reps,
+                "label": f"{load:g}kg", "detail": "No prior data -- starting weight",
+            }],
+            "recommended_type": "repeat",
+            "why": "No prior data — starting weight",
+        }
+
     hit_reps = (last.actual_reps or 0) >= (last.prescribed_reps or 0)
-    # RIR is optional -- the logging UI doesn't capture it. When it's present, use it as
-    # an extra gate; when it's absent (the normal case now), reps-hit alone decides.
+    # RIR is optional -- the logging UI doesn't always capture it. When present, use it as
+    # an extra gate; when absent, reps-hit alone decides.
     rir_ok = last.rir is None or last.rir >= target_rir
-    if hit_reps and rir_ok:
+    feel_ok = last.feel not in FEEL_BLOCKS_INCREASE
+    load = last.actual_load_kg
+    increased_load = round(load + SMALLEST_INCREMENT_KG, 1)
+
+    options = [{
+        "type": "repeat", "load_kg": round(load, 1), "reps": target_reps,
+        "label": f"Repeat {load:g}kg", "detail": "Same weight -- aim for cleaner or more total reps",
+    }]
+    can_increase = hit_reps and rir_ok and feel_ok
+    if can_increase:
+        options.append({
+            "type": "increase", "load_kg": increased_load, "reps": target_reps,
+            "label": f"Increase to {increased_load:g}kg", "detail": f"+{SMALLEST_INCREMENT_KG:g}kg from last session",
+        })
+    options.append({
+        "type": "technique_focus", "load_kg": round(load, 1), "reps": target_reps,
+        "label": f"Technique focus at {load:g}kg", "detail": "Same weight, controlled tempo and full range of motion",
+    })
+
+    if not hit_reps or not rir_ok:
+        recommended_type, why = "repeat", "Last session missed target — holding load"
+    elif not feel_ok:
+        recommended_type = "repeat"
+        why = f"Reps were hit, but the final set felt {last.feel} — repeating to lock in quality before adding load"
+    elif last.confidence_next == "no":
+        recommended_type = "repeat"
+        why = "Reps were hit, but you weren't confident going heavier — repeating to build that confidence"
+    elif last.confidence_next == "maybe":
+        recommended_type = "technique_focus"
+        why = "Reps were hit and you were on the fence about going heavier — a clean, controlled repeat is a solid middle ground"
+    else:
+        recommended_type = "increase"
         detail = f"RIR {last.rir:g} at target, reps hit" if last.rir is not None else "reps hit"
-        return (
-            last.actual_load_kg + SMALLEST_INCREMENT_KG,
-            f"Last session: {detail} — progressing +{SMALLEST_INCREMENT_KG:g}kg",
-        )
-    return last.actual_load_kg, "Last session missed target — holding load"
+        why = f"Last session: {detail} — progressing +{SMALLEST_INCREMENT_KG:g}kg"
+
+    return {"options": options, "recommended_type": recommended_type, "why": why}
 
 
 def _active_injury_regions(db: Session, user_id: int):
@@ -204,7 +249,10 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
                     reasoning.append(f"Substituted {ex.name} for {sub} — active {region.replace('_', ' ')} injury")
                     break
 
-            load, why = _progressed_load(db, user_id, item["exercise_id"], item["target_rir"], item["starting_load_kg"])
+            progression = progression_options(
+                db, user_id, item["exercise_id"], item["target_rir"], item["reps"], item["starting_load_kg"]
+            )
+            recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
             sets = max(1, round(item["sets"] * set_multiplier))
             exercises_out.append(
                 {
@@ -212,12 +260,15 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
                     "name": name,
                     "sets": sets,
                     "reps": item["reps"],
-                    "load_kg": round(load, 1),
+                    "load_kg": recommended["load_kg"],
                     "target_rir": item["target_rir"],
+                    "progression_options": progression["options"],
+                    "recommended_type": progression["recommended_type"],
+                    "why": progression["why"],
                 }
             )
             if len(reasoning) < 3:
-                reasoning.append(why)
+                reasoning.append(progression["why"])
 
         return _save_recommendation(
             db, user_id, date, "lift",

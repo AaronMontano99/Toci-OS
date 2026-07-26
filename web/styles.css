@@ -346,3 +346,15 @@ select.chip-select { padding: 0.5rem 0.7rem; border-radius: 10px; border: 1px so
 .recipe-instructions-list { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; line-height: 1.6; }
 .recipe-instructions-list li { margin-bottom: 0.5rem; }
 .recipe-instructions-list li:last-child { margin-bottom: 0; }
+
+/* ---------------------------------------------------------- program tab --- */
+.bar-track { background: var(--neutral-badge-bg); border-radius: 9999px; height: 8px; overflow: hidden; }
+.bar-fill { background: var(--brand); height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+.day-row { cursor: pointer; }
+.day-row .chevron { transition: transform 0.2s ease; color: var(--neutral-2); }
+.day-row.expanded .chevron { transform: rotate(90deg); }
+.day-detail { padding: 0 0.9rem 0.7rem; }
+.day-detail .exercise-line { font-size: 0.8rem; color: var(--neutral); padding: 0.2rem 0; }
+.observation-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+.observation-row:last-child { border-bottom: none; }
+.observation-row .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); margin-top: 0.45rem; }

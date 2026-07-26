@@ -534,7 +534,7 @@ def seed(reset: bool = False):
         # a progressing bench press history + one squat session, so the
         # progress chart and progression rule both have real data to read
         bench_id, squat_id = ex_id["Barbell Bench Press"], ex_id["Barbell Back Squat"]
-        for days_ago, load in [(12, 77.5), (9, 80), (5, 80), (2, 82.5)]:
+        for days_ago, load in [(12, 77.5), (9, 80), (5, 80), (2, 82.5), (1, 85)]:
             d = today - dt.timedelta(days=days_ago)
             session = models.WorkoutSession(user_id=1, date=d, label="Upper Push", started_at=dt.datetime.combine(d, dt.time(9, 0)))
             db.add(session)
@@ -557,6 +557,18 @@ def seed(reset: bool = False):
 
         # one active injury, to demo the substitution rule out of the box
         db.add(models.Injury(user_id=1, body_region="left_shoulder", description="Mild strain — avoid heavy overhead pressing", active=True))
+        db.commit()
+
+        # goals for the Program dashboard -- primary tracks the seeded bench history above,
+        # secondary is a manually-tracked target (no exercise log backs pull-up reps yet)
+        db.add(models.Goal(
+            user_id=1, title="Bench Press 100kg for 6", kind="strength", unit="kg",
+            start_value=77.5, current_value=82.5, target_value=100, is_secondary=False, status="improving",
+        ))
+        db.add(models.Goal(
+            user_id=1, title="10 Strict Pull-Ups", kind="strength", unit="reps",
+            start_value=3, current_value=6, target_value=10, is_secondary=True, status="improving",
+        ))
         db.commit()
 
         # a small starter food library so Search and the saved-meal builder

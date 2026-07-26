@@ -24,6 +24,27 @@ class SetIn(BaseModel):
     actual_load_kg: float
     rir: Optional[float] = None
     rest_seconds: Optional[int] = None
+    feel: Optional[str] = None  # "clean" | "difficult" | "sloppy" | "partial" | "assisted" | "pain" | "unsure"
+    confidence_next: Optional[str] = None  # "yes" | "maybe" | "no"
+
+
+class GoalIn(BaseModel):
+    title: str
+    kind: str = "custom"  # "strength" | "endurance" | "consistency" | "custom"
+    unit: str = ""
+    start_value: Optional[float] = None
+    current_value: Optional[float] = None
+    target_value: Optional[float] = None
+    is_secondary: bool = False
+    target_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
+
+
+class GoalUpdateIn(BaseModel):
+    title: Optional[str] = None
+    current_value: Optional[float] = None
+    target_value: Optional[float] = None
+    is_secondary: Optional[bool] = None
+    target_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
 
 
 class RunIn(BaseModel):

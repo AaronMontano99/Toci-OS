@@ -505,12 +505,52 @@
   <section class="view" id="view-program">
     <span class="kicker" id="program-focus">—</span>
     <h1 class="h1" id="program-week-title">Week — of —</h1>
+
+    <div class="card" id="program-identity-card">
+      <div style="font-weight:700;font-size:1.05rem;" id="program-name">—</div>
+      <div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-top:0.2rem;" id="program-phase-line">—</div>
+      <div style="font-size:0.8rem;margin-top:0.7rem;">
+        <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Primary goal</span>
+        <div style="font-weight:600;margin-top:0.1rem;" id="program-primary-goal">—</div>
+      </div>
+      <div id="program-secondary-goals-wrap" class="hidden" style="margin-top:0.6rem;">
+        <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Secondary goals</span>
+        <div style="font-size:0.82rem;margin-top:0.2rem;" id="program-secondary-goals"></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.7rem;" id="program-reassessment">—</div>
+    </div>
+
     <div class="card tight hidden" id="deload-card" style="display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:0.85rem;font-weight:600;">Deload scheduled</span>
       <span class="badge warn" id="deload-week-badge">—</span>
     </div>
-    <div class="set-group-label">This Week</div>
+
+    <div class="set-group-label">Progress</div>
+    <div class="card" id="program-progress-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
+        <span style="font-size:0.82rem;font-weight:600;">Program Completion</span>
+        <span class="tnum" style="font-size:0.82rem;font-weight:700;" id="progress-completion-pct">—</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="progress-completion-bar" style="width:0%;"></div></div>
+      <div class="stat-row" style="margin-top:0.9rem;margin-bottom:0;">
+        <div class="stat-tile"><div class="label">Workouts</div><div class="value tnum" id="progress-workouts">—</div></div>
+        <div class="stat-tile"><div class="label">Adherence</div><div class="value tnum" id="progress-adherence">—</div></div>
+        <div class="stat-tile"><div class="label">Streak</div><div class="value tnum" id="progress-streak">—</div></div>
+      </div>
+      <div style="margin-top:0.8rem;"><span class="badge neutral" id="progress-status-badge">—</span></div>
+    </div>
+
+    <div class="set-group-label">Today's Workout</div>
+    <div class="card tight" id="program-today-card"></div>
+
+    <div class="set-group-label">Weekly Structure</div>
     <div id="program-week-list"></div>
+
+    <div class="set-group-label">Goal Progress</div>
+    <div id="program-goals-list"><div class="empty-note">No goals set yet.</div></div>
+
+    <div class="set-group-label">Coach Observations</div>
+    <div class="card tight" id="program-observations-card"><div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div></div>
   </section>
 
   <!-- ============ SETTINGS ============ -->

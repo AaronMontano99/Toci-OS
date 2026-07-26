@@ -16,6 +16,12 @@ const state = {
 
 const KG_PER_LB = 0.45359237;
 const REST_PRESETS_SEC = [30, 60, 90, 120, 180, 300]; // 0:30, 1:00, 1:30, 2:00, 3:00, 5:00
+const FEEL_OPTIONS = [
+  { val: "clean", label: "Clean" }, { val: "difficult", label: "Difficult but solid" },
+  { val: "sloppy", label: "Sloppy" }, { val: "partial", label: "Partial ROM" },
+  { val: "assisted", label: "Assisted" }, { val: "pain", label: "Pain" }, { val: "unsure", label: "Unsure" },
+];
+const CONFIDENCE_OPTIONS = [{ val: "yes", label: "Yes" }, { val: "maybe", label: "Maybe" }, { val: "no", label: "No" }];
 
 function weightUnit() {
   return state.units === "imperial" ? "lb" : "kg";
@@ -514,13 +520,27 @@ document.getElementById("btn-add-exercise").addEventListener("click", async () =
 
     // sensible round default per unit, converted to kg for canonical storage
     const defaultLoadKg = state.units === "imperial" ? 45 * KG_PER_LB : 20;
+    let loadKg = defaultLoadKg, progressionOptions = null, recommendedType = null, why = null;
+    try {
+      const decision = await api("/exercises/" + exerciseId + "/decision");
+      const recommended = decision.options.find((o) => o.type === decision.recommended_type);
+      if (recommended) loadKg = recommended.load_kg;
+      progressionOptions = decision.options;
+      recommendedType = decision.recommended_type;
+      why = decision.why;
+    } catch (e) {
+      // no prior history for this exercise yet -- fall back to the plain default, no decision card shown
+    }
     state.activeWorkoutExercises.push({
       exercise_id: exerciseId,
       name: exerciseName,
       sets: 3,
       reps: 8,
-      load_kg: defaultLoadKg,
+      load_kg: loadKg,
       target_rir: 2,
+      progression_options: progressionOptions,
+      recommended_type: recommendedType,
+      why: why,
       loggedSets: [],
     });
 
@@ -556,10 +576,30 @@ function renderLiftExercises() {
       const restChips = REST_PRESETS_SEC
         .map((sec, ci) => '<button type="button" class="chip' + (ci === 2 ? " active" : "") + '" data-rest="' + sec + '">' + fmtRest(sec) + "</button>")
         .join("");
+      const feelChips = FEEL_OPTIONS
+        .map((o) => '<button type="button" class="chip" data-feel="' + o.val + '">' + o.label + "</button>")
+        .join("");
+      const confidenceChips = CONFIDENCE_OPTIONS
+        .map((o) => '<button type="button" class="chip" data-confidence="' + o.val + '">' + o.label + "</button>")
+        .join("");
+
+      let decisionHtml = "";
+      if (ex.progression_options && ex.progression_options.length > 1) {
+        const optionChips = ex.progression_options
+          .map((opt) => '<button type="button" class="chip' + (opt.type === ex.recommended_type ? " active" : "") + '" data-load-kg="' + opt.load_kg + '" title="' + opt.detail + '">' + opt.label + "</button>")
+          .join("");
+        decisionHtml =
+          '<div class="field" style="margin-bottom:0.6rem;"><label>Next step for this exercise</label>' +
+          '<div class="chip-row" id="ex-' + i + '-decision-chips">' + optionChips + "</div>" +
+          (ex.why ? '<div style="font-size:0.74rem;color:var(--neutral-2);font-style:italic;margin-top:0.35rem;">“' + ex.why + '”</div>' : "") +
+          "</div>";
+      }
+
       const nextSet = ex.loggedSets.length + 1;
       return (
         '<div class="card"><span class="kicker">' + ex.name + '</span>' +
         '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-bottom:0.6rem;">Target: ' + fmtWeight(ex.load_kg) + " × " + ex.sets + " sets × " + ex.reps + " reps</div>" +
+        decisionHtml +
         '<div style="display:flex;gap:0.5rem;margin-bottom:0.7rem;">' +
         '<div class="field" style="margin-bottom:0;flex:1;"><label>Weight (' + weightUnit() + ")</label><input type=\"number\" inputmode=\"decimal\" step=\"0.5\" value=\"" + kgToDisplay(ex.load_kg) + '" id="ex-' + i + '-weight"></div>' +
         '<div class="field" style="margin-bottom:0;flex:1;"><label>Sets</label><input type="number" inputmode="numeric" min="1" value="' + nextSet + '" id="ex-' + i + '-sets"></div>' +
@@ -567,6 +607,10 @@ function renderLiftExercises() {
         "</div>" +
         '<div class="field" style="margin-bottom:0.7rem;"><label>Rest before this set (optional)</label>' +
         '<div class="chip-row" id="ex-' + i + '-rest-chips">' + restChips + "</div></div>" +
+        '<div class="field" style="margin-bottom:0.7rem;"><label>How did the last set feel? (optional)</label>' +
+        '<div class="chip-row" id="ex-' + i + '-feel-chips">' + feelChips + "</div></div>" +
+        '<div class="field" style="margin-bottom:0.7rem;"><label>Confident going heavier next time? (optional)</label>' +
+        '<div class="chip-row" id="ex-' + i + '-confidence-chips">' + confidenceChips + "</div></div>" +
         '<button class="btn subtle" data-exi="' + i + '" data-action="log-set">Log Set</button>' +
         '<div style="margin-top:0.5rem;">' + loggedRows + "</div></div>"
       );
@@ -583,11 +627,21 @@ function renderLiftExercises() {
     // tap the number and start typing immediately, no manual clear first
     input.addEventListener("focus", () => input.select());
   });
-  container.querySelectorAll('[id$="-rest-chips"]').forEach((row) => {
+  container.querySelectorAll('[id$="-rest-chips"], [id$="-feel-chips"], [id$="-confidence-chips"]').forEach((row) => {
     row.querySelectorAll(".chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         row.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
+      });
+    });
+  });
+  container.querySelectorAll('[id$="-decision-chips"]').forEach((row) => {
+    const exi = row.id.match(/^ex-(\d+)-decision-chips$/)[1];
+    row.querySelectorAll(".chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        row.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        document.getElementById("ex-" + exi + "-weight").value = kgToDisplay(parseFloat(chip.dataset.loadKg));
       });
     });
   });
@@ -600,6 +654,10 @@ async function logSet(exi) {
   const reps = parseInt(document.getElementById("ex-" + exi + "-reps").value, 10);
   const activeRestChip = document.querySelector('#ex-' + exi + '-rest-chips .chip.active');
   const restSeconds = activeRestChip ? parseInt(activeRestChip.dataset.rest, 10) : null;
+  const activeFeelChip = document.querySelector('#ex-' + exi + '-feel-chips .chip.active');
+  const feel = activeFeelChip ? activeFeelChip.dataset.feel : null;
+  const activeConfidenceChip = document.querySelector('#ex-' + exi + '-confidence-chips .chip.active');
+  const confidenceNext = activeConfidenceChip ? activeConfidenceChip.dataset.confidence : null;
 
   const created = await api("/workouts/" + state.activeWorkoutSessionId + "/sets", {
     method: "POST",
@@ -611,6 +669,8 @@ async function logSet(exi) {
       actual_reps: reps,
       actual_load_kg: weightKg,
       rest_seconds: restSeconds,
+      feel: feel,
+      confidence_next: confidenceNext,
     }),
   });
   ex.loggedSets.push({ id: created.id, setNumber: setNumber, weightKg: weightKg, reps: reps, restSeconds: restSeconds });
@@ -1663,32 +1723,153 @@ async function renderPRs() {
 
 // --------------------------------------------------------------- program ----
 
+const GOAL_LABELS = {
+  strength: "Build strength", hypertrophy: "Build a muscular, athletic physique",
+  endurance: "Improve endurance", general_fitness: "General fitness", fat_loss: "Lose fat",
+};
+const GOAL_STATUS_LABELS = { improving: "Improving", stable: "Stable", declining: "Needs attention" };
+const PROGRESS_STATUS_LABELS = { ahead: "Ahead of Schedule", on_track: "On Track", behind: "Slightly Behind" };
+
+function fmtGoalValue(v, unit) {
+  const n = Number.isInteger(v) ? v : Math.round(v * 10) / 10;
+  return n + (unit ? " " + unit : "");
+}
+
+function renderProgramToday(today) {
+  const card = document.getElementById("program-today-card");
+  const reasoning = (today.reasoning || []).join(" ");
+  const p = today.prescription;
+  if (today.session_type === "lift") {
+    card.innerHTML =
+      '<div style="font-weight:700;font-size:0.95rem;">' + (p.label || "Lift") + "</div>" +
+      p.exercises.map((e) => '<div class="tnum" style="font-size:0.82rem;margin-top:0.25rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>").join("") +
+      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+  } else if (today.session_type === "run") {
+    card.innerHTML =
+      '<div style="font-weight:700;font-size:0.95rem;">' + labelForRunType(p.run_type) + "</div>" +
+      '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-top:0.2rem;">' + p.duration_min + " min · Zone " + p.zone + "</div>" +
+      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+  } else {
+    card.innerHTML =
+      '<div style="font-weight:700;font-size:0.95rem;">' + (p.note || "Rest day") + "</div>" +
+      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+  }
+}
+
+function renderProgramWeek(week) {
+  const list = document.getElementById("program-week-list");
+  list.innerHTML = week
+    .map((d, i) => {
+      const dayName = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" });
+      const nameColor = d.is_today ? "color:var(--brand-dark);" : "";
+      const hasDetail = d.exercises.length > 0 || d.run;
+      let detailHtml = "";
+      if (d.exercises.length) {
+        detailHtml = d.exercises.map((e) => '<div class="exercise-line">' + e.name + " — " + e.sets + " sets × " + e.reps + " reps</div>").join("");
+      } else if (d.run) {
+        detailHtml = '<div class="exercise-line">' + labelForRunType(d.run.run_type) + " — " + d.run.duration_min + " min · Zone " + d.run.zone + "</div>";
+      }
+      return (
+        '<div class="card tight">' +
+        '<div class="pr-row day-row" style="border-bottom:none;"' + (hasDetail ? ' data-day-idx="' + i + '"' : "") + '>' +
+        '<span class="name" style="' + nameColor + '">' + dayName + " — " + d.label + (d.is_today ? " · Today" : "") + "</span>" +
+        '<span style="display:flex;align-items:center;gap:0.4rem;">' +
+        '<span class="badge neutral" style="font-size:0.62rem;">' + labelShort(d.day_type) + "</span>" +
+        (hasDetail ? '<span class="chevron">›</span>' : "") +
+        "</span></div>" +
+        (hasDetail ? '<div class="day-detail hidden" id="program-day-detail-' + i + '">' + detailHtml + "</div>" : "") +
+        "</div>"
+      );
+    })
+    .join("");
+
+  list.querySelectorAll("[data-day-idx]").forEach((row) => {
+    const detail = document.getElementById("program-day-detail-" + row.dataset.dayIdx);
+    row.addEventListener("click", () => {
+      const wasHidden = detail.classList.contains("hidden");
+      list.querySelectorAll(".day-detail").forEach((el) => el.classList.add("hidden"));
+      list.querySelectorAll(".day-row").forEach((el) => el.classList.remove("expanded"));
+      if (wasHidden) {
+        detail.classList.remove("hidden");
+        row.classList.add("expanded");
+      }
+    });
+  });
+}
+
+function renderProgramGoals(goals) {
+  const list = document.getElementById("program-goals-list");
+  if (!goals.length) {
+    list.innerHTML = '<div class="empty-note">No goals set yet.</div>';
+    return;
+  }
+  list.innerHTML = goals
+    .map((g) => {
+      const pct = g.progress_pct != null ? g.progress_pct : 0;
+      const valueLine = g.current_value != null && g.target_value != null
+        ? fmtGoalValue(g.current_value, g.unit) + " → " + fmtGoalValue(g.target_value, g.unit) + " · "
+        : "";
+      return (
+        '<div class="card tight" style="margin-bottom:0.6rem;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">' +
+        '<span style="font-size:0.85rem;font-weight:600;">' + g.title + "</span>" +
+        '<span class="badge neutral" style="font-size:0.62rem;">' + (GOAL_STATUS_LABELS[g.status] || "Stable") + "</span></div>" +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;"></div></div>' +
+        '<div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.35rem;">' + valueLine + pct + "% there</div>" +
+        "</div>"
+      );
+    })
+    .join("");
+}
+
 async function loadProgram() {
   const data = await api("/program");
-  document.getElementById("program-focus").textContent = data.program_name + " — " + data.focus;
-  document.getElementById("program-week-title").textContent = "Week " + data.current_week + " of " + data.total_weeks;
+  const id = data.identity;
+
+  document.getElementById("program-focus").textContent = id.program_name + " — " + id.focus;
+  document.getElementById("program-week-title").textContent = "Week " + id.current_week + " of " + id.total_weeks;
+  document.getElementById("program-name").textContent = id.program_name;
+  document.getElementById("program-phase-line").textContent = "Week " + id.current_week + " of " + id.total_weeks + " — " + id.focus + " phase";
+  document.getElementById("program-primary-goal").textContent = GOAL_LABELS[id.primary_goal] || id.primary_goal;
+
+  const secWrap = document.getElementById("program-secondary-goals-wrap");
+  if (id.secondary_goals.length) {
+    secWrap.classList.remove("hidden");
+    document.getElementById("program-secondary-goals").textContent = id.secondary_goals.join(" · ");
+  } else {
+    secWrap.classList.add("hidden");
+  }
+
+  const days = id.days_to_reassessment;
+  document.getElementById("program-reassessment").textContent =
+    "Next reassessment " + (days <= 0 ? "today" : "in " + days + " day" + (days === 1 ? "" : "s"));
 
   const deloadCard = document.getElementById("deload-card");
-  if (data.deload_week) {
+  if (id.deload_week) {
     deloadCard.classList.remove("hidden");
-    document.getElementById("deload-week-badge").textContent = "Week " + data.deload_week;
+    document.getElementById("deload-week-badge").textContent = "Week " + id.deload_week;
   } else {
     deloadCard.classList.add("hidden");
   }
 
-  const list = document.getElementById("program-week-list");
-  list.innerHTML = data.week
-    .map((d) => {
-      const dayName = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" });
-      const border = d.is_today ? "border:1.5px solid var(--brand);" : "";
-      const nameColor = d.is_today ? "color:var(--brand-dark);" : "";
-      return (
-        '<div class="card tight" style="' + border + '"><div class="pr-row" style="border-bottom:none;">' +
-        '<span class="name" style="' + nameColor + '">' + dayName + " — " + d.label + (d.is_today ? " · Today" : "") + "</span>" +
-        '<span class="badge neutral" style="font-size:0.62rem;">' + labelShort(d.day_type) + "</span></div></div>"
-      );
-    })
-    .join("");
+  const p = data.progress;
+  document.getElementById("progress-completion-pct").textContent = p.completion_pct + "%";
+  document.getElementById("progress-completion-bar").style.width = p.completion_pct + "%";
+  document.getElementById("progress-workouts").textContent = p.workouts_completed + " / " + p.workouts_planned_to_date;
+  document.getElementById("progress-adherence").textContent = p.weekly_adherence_pct + "%";
+  document.getElementById("progress-streak").textContent = p.streak;
+  const statusBadge = document.getElementById("progress-status-badge");
+  statusBadge.textContent = PROGRESS_STATUS_LABELS[p.status] || "On Track";
+  statusBadge.className = "badge " + (p.status === "behind" ? "warn" : "success");
+
+  renderProgramToday(data.today);
+  renderProgramWeek(data.week);
+  renderProgramGoals(data.goals);
+
+  const obsCard = document.getElementById("program-observations-card");
+  obsCard.innerHTML = data.coach_observations.length
+    ? data.coach_observations.map((o) => '<div class="observation-row"><span class="dot"></span><span>' + o + "</span></div>").join("")
+    : '<div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div>';
 }
 
 // --------------------------------------------------------------- settings ----
