@@ -6,7 +6,7 @@ An adaptive AI fitness coach — not a workout tracker. It remembers your workou
 
 ## Status
 
-A working local demo exists: real readiness scoring, progressive overload, and autoregulation, running against a real (SQLite) database with a real UI you can log into and use.
+A working local demo exists: real readiness scoring, progressive overload, and autoregulation, running against a real (SQLite) database with a real UI you can log into and use. The Program tab is now a full coaching dashboard — program identity, progress, a tap-to-expand weekly structure, goal tracking, and deterministic Coach Observations (optionally narrated by a local, free LLM) — built around **collaborative progression**: instead of silently auto-picking a weight, it offers a few reasonable next-session options (repeat / increase / technique-focus) with reasoning, informed by how the last set actually felt.
 
 **Run it:** see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
 
@@ -14,6 +14,18 @@ Not production-ready — no auth, no real wearable data, no Postgres, no deploym
 
 Full spec: **[docs/architecture.md](docs/architecture.md)**
 Rendered version: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
+
+### Progress
+
+Built so far, roughly in order:
+
+- Core loop — readiness scoring, progressive overload, autoregulation, injury-aware substitution (FastAPI + SQLite backend, vanilla JS frontend)
+- Lift/run logging — units (lb/kg), rest timer, exercise picker, workout-split pictograms
+- Today tab — onboarding flow, real Spotify OAuth, wearable-connect stub, nutrition + check-in
+- Nutrition — food logging (barcode scan, custom foods, saved meals), smart search/favorites/restaurants, AI-personalized Recipe Hub, Smart Cart shopping list
+- **Program tab → coaching dashboard** (current) — collaborative Progression Decision Cards, goal tracking, weekly structure drill-down, deterministic Coach Observations with optional local-LLM narration
+
+Still ahead for Program: an ongoing coach conversation ("Ask Toci"), physique photo progress tracking, adherence/consistency detail, recent-changes history, and page personalization — deferred from the current pass to keep each build reviewable.
 
 ## Design
 
