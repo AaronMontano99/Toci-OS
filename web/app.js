@@ -8,6 +8,7 @@ const state = {
   selectedFood: null,
   selectedServings: 1,
   selectedMealSlot: "snack",
+  householdSize: 1,
   settings: null,
   onboardingPace: "lose_1",
   onboardingActivity: "active",
@@ -1444,6 +1445,133 @@ document.getElementById("btn-log-recipe").addEventListener("click", async () => 
   loadFoodToday();
 });
 
+document.getElementById("btn-add-recipe-to-cart").addEventListener("click", async () => {
+  const result = await api("/shopping/from-recipe/" + state.selectedRecipe.id, {
+    method: "POST",
+    body: JSON.stringify({ multiplier: state.recipeLogServings }),
+  });
+  toast(result.ingredients_added + " ingredient" + (result.ingredients_added === 1 ? "" : "s") + " added to Smart Cart");
+});
+
+// -- smart cart --
+
+document.getElementById("btn-open-shopping-cart").addEventListener("click", () => {
+  showView("view-shopping-cart");
+  loadShoppingCart();
+});
+
+const CART_CATEGORY_ORDER = ["protein", "produce", "fruit", "carbs", "fats", "dairy", "frozen", "snacks", "drinks", "pantry"];
+const CART_CATEGORY_LABELS = {
+  protein: "Protein", produce: "Produce", fruit: "Fruit", carbs: "Carbohydrates", fats: "Healthy Fats",
+  dairy: "Dairy", frozen: "Frozen", pantry: "Pantry", snacks: "Snacks", drinks: "Drinks",
+};
+
+async function loadShoppingCart() {
+  const data = await api("/shopping");
+  document.getElementById("cart-cost").textContent = "$" + data.estimated_cost.toFixed(2);
+  document.getElementById("cart-budget").textContent = data.budget != null ? "$" + data.budget.toFixed(2) : "—";
+  document.getElementById("cart-item-count").textContent = data.item_count;
+  document.getElementById("cart-household").textContent = data.household_size;
+
+  const container = document.getElementById("cart-categories");
+  if (!data.items.length) {
+    container.innerHTML = '<div class="empty-note">Your cart is empty — add ingredients from a recipe, or add an item below.</div>';
+  } else {
+    const groups = {};
+    data.items.forEach((i) => { (groups[i.category] = groups[i.category] || []).push(i); });
+    container.innerHTML = CART_CATEGORY_ORDER.filter((c) => groups[c] && groups[c].length)
+      .map((c) => (
+        '<div class="set-group-label">' + CART_CATEGORY_LABELS[c] + '</div>' +
+        '<div class="card tight">' + groups[c].map(renderCartItemRow).join("") + '</div>'
+      ))
+      .join("");
+    wireCartItemRows(container);
+  }
+
+  await loadPantry();
+}
+
+function renderCartItemRow(item) {
+  const priceStr = "$" + item.estimated_price.toFixed(2);
+  return (
+    '<div class="pr-row"><input type="checkbox" class="cart-item-check" data-itemid="' + item.id + '"' +
+    (item.is_checked ? " checked" : "") + ' style="flex:none;margin-right:0.6rem;width:18px;height:18px;">' +
+    '<div style="min-width:0;flex:1;' + (item.is_checked ? "opacity:0.5;text-decoration:line-through;" : "") + '">' +
+    '<div class="name">' + item.name + (item.in_pantry ? ' <span class="badge neutral">Have it</span>' : "") + '</div>' +
+    '<div class="date tnum">' + item.quantity + " " + item.unit + " · " + priceStr + (item.purpose ? " · " + item.purpose : "") + '</div></div>' +
+    '<button class="set-delete-btn" data-itemid="' + item.id + '" aria-label="Remove item">×</button></div>'
+  );
+}
+
+function wireCartItemRows(container) {
+  container.querySelectorAll(".cart-item-check").forEach((cb) => {
+    cb.addEventListener("change", async () => {
+      await api("/shopping/items/" + cb.dataset.itemid, { method: "PATCH", body: JSON.stringify({ is_checked: cb.checked }) });
+      loadShoppingCart();
+    });
+  });
+  container.querySelectorAll(".set-delete-btn[data-itemid]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await api("/shopping/items/" + btn.dataset.itemid, { method: "DELETE" });
+      toast("Removed");
+      loadShoppingCart();
+    });
+  });
+}
+
+document.getElementById("cart-quick-actions").addEventListener("click", async (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  const result = await api("/shopping/quick-action", { method: "POST", body: JSON.stringify({ action: chip.dataset.action }) });
+  toast(result.affected + " item" + (result.affected === 1 ? "" : "s") + " updated");
+  loadShoppingCart();
+});
+
+document.getElementById("btn-add-cart-item").addEventListener("click", async () => {
+  const input = document.getElementById("cart-manual-item-input");
+  const name = input.value.trim();
+  if (!name) {
+    toast("Enter an item name");
+    return;
+  }
+  await api("/shopping/items", { method: "POST", body: JSON.stringify({ name: name, quantity: 1, unit: "unit" }) });
+  input.value = "";
+  loadShoppingCart();
+});
+
+async function loadPantry() {
+  const data = await api("/pantry");
+  const list = document.getElementById("pantry-list");
+  if (!data.items.length) {
+    list.innerHTML = '<div class="empty-note">Nothing saved.</div>';
+    return;
+  }
+  list.innerHTML = data.items
+    .map((p) => (
+      '<div class="pr-row"><span class="name">' + p.name + '</span>' +
+      '<button class="set-delete-btn" data-pantryid="' + p.id + '" aria-label="Remove">×</button></div>'
+    ))
+    .join("");
+  list.querySelectorAll("[data-pantryid]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await api("/pantry/" + btn.dataset.pantryid, { method: "DELETE" });
+      loadShoppingCart();
+    });
+  });
+}
+
+document.getElementById("btn-add-pantry-item").addEventListener("click", async () => {
+  const input = document.getElementById("pantry-item-input");
+  const name = input.value.trim();
+  if (!name) {
+    toast("Enter an item name");
+    return;
+  }
+  await api("/pantry", { method: "POST", body: JSON.stringify({ name: name }) });
+  input.value = "";
+  loadShoppingCart();
+});
+
 // -------------------------------------------------------------- progress ----
 
 async function loadProgress() {
@@ -1627,9 +1755,34 @@ async function loadSettings() {
   renderDietPreferenceChips(data.dietary_preferences || []);
   renderFoodRestrictionChips(data.food_restrictions || []);
 
+  document.getElementById("set-input-shopping-budget").value = data.shopping_weekly_budget != null ? data.shopping_weekly_budget : "";
+  state.householdSize = data.household_size || 1;
+  document.getElementById("set-household-size-display").textContent = state.householdSize;
+
   await loadSpotifySettings();
   await loadWhoopSettings();
 }
+
+document.getElementById("btn-household-minus").addEventListener("click", () => {
+  state.householdSize = Math.max(1, state.householdSize - 1);
+  document.getElementById("set-household-size-display").textContent = state.householdSize;
+});
+document.getElementById("btn-household-plus").addEventListener("click", () => {
+  state.householdSize = Math.min(12, state.householdSize + 1);
+  document.getElementById("set-household-size-display").textContent = state.householdSize;
+});
+
+document.getElementById("btn-save-shopping-settings").addEventListener("click", async () => {
+  const budgetVal = document.getElementById("set-input-shopping-budget").value;
+  await api("/settings", {
+    method: "PATCH",
+    body: JSON.stringify({
+      household_size: state.householdSize,
+      shopping_weekly_budget: budgetVal ? parseFloat(budgetVal) : null,
+    }),
+  });
+  toast("Smart Cart settings saved");
+});
 
 function renderDietPreferenceChips(selected) {
   document.querySelectorAll("#diet-preference-chips .chip").forEach((c) => {

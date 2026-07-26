@@ -62,6 +62,9 @@ class User(Base):
     dietary_preferences = Column(JSON, nullable=False, default=list)  # e.g. ["high_protein", "mediterranean"]
     food_restrictions = Column(JSON, nullable=False, default=list)  # e.g. ["shellfish", "peanuts"] -- excluded ingredient tags
 
+    household_size = Column(Integer, nullable=False, default=1)  # scales Smart Cart quantities/cost -- no multi-user profiles in this app
+    shopping_weekly_budget = Column(Float)  # drives the Smart Cart budget bar
+
 
 class Injury(Base):
     __tablename__ = "injuries"
@@ -290,6 +293,30 @@ class RecipeIngredient(Base):
     restriction_tags = Column(JSON, nullable=False, default=list)  # e.g. ["shellfish"] -- excludes the parent recipe for matching users
     is_primary_protein = Column(Boolean, nullable=False, default=False)  # scaled by "Fit My Macros"
     substitutions = Column(JSON, nullable=False, default=list)  # [{"name","calories","protein_g","carbs_g","fat_g","restriction_tags":[...]}]
+
+
+class ShoppingListItem(Base):
+    __tablename__ = "shopping_list_items"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False, default="pantry")  # protein|produce|fruit|carbs|fats|dairy|frozen|pantry|snacks|drinks
+    quantity = Column(Float, nullable=False, default=1.0)
+    unit = Column(String, nullable=False, default="unit")
+    estimated_price = Column(Float, nullable=False, default=0.0)
+    purpose = Column(String)  # e.g. "Used for Grilled Chicken Rice Bowl"
+    is_checked = Column(Boolean, nullable=False, default=False)
+    source = Column(String, nullable=False, default="manual")  # "manual" | "recipe"
+    recipe_id = Column(Integer, ForeignKey("recipes.id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class PantryItem(Base):
+    __tablename__ = "pantry_items"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
 class WearableDayStats(Base):

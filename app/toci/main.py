@@ -14,6 +14,7 @@ from . import engine as reco_engine
 from . import models, schemas
 from . import nutrition as nutrition_client
 from . import recipes as recipes_client
+from . import shopping as shopping_client
 from . import spotify as spotify_client
 from . import whoop as whoop_client
 from .database import Base
@@ -482,6 +483,8 @@ def get_settings(db: Session = Depends(get_db)):
         "is_premium": user.is_premium,
         "dietary_preferences": user.dietary_preferences or [],
         "food_restrictions": user.food_restrictions or [],
+        "household_size": user.household_size,
+        "shopping_weekly_budget": user.shopping_weekly_budget,
     }
 
 
@@ -835,6 +838,86 @@ def recipe_log(recipe_id: int, payload: schemas.RecipeLogIn, db: Session = Depen
     db.add(entry)
     db.commit()
     return {"food_item_id": food.id, "log_entry_id": entry.id}
+
+
+# ------------------------------------------------------------ smart cart ----
+
+@app.get("/api/shopping")
+def shopping_list(db: Session = Depends(get_db)):
+    return shopping_client.list_shopping(db, DEMO_USER_ID)
+
+
+@app.post("/api/shopping/items")
+def shopping_add_item(payload: schemas.ShoppingItemIn, db: Session = Depends(get_db)):
+    item = shopping_client.add_manual_item(db, DEMO_USER_ID, payload.name, payload.quantity, payload.unit, payload.category)
+    return {"id": item.id}
+
+
+@app.patch("/api/shopping/items/{item_id}")
+def shopping_update_item(item_id: int, payload: schemas.ShoppingItemUpdateIn, db: Session = Depends(get_db)):
+    item = db.query(models.ShoppingListItem).filter_by(id=item_id, user_id=DEMO_USER_ID).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    if payload.quantity is not None:
+        item.quantity = payload.quantity
+        item.estimated_price = shopping_client.price_for(item.name, item.quantity, item.unit)
+    if payload.is_checked is not None:
+        item.is_checked = payload.is_checked
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/shopping/items/{item_id}")
+def shopping_delete_item(item_id: int, db: Session = Depends(get_db)):
+    db.query(models.ShoppingListItem).filter_by(id=item_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/shopping/from-recipe/{recipe_id}")
+def shopping_add_from_recipe(recipe_id: int, payload: schemas.ShoppingFromRecipeIn, db: Session = Depends(get_db)):
+    recipe = db.query(models.Recipe).get(recipe_id)
+    if not recipe:
+        raise HTTPException(404, "Recipe not found")
+    count = shopping_client.add_from_recipe(db, DEMO_USER_ID, recipe, payload.multiplier)
+    return {"ingredients_added": count}
+
+
+@app.post("/api/shopping/quick-action")
+def shopping_quick_action(payload: schemas.ShoppingQuickActionIn, db: Session = Depends(get_db)):
+    valid_actions = {"remove_seafood", "reduce_cost", "increase_protein", "clear_checked"}
+    if payload.action not in valid_actions:
+        raise HTTPException(400, "Unknown action")
+    affected = shopping_client.quick_action(db, DEMO_USER_ID, payload.action)
+    return {"affected": affected}
+
+
+@app.get("/api/pantry")
+def pantry_list(db: Session = Depends(get_db)):
+    rows = db.query(models.PantryItem).filter_by(user_id=DEMO_USER_ID).order_by(models.PantryItem.name).all()
+    return {"items": [{"id": p.id, "name": p.name} for p in rows]}
+
+
+@app.post("/api/pantry")
+def pantry_add(payload: schemas.PantryItemIn, db: Session = Depends(get_db)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(400, "Name is required")
+    existing = db.query(models.PantryItem).filter_by(user_id=DEMO_USER_ID, name=name).first()
+    if existing:
+        return {"id": existing.id}
+    item = models.PantryItem(user_id=DEMO_USER_ID, name=name)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id}
+
+
+@app.delete("/api/pantry/{item_id}")
+def pantry_delete(item_id: int, db: Session = Depends(get_db)):
+    db.query(models.PantryItem).filter_by(id=item_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- spotify ----

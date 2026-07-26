@@ -63,6 +63,8 @@ class SettingsUpdateIn(BaseModel):
     is_premium: Optional[bool] = None  # demo-only "Simulate Premium" toggle -- no real billing
     dietary_preferences: Optional[List[str]] = None
     food_restrictions: Optional[List[str]] = None
+    household_size: Optional[int] = None
+    shopping_weekly_budget: Optional[float] = None
 
 
 class PasswordUpdateIn(BaseModel):
@@ -171,6 +173,30 @@ class RecipeLogIn(BaseModel):
     servings: float = 1.0
     meal_slot: str = "dinner"
     overrides: List[RecipeIngredientOverrideIn] = []
+
+
+class ShoppingItemIn(BaseModel):
+    name: str
+    quantity: float = 1.0
+    unit: str = "unit"
+    category: Optional[str] = None
+
+
+class ShoppingItemUpdateIn(BaseModel):
+    quantity: Optional[float] = None
+    is_checked: Optional[bool] = None
+
+
+class ShoppingFromRecipeIn(BaseModel):
+    multiplier: float = 1.0
+
+
+class ShoppingQuickActionIn(BaseModel):
+    action: str  # "remove_seafood" | "reduce_cost" | "increase_protein" | "clear_checked"
+
+
+class PantryItemIn(BaseModel):
+    name: str
 
 
 class OnboardingCompleteIn(BaseModel):
