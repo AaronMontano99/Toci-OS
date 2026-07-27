@@ -4,31 +4,63 @@ An adaptive AI fitness coach — not a workout tracker. It remembers your workou
 
 **Lift. Run. Recover. Progress. Repeat.**
 
-## Status
+## Status at a glance
 
-A working local demo exists: real readiness scoring, progressive overload, and autoregulation, running against a real (SQLite) database with a real UI you can log into and use. The Program tab is now a full coaching dashboard — program identity, progress, a tap-to-expand weekly structure, goal tracking, and deterministic Coach Observations (optionally narrated by a local, free LLM) — built around **collaborative progression**: instead of silently auto-picking a weight, it offers a few reasonable next-session options (repeat / increase / technique-focus) with reasoning, informed by how the last set actually felt.
+| Layer | State |
+|---|---|
+| Local demo (FastAPI + SQLite + vanilla JS) | **Working** — real UI, real database, log in and use it today |
+| Native apps (Kotlin Multiplatform / SwiftUI / Jetpack Compose) | Not started — this is the local demo the real apps will be built from |
+| Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
+| Local AI features (Coach narration, Ask Toci, photo impressions) | Code complete with tested fallback paths; live model output not yet verified on this hardware — see [Known gaps](#known-gaps) |
 
 **Run it:** see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
 
-Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See the "what's deliberately not production-ready" section in the app README for the full list before mistaking this for more than it is.
+Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See [Known gaps](#known-gaps) and the app README's "what's deliberately not production-ready" section before mistaking this for more than it is.
 
-Full spec: **[docs/architecture.md](docs/architecture.md)**
-Rendered version: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
+Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
 
-### Progress
+## What actually works right now
 
-Built so far, roughly in order:
+Everything below is live in the running local demo — not a mockup. Run it yourself per [`app/README.md`](app/README.md).
 
-- Core loop — readiness scoring, progressive overload, autoregulation, injury-aware substitution (FastAPI + SQLite backend, vanilla JS frontend)
-- Lift/run logging — units (lb/kg), rest timer, exercise picker, workout-split pictograms
-- Today tab — onboarding flow, real Spotify OAuth, wearable-connect stub, nutrition + check-in
-- Nutrition — food logging (barcode scan, custom foods, saved meals), smart search/favorites/restaurants, AI-personalized Recipe Hub, Smart Cart shopping list
-- **Program tab → coaching dashboard** — collaborative Progression Decision Cards, goal tracking, weekly structure drill-down, deterministic Coach Observations with optional local-LLM narration
-- Seeded with a real training profile and 7-day split (not placeholder demo data) — see `app/toci/seed.py`
-- **Progress photo timeline** — explicit "Take Photo" (camera permission) or "Choose from Library" (native photo picker) actions, each photo optionally gets a best-effort qualitative AI impression from a local vision model, with a clear fallback message when that model isn't available. No photos are pre-seeded; the timeline starts empty for every user.
-- **Ask Toci** (current) — a conversational program-builder in the Program tab, scoped strictly to this user's own training/goals/history. Off-topic requests are declined before ever reaching the model (see `app/toci/coach_chat.py`); on-topic program-change requests get a structured proposal the user must explicitly Apply or Discard — never applied automatically.
+**The recommendation engine (`toci/engine.py`)**
+- Readiness scoring — HRV/RHR z-scores against a rolling baseline, sleep vs. target, and a subjective check-in, weighted and banded exactly as documented in the architecture spec.
+- Progressive overload — logging a set today changes what's prescribed next session, based on the actual RIR/reps-hit rule, not a fixed schedule.
+- Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery.
+- Injury-aware substitution — an active injury swaps out the affected lift on the next session that includes it.
+- **Collaborative progression** — instead of silently picking a weight, the engine offers a few reasoned next-session options (repeat / increase / technique-focus), and logging feeds back `feel` (clean/difficult/sloppy/partial/assisted/pain) and `confidence_next` per set so the coaching stays grounded in how training actually felt, not just numbers hit.
 
-Still ahead for Program: adherence/consistency detail, recent-changes history, and page personalization — deferred to keep each build reviewable.
+**Real training data**
+- Seeded with an actual profile (26M, 5'9", 201.3 lb, advanced/very-active) and a real 7-day split — Sunday Lower Body through Saturday Rest, including cardio finishers embedded in lift days and a full mobility checklist on the recovery day (`toci/seed.py`).
+- Recent logged history matches stated real bests (squat 205×4×5, bench 185×5 with the real "fell off fast, backed off to 155" story, pull-ups 3×3+1×2) with `feel`/`confidence_next` populated, so the progression engine has real signal from day one instead of blank data.
+- Goals tracked: bench back to 305 lb, run 3 miles continuously, 10 strict pull-ups.
+
+**Program dashboard**
+- Program identity, weekly progress (completion %, adherence, streak), a tap-to-expand weekly structure, goal-progress bars, and deterministic Coach Observations (plateau/progression/adherence-trend detection), optionally rephrased in a warmer voice by a local LLM.
+- **Progress photo timeline** — two explicit, permission-respecting actions: "Take Photo" (real `getUserMedia()` camera request — the browser's own permission prompt appears, with clear denied/no-camera messaging) and "Choose from Library" (native OS photo picker, which handles its own access permission). Each photo can get a short qualitative AI posture/build impression from a local vision model, with an honest fallback message when that's unavailable. No photos are ever pre-seeded — every timeline starts empty.
+- **Ask Toci** — a conversational program-builder, restricted strictly to this user's own program/goals/training history. Off-topic requests (general trivia, coding, anything unrelated to this app) are declined before the message ever reaches the model. Program-change requests get a structured JSON proposal — validated against the app's real exercise catalog — that must be explicitly **Applied** or **Discarded**; nothing changes automatically, matching the same propose-then-approve pattern already used for set-by-set progression.
+
+**Logging**
+- Lift and run logging with lb/kg unit switching, a rest timer, an exercise picker, and workout-split pictograms.
+- Set logging captures weight/sets/reps plus the qualitative `feel` and `confidence_next` fields the collaborative progression engine reads.
+
+**Today tab**
+- Onboarding flow, real Spotify OAuth (Authorization Code + PKCE, no client secret needed), a wearable-connect stub, nutrition summary, and the daily recovery check-in.
+
+**Nutrition**
+- Food logging (barcode scan via Open Food Facts, custom foods, saved meals), smart search/favorites/restaurant browsing, an AI-personalized Recipe Hub (diet styles, restrictions, ingredient substitutions), and a Smart Cart shopping list generated from planned meals.
+
+## Known gaps
+
+- **Live local-AI output not verified**: Coach narration, Ask Toci, and photo AI impressions are fully coded with tested graceful-fallback paths (the app never hangs or breaks without them), but this machine has no pre-built Ollama package — `brew install ollama` compiles it and its `llama.cpp` dependency from source, which is slow on older/modest hardware. Vision models in particular are heavy; realistic expectations are set in `app/README.md`.
+- **Ask Toci's scope guardrail** is a strong deterrent (pre-filter + system prompt), not a mathematically airtight guarantee against a determined adversarial prompt on a local open-weight model.
+- **No auth** — single hardcoded demo user; the architecture doc's Sign in with Apple/Google plan isn't wired up.
+- **No real wearable data** — HRV/RHR/sleep are simulated around a seeded baseline until manually overridden on the Recovery Check-in screen.
+- **SQLite, not Postgres** — a one-line change in `toci/database.py` when that matters.
+- **No training-load/ACWR tracking, no deload auto-trigger, no program version history** — this implements the readiness + progression core loop, not every table in the full architecture spec.
+- **No tests, no migrations tooling, no deployment config.**
+- **Qualitative goals aren't numerically tracked** — "improve posture," "look more athletic" etc. don't fit the Goal model's start→target progress bar, so they're intentionally not forced into it (addressed instead via the primary program focus and the recovery day's mobility work) rather than inventing a fake metric.
+- **Native apps not started** — this is entirely the local FastAPI/vanilla-JS demo; Kotlin Multiplatform/SwiftUI/Jetpack Compose are still just the planned target stack.
 
 ## Design
 
