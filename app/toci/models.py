@@ -225,6 +225,16 @@ class BodyMetric(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
     weight_kg = Column(Float)
+    body_fat_pct = Column(Float)  # optional, user-entered -- never estimated from photos
+
+
+class WaterLogEntry(Base):
+    __tablename__ = "water_log_entries"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False, default=dt.date.today)
+    ounces = Column(Float, nullable=False)
+    logged_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
 class ProgramChatMessage(Base):

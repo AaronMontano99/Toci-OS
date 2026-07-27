@@ -49,18 +49,8 @@
 
   <!-- ============ TODAY ============ -->
   <section class="view active" id="view-today">
-    <div class="home-header">
-      <button class="avatar-btn" id="btn-avatar" aria-label="Profile">—</button>
-      <div class="home-header-mid">
-        <span class="greeting" id="today-greeting">Good day</span>
-        <span class="date" id="today-date">—</span>
-      </div>
-      <div class="streak-pill" id="today-streak-pill">
-        <span class="icon-circle sm">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z" fill="currentColor"/></svg>
-        </span>
-        <div><div class="n tnum" id="today-streak-n">0</div><div class="lbl">Day streak</div></div>
-      </div>
+    <div class="today-topbar">
+      <div class="toci-wordmark">TOCI</div>
       <div class="notif-wrap">
         <button class="bell-btn" id="btn-notifications" aria-label="Notifications">
           <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="19" height="19">
@@ -73,89 +63,113 @@
       </div>
     </div>
 
-    <div class="card premium-banner hidden" id="premium-banner">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.7rem;">
-        <div>
-          <div style="font-weight:700;font-size:0.9rem;">Go Premium</div>
-          <div style="font-size:0.78rem;color:var(--neutral-2);">Unlock deeper insights and advanced programming.</div>
-        </div>
-        <button class="btn small primary" id="btn-premium-upsell" style="width:auto;flex:none;">Upgrade</button>
+    <div class="home-header">
+      <button class="avatar-btn" id="btn-avatar" aria-label="Open profile">—</button>
+      <div class="home-header-mid">
+        <span class="greeting" id="today-greeting">Good day</span>
+        <span class="date" id="today-date">—</span>
       </div>
+      <button type="button" class="streak-pill" id="today-streak-pill" aria-label="View streak detail">
+        <span class="icon-circle sm">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z" fill="currentColor"/></svg>
+        </span>
+        <div><div class="n tnum" id="today-streak-n">0</div><div class="lbl" id="today-streak-lbl">Day streak</div></div>
+      </button>
     </div>
+    <div class="card tight hidden" id="streak-detail-panel"></div>
 
-    <div class="hero-photo-card" id="readiness-hero-card" style="flex-direction:row;align-items:center;gap:0.9rem;min-height:auto;padding:1rem 1.1rem;">
-      <button class="btn small subtle hidden" id="btn-goto-checkin" style="position:absolute;top:0.6rem;right:0.6rem;width:auto;">Check In</button>
+    <button type="button" class="hero-photo-card tap-card" id="readiness-hero-card"
+            style="flex-direction:row;align-items:center;gap:0.9rem;min-height:auto;padding:1rem 1.1rem;">
       <div class="ring-wrap">
         <svg width="74" height="74" viewBox="0 0 74 74">
           <circle cx="37" cy="37" r="31" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="7"/>
           <circle id="readiness-ring-fill" cx="37" cy="37" r="31" fill="none" stroke="var(--success)" stroke-width="7"
                   stroke-linecap="round" stroke-dasharray="194.8" stroke-dashoffset="194.8"/>
         </svg>
-        <div class="ring-value" id="readiness-value" style="color:#fff;">--</div>
+        <div class="ring-value" id="readiness-value" style="color:#fff;">
+          <span id="readiness-value-num">--</span><span class="ring-value-sub">/100</span>
+        </div>
       </div>
       <div style="flex:1;min-width:0;">
         <span class="kicker">Readiness</span>
         <div class="hero-title" id="readiness-band-title" style="font-size:1.05rem;">—</div>
         <div class="hero-sub" id="readiness-summary">Loading…</div>
       </div>
-    </div>
+      <span class="chevron-affordance"><svg viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </button>
 
     <div class="hero-photo-card" id="reco-card" style="min-height:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.7rem;">
         <div style="min-width:0;flex:1;">
-          <span class="kicker" id="reco-kicker">—</span>
+          <span class="kicker" id="reco-kicker">Today's Workout</span>
           <div id="reco-body">Loading…</div>
         </div>
         <div class="icon-circle md" id="reco-ico" style="flex:none;background:rgba(255,255,255,0.14);"></div>
       </div>
-      <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.9rem;">Start</button>
+      <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.9rem;"></button>
+      <div class="workout-caption-row hidden" id="workout-caption-row">
+        <button type="button" class="cap-action" id="btn-warmup">Warm-up</button>
+        <span class="cap-sep">·</span>
+        <button type="button" class="cap-action" id="btn-mobility">Mobility</button>
+        <span class="cap-sep">·</span>
+        <span class="cap-plain">Let's go</span>
+      </div>
+      <div class="inline-detail-panel hidden" id="warmup-panel"></div>
+      <div class="inline-detail-panel hidden" id="mobility-panel"></div>
     </div>
 
-    <div class="stat-row" id="today-macro-stat-row">
-      <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="macro-calories-val">0</div><div class="sub tnum" id="macro-calories-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-calories-bar" style="width:0%;"></div></div></div>
-      <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="macro-protein-val">0g</div><div class="sub tnum" id="macro-protein-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-protein-bar" style="width:0%;"></div></div></div>
-      <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="macro-carbs-val">0g</div><div class="sub tnum" id="macro-carbs-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-carbs-bar" style="width:0%;"></div></div></div>
-      <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="macro-fat-val">0g</div><div class="sub tnum" id="macro-fat-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-fat-bar" style="width:0%;"></div></div></div>
-    </div>
+    <button type="button" class="card tap-card" id="nutrition-summary-card" aria-label="Open nutrition" style="position:relative;">
+      <span class="chevron-affordance" style="position:absolute;top:0.9rem;right:0.7rem;"><svg viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div class="stat-row" id="today-macro-stat-row" style="margin-bottom:0;padding-right:1.2rem;">
+        <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="macro-calories-val">0</div><div class="sub tnum" id="macro-calories-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-calories-bar" style="width:0%;"></div></div></div>
+        <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="macro-protein-val">0g</div><div class="sub tnum" id="macro-protein-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-protein-bar" style="width:0%;"></div></div></div>
+        <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="macro-carbs-val">0g</div><div class="sub tnum" id="macro-carbs-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-carbs-bar" style="width:0%;"></div></div></div>
+        <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="macro-fat-val">0g</div><div class="sub tnum" id="macro-fat-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-fat-bar" style="width:0%;"></div></div></div>
+      </div>
+      <div class="empty-note hidden" id="nutrition-setup-note" style="padding:0.2rem 0 0;">Set up nutrition targets ›</div>
+    </button>
 
     <div style="display:flex;gap:0.7rem;align-items:stretch;">
-      <div class="card" id="weight-progress-card" style="flex:1;min-width:0;">
-        <span class="kicker">Weight Trend</span>
+      <button type="button" class="card tap-card" id="weight-progress-card" style="flex:1;min-width:0;" aria-label="Open weight progress">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="kicker" style="margin-bottom:0;">Weight Trend</span>
+          <span class="chevron-affordance"><svg viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
         <div id="weight-progress-body">Loading…</div>
-      </div>
-      <div class="card" id="this-week-streak-card" style="flex:1;min-width:0;">
-        <span class="kicker">This Week</span>
+      </button>
+      <button type="button" class="card tap-card" id="this-week-streak-card" style="flex:1;min-width:0;" aria-label="Open weekly schedule">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="kicker" style="margin-bottom:0;">This Week</span>
+          <span class="chevron-affordance"><svg viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </div>
         <div id="this-week-streak-body">Loading…</div>
-      </div>
+      </button>
     </div>
 
     <div class="stat-row">
-      <div class="stat-tile" id="steps-card">
-        <div class="label">Steps</div>
-        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not connected yet.</div>
-      </div>
-      <div class="stat-tile" id="water-card">
-        <div class="label">Water</div>
-        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not tracked yet.</div>
-      </div>
-      <div class="stat-tile" id="bodyfat-card">
-        <div class="label">Body Fat</div>
-        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not tracked yet.</div>
-      </div>
+      <button type="button" class="stat-tile tap-card" id="steps-card" aria-label="Steps">
+        <div class="label">
+          <svg viewBox="0 0 20 20" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:3px;"><path d="M6 2c-1 0-1.8.8-1.8 2 0 .6.2 1 .5 1.4C4.3 6 4 7 4 8c0 1.6 1 2.5 2.3 2.5.7 0 1.2-.3 1.5-.7.2.9.2 2-.3 3.2-.4 1-1.3 1.6-2.3 1.8-.6.1-1 .6-.9 1.2.1.5.6.9 1.2.8 1.5-.3 2.8-1.2 3.4-2.6.8-1.8.4-3.7-.2-5-.3-.7-.6-1.7-.4-2.6C8.5 5.4 8 4.3 8 3.2 8 2 7 2 6 2z"/></svg>
+          Steps
+        </div>
+        <div class="value tnum" id="steps-val">—</div>
+        <div class="sub tnum" id="steps-sub">Connect a device</div>
+        <div class="bar-track hidden" id="steps-bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="steps-bar" style="width:0%;"></div></div>
+      </button>
+      <button type="button" class="stat-tile tap-card" id="water-card" aria-label="Water intake, tap to log">
+        <div class="label"><svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;"><path d="M10 3C10 3 5 9.5 5 13a5 5 0 0010 0c0-3.5-5-10-5-10z" stroke-width="1.5" stroke-linejoin="round"/></svg>Water</div>
+        <div class="value tnum" id="water-val">0<span style="font-size:0.7rem;font-weight:600;"> oz</span></div>
+        <div class="sub tnum" id="water-sub">of —</div>
+        <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="water-bar" style="width:0%;"></div></div>
+      </button>
+      <button type="button" class="stat-tile tap-card" id="bodyfat-card" aria-label="Body fat, tap to log">
+        <div class="label"><svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;"><circle cx="10" cy="6" r="3" stroke-width="1.5"/><path d="M5 17c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke-width="1.5" stroke-linecap="round"/></svg>Body Fat</div>
+        <div class="value tnum" id="bodyfat-val">—</div>
+        <div class="sub tnum" id="bodyfat-sub">Not recorded</div>
+      </button>
     </div>
-
-    <div class="set-group-label">This Week's Training</div>
-    <div class="card tight" id="exercise-summary-list"></div>
-
-    <div class="card" id="weekly-progress-card">
-      <span class="kicker">Weekly Progress</span>
-      <div id="weekly-progress-body">Loading…</div>
-    </div>
-
-    <div class="card tight" id="music-card">
-      <span class="kicker">Music</span>
-      <div id="music-body">Loading…</div>
-    </div>
+    <div class="quick-entry-panel card tight hidden" id="water-quickadd-panel"></div>
+    <div class="quick-entry-panel card tight hidden" id="bodyfat-entry-panel"></div>
   </section>
 
   <button class="fab-add-food" id="btn-fab-add-food" aria-label="Log food">+</button>
@@ -1169,7 +1183,7 @@
         <path d="M5 3V9.5C5 10.6 5.9 11.5 7 11.5C8.1 11.5 9 10.6 9 9.5V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M7 11.5V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
         <path d="M13.5 3C12 3 11 4.5 11 6.5C11 8 11.8 9 13 9.3V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg></div>Food
+      </svg></div>Nutrition
     </button>
     <button class="tab" data-tab="view-progress">
       <div class="ico"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1188,7 +1202,7 @@
       <div class="ico"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.7"/>
         <path d="M4 17C4 13.6863 6.68629 11 10 11C13.3137 11 16 13.6863 16 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-      </svg></div>You
+      </svg></div>Profile
     </button>
   </div>
 </div>

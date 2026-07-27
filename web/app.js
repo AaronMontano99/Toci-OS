@@ -148,7 +148,7 @@ document.querySelectorAll(".tab-bar .tab").forEach((t) => {
   t.addEventListener("click", () => {
     const id = t.dataset.tab;
     showView(id);
-    if (id === "view-today") { loadTodayMacroStats(); loadWeightProgressCard(); loadWeeklyProgressCard(); loadMusicCard(); loadWearableCard(); }
+    if (id === "view-today") { loadTodayMacroStats(); loadWeightProgressCard(); loadWearableCard(); }
     if (id === "view-food") loadFoodToday();
     if (id === "view-progress") loadProgress();
     if (id === "view-program") loadProgram();
@@ -178,13 +178,15 @@ async function loadToday() {
   const name = state.settings && state.settings.name ? state.settings.name.split(" ")[0] : "";
   document.getElementById("today-greeting").textContent = timeOfDayGreeting() + (name ? ", " + name : "");
   document.getElementById("today-streak-n").textContent = data.streak;
+  document.getElementById("today-streak-lbl").textContent = data.streak > 0 ? "Day streak" : "Start your streak";
+  document.getElementById("streak-detail-panel").classList.add("hidden"); // collapse any previously open detail on refresh
 
   const score = data.readiness.score;
   const band = data.readiness.band;
-  document.getElementById("readiness-value").textContent = Math.round(score);
+  document.getElementById("readiness-value-num").textContent = Math.round(score);
 
   const bandTitle = document.getElementById("readiness-band-title");
-  const bandWord = band === "green" ? "Good" : band === "amber" ? "Moderate" : "Low";
+  const bandWord = band === "green" ? "Good" : band === "amber" ? "Moderate" : "Take It Easy";
   bandTitle.textContent = bandWord;
 
   const ringFill = document.getElementById("readiness-ring-fill");
@@ -193,12 +195,11 @@ async function loadToday() {
   ringFill.style.stroke = strokeVar;
   ringFill.setAttribute("stroke-dashoffset", String(circumference * (1 - score / 100)));
 
-  document.getElementById("btn-goto-checkin").classList.toggle("hidden", data.checked_in);
-
-  renderRecommendation(data.recommendation);
-  renderExerciseSummary(data.week);
+  renderRecommendation(data);
   renderThisWeekStreak(data.week);
   renderNotifications(data);
+  loadWaterCard();
+  loadBodyFatCard();
 }
 
 function renderThisWeekStreak(week) {
@@ -225,6 +226,93 @@ function renderThisWeekStreak(week) {
     '<div style="font-weight:800;font-family:var(--font-display);font-size:1.1rem;">' + completed + " of " + planned.length + " days</div>" +
     '<div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">' + caption + "</div>";
 }
+
+document.getElementById("today-streak-pill").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById("streak-detail-panel");
+  if (!panel.classList.contains("hidden")) { panel.classList.add("hidden"); return; }
+  panel.innerHTML = '<div class="empty-note">Loading…</div>';
+  panel.classList.remove("hidden");
+  const weekly = await api("/progress/weekly-summary");
+  const c = weekly.consistency;
+  panel.innerHTML =
+    '<div style="font-weight:700;font-size:0.88rem;margin-bottom:0.5rem;">Adherence this week</div>' +
+    '<div class="set-row"><span class="k">Consistency score</span><span class="v tnum" style="font-weight:700;">' + c.score + " · " + c.band + "</span></div>" +
+    '<div class="set-row" style="border-bottom:none;"><span class="k">Meals logged</span><span class="v tnum">' + weekly.days_logged + " of 7 days</span></div>";
+});
+
+// oz is the canonical hydration storage unit (same "canonical metric, converted
+// for display" convention as weight_kg) -- 1 US fl oz = 29.5735 mL.
+function ozToDisplay(oz) {
+  return state.units === "imperial" ? Math.round(oz) : Math.round(oz * 29.5735);
+}
+function hydrationUnit() {
+  return state.units === "imperial" ? "oz" : "mL";
+}
+
+async function loadWaterCard() {
+  const data = await api("/hydration/today");
+  document.getElementById("water-val").innerHTML = ozToDisplay(data.ounces) + '<span style="font-size:0.7rem;font-weight:600;"> ' + hydrationUnit() + "</span>";
+  document.getElementById("water-sub").textContent = "of " + ozToDisplay(data.goal_oz) + " " + hydrationUnit();
+  document.getElementById("water-bar").style.width = Math.min(100, Math.round((100 * data.ounces) / data.goal_oz)) + "%";
+}
+
+document.getElementById("water-card").addEventListener("click", () => {
+  const panel = document.getElementById("water-quickadd-panel");
+  const bodyfatPanel = document.getElementById("bodyfat-entry-panel");
+  bodyfatPanel.classList.add("hidden");
+  if (!panel.classList.contains("hidden")) { panel.classList.add("hidden"); return; }
+  const isMetric = state.units !== "imperial";
+  const options = isMetric ? [250, 500, 750] : [8, 16, 24]; // mL or oz quick-add amounts
+  panel.innerHTML =
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.5rem;">Add water (' + hydrationUnit() + ")</div>" +
+    '<div class="qty-row">' +
+    options.map((v) => '<button type="button" class="btn subtle small" data-oz="' + v + '">+' + v + "</button>").join("") +
+    "</div>";
+  panel.classList.remove("hidden");
+  panel.querySelectorAll("[data-oz]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const displayVal = parseFloat(btn.dataset.oz);
+      const ounces = isMetric ? displayVal / 29.5735 : displayVal;
+      await api("/hydration/today", { method: "POST", body: JSON.stringify({ ounces: ounces }) });
+      panel.classList.add("hidden");
+      loadWaterCard();
+      toast("Logged " + displayVal + " " + hydrationUnit());
+    });
+  });
+});
+
+async function loadBodyFatCard() {
+  const data = await api("/body-fat");
+  if (data.body_fat_pct == null) {
+    document.getElementById("bodyfat-val").textContent = "—";
+    document.getElementById("bodyfat-sub").textContent = "Not recorded";
+  } else {
+    document.getElementById("bodyfat-val").textContent = Math.round(data.body_fat_pct * 10) / 10 + "%";
+    const d = new Date(data.date + "T00:00:00");
+    document.getElementById("bodyfat-sub").textContent = "Last updated " + d.toLocaleDateString(undefined, { weekday: "short" });
+  }
+}
+
+document.getElementById("bodyfat-card").addEventListener("click", () => {
+  const panel = document.getElementById("bodyfat-entry-panel");
+  document.getElementById("water-quickadd-panel").classList.add("hidden");
+  if (!panel.classList.contains("hidden")) { panel.classList.add("hidden"); return; }
+  panel.innerHTML =
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.5rem;">Log body fat % — never estimated from photos</div>' +
+    '<div style="display:flex;gap:0.5rem;align-items:center;">' +
+    '<input type="number" step="0.1" min="3" max="60" id="bodyfat-input" placeholder="e.g. 18.6" style="flex:1;">' +
+    '<button type="button" class="btn primary small" id="btn-save-bodyfat" style="width:auto;">Save</button></div>';
+  panel.classList.remove("hidden");
+  document.getElementById("btn-save-bodyfat").addEventListener("click", async () => {
+    const val = parseFloat(document.getElementById("bodyfat-input").value);
+    if (Number.isNaN(val) || val <= 0) { toast("Enter a valid percentage"); return; }
+    await api("/body-fat", { method: "POST", body: JSON.stringify({ body_fat_pct: val }) });
+    panel.classList.add("hidden");
+    loadBodyFatCard();
+    toast("Body fat logged");
+  });
+});
 
 // Simple pictogram figures (circle head + line limbs), one per workout split --
 // same convention as exercise-chart icons: minimal enough to always read cleanly.
@@ -298,99 +386,135 @@ function pictogramFor(reco) {
 }
 
 const META_CLOCK_SVG = '<svg viewBox="0 0 20 20" width="12" height="12" fill="none" style="vertical-align:-1.5px;margin-right:2px;"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const META_BARS_SVG = '<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" style="vertical-align:-1.5px;margin-right:2px;"><path d="M5 14V9M10 14V5M15 14v-3" stroke-width="1.7" stroke-linecap="round"/></svg>';
+const META_COUNT_SVG = '<svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" style="vertical-align:-1.5px;margin-right:2px;"><path d="M2 10H4M16 10H18M4 10H16" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor" stroke="none"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor" stroke="none"/></svg>';
+const PLAY_TRIANGLE_SVG = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" style="margin-right:6px;"><path d="M6 4.5v11l9-5.5-9-5.5z"/></svg>';
 
-function renderRecommendation(reco) {
+function metaRow(items) {
+  // items: [[icon, text], ...] joined with a middle dot, matching the reference's "45–60 min · Strength · 5 exercises" row
+  return '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.6rem;display:flex;align-items:center;flex-wrap:wrap;gap:0 0.4rem;">' +
+    items.map(([icon, text]) => '<span>' + icon + text + "</span>").join('<span style="opacity:0.5;">·</span>') +
+    "</div>";
+}
+
+function renderRecommendation(data) {
+  const reco = data.recommendation;
+  const status = data.workout_status;
   const kicker = document.getElementById("reco-kicker");
   const body = document.getElementById("reco-body");
   const startBtn = document.getElementById("btn-start-session");
+  const captionRow = document.getElementById("workout-caption-row");
   const p = reco.prescription;
   const reasoning = (reco.reasoning || []).join(" ");
 
+  kicker.textContent = "Today's Workout";
   document.getElementById("reco-ico").innerHTML = pictogramFor(reco);
+  document.getElementById("warmup-panel").classList.add("hidden");
+  document.getElementById("mobility-panel").classList.add("hidden");
 
   if (reco.session_type === "lift") {
     const estMin = Math.max(15, Math.round((p.exercises.reduce((s, e) => s + e.sets * 2.5, 0)) / 5) * 5);
-    kicker.textContent = "Today's Workout";
-    const rows = p.exercises
-      .map((e) => '<div class="tnum" style="font-size:0.83rem;margin-top:0.2rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>")
-      .join("");
+    const title = p.exercises[0] ? p.exercises[0].name : (p.label || "Lift session");
     body.innerHTML =
-      '<div style="font-weight:700;font-size:1.08rem;">' + (p.exercises[0] ? p.exercises[0].name : "Lift session") + "</div>" +
+      '<div style="font-weight:700;font-size:1.08rem;">' + title + "</div>" +
       '<div style="font-size:0.82rem;opacity:0.75;margin-top:0.1rem;">' + (p.label || "") + "</div>" +
-      '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.6rem;">' + META_CLOCK_SVG + "Est. " + estMin + " min · " + p.exercises.length + " exercises</div>" +
-      rows +
+      metaRow([[META_CLOCK_SVG, estMin + " min"], [META_BARS_SVG, "Strength"], [META_COUNT_SVG, p.exercises.length + " exercises"]]) +
       '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
-    startBtn.textContent = "Start Workout";
-    startBtn.classList.remove("hidden");
-    startBtn.onclick = () => { showView("view-log"); loadLogChooser(); };
+    captionRow.classList.remove("hidden");
+
+    if (status.state === "completed") {
+      startBtn.innerHTML = "View Review";
+      startBtn.classList.remove("hidden");
+      startBtn.onclick = () => { document.querySelector('.tab-bar [data-tab="view-log"]').click(); };
+    } else if (status.state === "active") {
+      const progress = status.total_exercise_count
+        ? '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.5rem;">' +
+          status.completed_exercise_count + " of " + status.total_exercise_count + " exercises completed" +
+          (status.elapsed_min != null ? " · " + status.elapsed_min + " min elapsed" : "") + "</div>"
+        : "";
+      body.innerHTML += progress;
+      startBtn.innerHTML = PLAY_TRIANGLE_SVG + "Resume Workout";
+      startBtn.classList.remove("hidden");
+      startBtn.onclick = () => openLiftSession(status.session_id);
+    } else {
+      startBtn.innerHTML = PLAY_TRIANGLE_SVG + "Start Workout";
+      startBtn.classList.remove("hidden");
+      startBtn.onclick = () => openLiftSession();
+    }
   } else if (reco.session_type === "run") {
-    kicker.textContent = "Today's Workout";
     body.innerHTML =
       '<div style="font-weight:700;font-size:1.08rem;">' + labelForRunType(p.run_type) + "</div>" +
-      '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.6rem;">' + META_CLOCK_SVG + p.duration_min + " min · Zone " + p.zone + "</div>" +
+      metaRow([[META_CLOCK_SVG, p.duration_min + " min"], [META_BARS_SVG, "Cardio"], [META_COUNT_SVG, "Zone " + p.zone]]) +
       '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
-    startBtn.textContent = "Start Run";
-    startBtn.classList.remove("hidden");
-    startBtn.onclick = () => { showView("view-log"); loadLogChooser(); };
-  } else {
-    kicker.textContent = reco.session_type === "recover" ? "Recovery" : "Rest";
+    captionRow.classList.remove("hidden");
+
+    if (status.state === "completed") {
+      body.innerHTML += '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.5rem;">Completed today' +
+        (status.elapsed_min != null ? " · " + status.elapsed_min + " min" : "") + "</div>";
+      startBtn.innerHTML = "View Review";
+      startBtn.classList.remove("hidden");
+      startBtn.onclick = () => { document.querySelector('.tab-bar [data-tab="view-log"]').click(); };
+    } else {
+      startBtn.innerHTML = PLAY_TRIANGLE_SVG + "Start Run";
+      startBtn.classList.remove("hidden");
+      startBtn.onclick = () => {
+        document.getElementById("run-kicker").textContent = labelForRunType(p.run_type);
+        showView("view-run");
+      };
+    }
+  } else if (reco.session_type === "recover" || reco.session_type === "rest") {
+    kicker.textContent = "Today's Workout";
     body.innerHTML =
-      '<div style="font-weight:700;font-size:1.08rem;">' + (p.note || "Rest day") + "</div>" +
+      '<div style="font-weight:700;font-size:1.08rem;">' + (p.note || (reco.session_type === "recover" ? "Active Recovery" : "Rest Day")) + "</div>" +
       '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
-    startBtn.classList.add("hidden");
-  }
-}
-
-function renderExerciseSummary(week) {
-  const el = document.getElementById("exercise-summary-list");
-  el.innerHTML = week
-    .map((d, i) => {
-      const dayName = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" });
-      const kStyle = d.is_today ? ' style="color:var(--brand-dark);font-weight:700;"' : "";
-      const clickable = d.day_type === "lift" || d.day_type === "run";
-      const rowAttrs = clickable ? ' data-summary-idx="' + i + '" style="cursor:pointer;"' : "";
-      return (
-        '<div class="set-row"' + rowAttrs + '><span class="k"' + kStyle + ">" + dayName + (d.is_today ? " · Today" : "") + "</span>" +
-        '<span class="v">' + d.label + (clickable ? " ›" : "") + "</span></div>" +
-        (clickable ? '<div class="empty-note hidden" id="exercise-detail-' + i + '"></div>' : "")
-      );
-    })
-    .join("");
-
-  el.querySelectorAll("[data-summary-idx]").forEach((row) => {
-    const idx = parseInt(row.dataset.summaryIdx, 10);
-    row.addEventListener("click", () => toggleExerciseDetail(idx, week[idx]));
-  });
-}
-
-async function toggleExerciseDetail(idx, day) {
-  const detail = document.getElementById("exercise-detail-" + idx);
-  const wasHidden = detail.classList.contains("hidden");
-  document.querySelectorAll('[id^="exercise-detail-"]').forEach((d) => d.classList.add("hidden"));
-  if (!wasHidden) return;
-
-  detail.classList.remove("hidden");
-  detail.textContent = "Loading…";
-  const data = await api("/workouts/last-session?label=" + encodeURIComponent(day.label) + "&day_type=" + day.day_type);
-  if (!data.found) {
-    detail.innerHTML = '<div style="padding:0.3rem 0;">No previous session for this split yet.</div>';
-    return;
-  }
-  const dateLabel = new Date(data.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  if (data.type === "lift") {
-    detail.innerHTML =
-      '<div style="padding:0.4rem 0 0.25rem;font-size:0.72rem;">Last ' + day.label + " (" + dateLabel + "):</div>" +
-      data.exercises
-        .map((e) => '<div class="tnum" style="font-size:0.82rem;color:var(--ink);padding:0.1rem 0;">• ' +
-          e.name + " — " + fmtWeight(e.top_load_kg) + " × " + e.sets + " sets × " + e.top_reps + " reps</div>")
-        .join("");
+    startBtn.innerHTML = "View Recovery Plan";
+    startBtn.classList.remove("hidden");
+    startBtn.onclick = () => toggleMobilityPanel(data, true);
+    captionRow.classList.add("hidden");
   } else {
-    detail.innerHTML =
-      '<div style="padding:0.4rem 0 0.25rem;font-size:0.72rem;">Last run (' + dateLabel + "):</div>" +
-      '<div class="tnum" style="font-size:0.82rem;color:var(--ink);">' + data.duration_min + " min · " + data.distance_km + " km" +
-      (data.avg_hr ? " · " + data.avg_hr + " bpm avg" : "") + "</div>";
+    // Defensive fallback -- the backend always resolves a session_type today, but
+    // this keeps the card honest instead of blank if that ever stops being true.
+    kicker.textContent = "Today's Workout";
+    body.innerHTML = '<div style="font-weight:700;font-size:1.08rem;">No workout scheduled</div>';
+    startBtn.innerHTML = "Build My Program";
+    startBtn.classList.remove("hidden");
+    startBtn.onclick = () => { document.querySelector('.tab-bar [data-tab="view-program"]').click(); };
+    captionRow.classList.add("hidden");
   }
+
+  wireWarmupMobilityButtons(data);
 }
+
+function toggleMobilityPanel(data, forceOpen) {
+  const panel = document.getElementById("mobility-panel");
+  const items = data.mobility_items || [];
+  const isHidden = panel.classList.contains("hidden");
+  document.getElementById("warmup-panel").classList.add("hidden");
+  if (!forceOpen && !isHidden) { panel.classList.add("hidden"); return; }
+  panel.innerHTML = items.length
+    ? "Today's mobility work:<br>" + items.map((m) => "• " + escapeHtml(m)).join("<br>")
+    : "No mobility work assigned for today — check the Program tab for your full schedule.";
+  panel.classList.remove("hidden");
+}
+
+function toggleWarmupPanel(data) {
+  const panel = document.getElementById("warmup-panel");
+  const isHidden = panel.classList.contains("hidden");
+  document.getElementById("mobility-panel").classList.add("hidden");
+  if (!isHidden) { panel.classList.add("hidden"); return; }
+  const p = data.recommendation.prescription;
+  const firstExercise = data.recommendation.session_type === "lift" && p.exercises && p.exercises[0] ? p.exercises[0].name : null;
+  panel.innerHTML = firstExercise
+    ? "5 min light cardio, then 2 easy ramp-up sets of " + escapeHtml(firstExercise) + " before your working weight."
+    : "5–10 min light cardio to raise your heart rate before starting.";
+  panel.classList.remove("hidden");
+}
+
+function wireWarmupMobilityButtons(data) {
+  document.getElementById("btn-warmup").onclick = () => toggleWarmupPanel(data);
+  document.getElementById("btn-mobility").onclick = () => toggleMobilityPanel(data, false);
+}
+
 
 function renderNotifications(data) {
   const items = [];
@@ -398,7 +522,9 @@ function renderNotifications(data) {
   if (data.readiness.band === "red") items.push("Readiness is low today — today's plan was adjusted to recovery.");
   if (data.readiness.band === "amber") items.push("Readiness is moderate today — volume has been trimmed.");
 
+  const bell = document.getElementById("btn-notifications");
   document.getElementById("notif-dot").classList.toggle("hidden", !items.length);
+  bell.setAttribute("aria-label", items.length ? items.length + " unread notification" + (items.length === 1 ? "" : "s") : "Notifications");
   const panel = document.getElementById("notif-panel");
   panel.innerHTML = items.length
     ? items.map((t) => '<div class="set-row"><span class="k" style="font-weight:500;font-size:0.82rem;">' + t + "</span></div>").join("")
@@ -418,11 +544,8 @@ document.addEventListener("click", (e) => {
     panel.classList.add("hidden");
   }
 });
-document.getElementById("btn-premium-upsell").addEventListener("click", () => {
-  toast("Premium isn't available yet — this is a demo placeholder for a future subscription tier.");
-});
 
-document.getElementById("btn-goto-checkin").addEventListener("click", () => {
+document.getElementById("readiness-hero-card").addEventListener("click", () => {
   prefillCheckin();
   showView("view-recovery");
 });
@@ -556,14 +679,37 @@ async function ensureExercisesLoaded() {
   return state.exercises;
 }
 
-async function openLiftSession() {
+async function openLiftSession(resumeSessionId) {
   const reco = state.today.recommendation;
   const exercises = reco.session_type === "lift" ? reco.prescription.exercises : [];
-  if (!exercises.length) toast("No lift prescribed today — add exercises below to log freely");
+  if (!exercises.length && !resumeSessionId) toast("No lift prescribed today — add exercises below to log freely");
 
-  const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: reco.prescription.label || "Freeform" }) });
-  state.activeWorkoutSessionId = session.id;
-  state.activeWorkoutExercises = exercises.map((e) => Object.assign({}, e, { loggedSets: [] }));
+  const baseExercises = exercises.map((e) => Object.assign({}, e, { loggedSets: [] }));
+  let sessionId;
+
+  if (resumeSessionId) {
+    // Reuse the session already in progress instead of creating a duplicate --
+    // merge in whatever sets are already logged, and keep any custom exercises
+    // the user added beyond the original prescription.
+    sessionId = resumeSessionId;
+    const sessionData = await api("/workouts/" + resumeSessionId);
+    const byExerciseId = {};
+    baseExercises.forEach((e) => { byExerciseId[e.exercise_id] = e; });
+    sessionData.exercises_with_sets.forEach((se) => {
+      const loggedSets = se.logged_sets.map((s) => ({ id: s.id, setNumber: s.set_number, weightKg: s.weight_kg, reps: s.reps, restSeconds: s.rest_seconds }));
+      if (byExerciseId[se.exercise_id]) {
+        byExerciseId[se.exercise_id].loggedSets = loggedSets;
+      } else {
+        baseExercises.push({ exercise_id: se.exercise_id, name: se.name, sets: loggedSets.length, reps: null, load_kg: null, loggedSets: loggedSets });
+      }
+    });
+  } else {
+    const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: reco.prescription.label || "Freeform" }) });
+    sessionId = session.id;
+  }
+
+  state.activeWorkoutSessionId = sessionId;
+  state.activeWorkoutExercises = baseExercises;
 
   document.getElementById("lift-session-kicker").textContent = state.activeWorkoutExercises.length ? "In progress" : "Freeform";
   document.getElementById("lift-session-title").textContent = reco.prescription.label || "Workout";
@@ -2554,7 +2700,6 @@ async function loadSettings() {
   document.getElementById("profile-weight-unit").textContent = weightUnit();
   document.getElementById("profile-goal-label").textContent = GOAL_LABELS[data.goal] || titleCase(data.goal);
 
-  document.getElementById("premium-banner").classList.toggle("hidden", !!data.is_premium);
   setNotifToggle(document.getElementById("toggle-premium"), data.is_premium);
 
   document.querySelectorAll("#units-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.val === data.units));
@@ -3027,7 +3172,6 @@ async function loadSpotifySettings() {
       await api("/spotify/disconnect", { method: "POST" });
       toast("Spotify disconnected");
       loadSpotifySettings();
-      loadMusicCard();
     });
   } else {
     area.innerHTML = '<button class="btn primary" id="btn-connect-spotify">Connect Spotify</button>';
@@ -3087,7 +3231,19 @@ async function loadTodayMacroStats() {
     document.getElementById("macro-calories-sub").textContent =
       (goal ? "of " + Math.round(goal).toLocaleString() : "—") + (exercise ? " (+" + Math.round(exercise) + " burned)" : "");
   }
+
+  document.getElementById("today-macro-stat-row").classList.toggle("hidden", !goal);
+  document.getElementById("nutrition-setup-note").classList.toggle("hidden", !!goal);
 }
+
+document.getElementById("nutrition-summary-card").addEventListener("click", () => {
+  if (state.settings && state.settings.daily_calorie_goal_kcal) {
+    document.querySelector('.tab-bar [data-tab="view-food"]').click();
+  } else {
+    document.querySelector('.tab-bar [data-tab="view-settings"]').click();
+    setTimeout(() => switchProfileSegment("account"), 50);
+  }
+});
 
 function renderWeightSparkline(points) {
   const svg = document.getElementById("weight-sparkline");
@@ -3112,9 +3268,10 @@ async function loadWeightProgressCard() {
   const data = await api("/body-weight/history?days=30");
   const current = state.settings && state.settings.current_weight_kg;
   if (current == null) {
-    body.innerHTML = '<div class="empty-note">Log your weight in Settings to see progress here.</div>';
+    body.innerHTML = '<div class="empty-note" style="padding:0.3rem 0 0;">Log your weight to see progress here.</div>';
     return;
   }
+  const chartHtml = '<div class="sparkline-wrap" style="margin:0.5rem 0;height:52px;"><svg id="weight-sparkline" width="100%" height="52" viewBox="0 0 280 52" preserveAspectRatio="none"></svg></div>';
   let deltaHtml;
   if (data.points.length >= 2) {
     const deltaKg = data.points[data.points.length - 1].weight_kg - data.points[0].weight_kg;
@@ -3124,67 +3281,26 @@ async function loadWeightProgressCard() {
     deltaHtml = '<div class="tnum" style="font-size:0.85rem;color:' + color + ';font-weight:700;margin-top:0.2rem;">' +
       arrow + " " + deltaDisplay + weightUnit() + " this month</div>";
   } else {
-    deltaHtml = '<div class="empty-note">Log your weight a few times to see a trend.</div>';
+    deltaHtml = '<div class="empty-note" style="padding:0.2rem 0 0;">Not enough data yet</div>';
   }
   body.innerHTML =
-    '<div class="hero-number tnum" style="font-size:1.7rem;">' + fmtWeight(current) + "</div>" +
-    deltaHtml +
-    '<div class="sparkline-wrap" style="margin-top:0.6rem;"><svg id="weight-sparkline" width="100%" height="60" viewBox="0 0 280 60" preserveAspectRatio="none"></svg></div>';
-  renderWeightSparkline(data.points);
+    chartHtml +
+    '<div class="hero-number tnum" style="font-size:1.5rem;">' + fmtWeight(current) + "</div>" +
+    deltaHtml;
+  if (data.points.length >= 2) renderWeightSparkline(data.points);
 }
 
-async function loadWeeklyProgressCard() {
-  const body = document.getElementById("weekly-progress-body");
-  const data = await api("/progress/weekly-summary");
-  const c = data.consistency;
-  const bandColor = c.band === "Excellent" ? "var(--success-text)" : c.band === "Good" ? "var(--warn-text)" : "var(--critical-text)";
-  let weightTrendText = "Not enough data yet";
-  if (data.weight_delta_kg != null) {
-    const d = data.weight_delta_kg;
-    const arrow = d < -0.05 ? "↓" : d > 0.05 ? "↑" : "→";
-    weightTrendText = arrow + " " + Math.abs(Math.round(kgToDisplay(d) * 10) / 10) + weightUnit() + " this week";
-  }
-  body.innerHTML =
-    '<div class="set-row"><span class="k">Calories this week</span><span class="v tnum">' + data.calories_this_week.toLocaleString() + "</span></div>" +
-    '<div class="set-row"><span class="k">Avg daily intake</span><span class="v tnum">' +
-    (data.days_logged ? data.avg_daily_calories.toLocaleString() + " (" + data.days_logged + "d logged)" : "—") + "</span></div>" +
-    '<div class="set-row"><span class="k">Weight trend</span><span class="v tnum">' + weightTrendText + "</span></div>" +
-    '<div class="set-row" style="border-bottom:none;"><span class="k">Consistency</span><span class="v tnum" style="font-weight:800;color:' +
-    bandColor + ';">' + c.score + " · " + c.band + "</span></div>";
-}
-
-async function loadMusicCard() {
-  const body = document.getElementById("music-body");
-  const status = await api("/spotify/status");
-  if (!status.connected) {
-    body.innerHTML = '<div style="font-size:0.85rem;color:var(--neutral-2);">Not connected — <a href="#" id="music-goto-settings">connect Spotify in Settings</a>.</div>';
-    document.getElementById("music-goto-settings").addEventListener("click", (e) => {
-      e.preventDefault();
-      document.querySelector('.tab-bar [data-tab="view-settings"]').click();
-    });
-    return;
-  }
-  const now = await api("/spotify/now-playing");
-  if (!now.connected || !now.track) {
-    body.innerHTML = '<div style="font-size:0.85rem;color:var(--neutral-2);">Connected — nothing playing right now.</div>';
-    return;
-  }
-  const art = now.album_art ? '<img src="' + now.album_art + '" alt="" style="width:44px;height:44px;border-radius:8px;flex:none;">' : "";
-  body.innerHTML =
-    '<div style="display:flex;align-items:center;gap:0.7rem;">' + art +
-    '<div style="min-width:0;flex:1;">' +
-    '<div style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + now.track + "</div>" +
-    '<div style="font-size:0.78rem;color:var(--neutral-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + now.artist + "</div></div>" +
-    '<button class="btn small subtle" id="btn-toggle-playback" style="flex:none;">' + (now.playing ? "Pause" : "Play") + "</button></div>";
-  document.getElementById("btn-toggle-playback").addEventListener("click", async () => {
-    try {
-      await api("/spotify/playback", { method: "POST", body: JSON.stringify({ action: now.playing ? "pause" : "play" }) });
-      loadMusicCard();
-    } catch (e) {
-      toast("Playback control failed — is Spotify open somewhere?");
-    }
-  });
-}
+document.getElementById("weight-progress-card").addEventListener("click", () => {
+  document.querySelector('.tab-bar [data-tab="view-progress"]').click();
+});
+document.getElementById("this-week-streak-card").addEventListener("click", () => {
+  document.querySelector('.tab-bar [data-tab="view-program"]').click();
+  setTimeout(() => switchProgramSegment("schedule"), 50);
+});
+document.getElementById("steps-card").addEventListener("click", () => {
+  document.querySelector('.tab-bar [data-tab="view-settings"]').click();
+  setTimeout(() => switchProfileSegment("devices"), 50);
+});
 
 // ---------------------------------------------------------------- wearable ----
 // Real OAuth against Whoop -- Authorization Code, confidential client (Whoop
@@ -3333,9 +3449,19 @@ async function loadWearableCard() {
   }
   if (!data.stats.length) {
     el.textContent = "Connected — pick stats to show in Settings.";
-    return;
+  } else {
+    el.textContent = data.stats.map((s) => s.label + " " + s.value + s.unit).join(" · ");
   }
-  el.textContent = data.stats.map((s) => s.label + " " + s.value + s.unit).join(" · ");
+  announceReadinessAccessibility();
+}
+
+function announceReadinessAccessibility() {
+  if (!state.today) return;
+  const score = Math.round(state.today.readiness.score);
+  const band = state.today.readiness.band;
+  const bandWord = band === "green" ? "Good" : band === "amber" ? "Moderate" : "Take It Easy";
+  const summary = document.getElementById("readiness-summary").textContent;
+  document.getElementById("readiness-hero-card").setAttribute("aria-label", "Readiness " + score + " out of 100, " + bandWord + ". " + summary);
 }
 
 // --------------------------------------------------------------- onboarding ----
@@ -3394,8 +3520,6 @@ async function finishOnboardingIntoToday() {
   await loadToday();
   await loadTodayMacroStats();
   await loadWeightProgressCard();
-  await loadWeeklyProgressCard();
-  await loadMusicCard();
   updateSplashStatus("Syncing wearable data…");
   await loadWearableCard();
   showView("view-today");
@@ -3448,8 +3572,6 @@ document.getElementById("btn-onboarding-continue").addEventListener("click", asy
     await loadToday();
     await loadTodayMacroStats();
     await loadWeightProgressCard();
-    await loadWeeklyProgressCard();
-    await loadMusicCard();
     updateSplashStatus("Syncing wearable data…");
     await loadWearableCard();
   }

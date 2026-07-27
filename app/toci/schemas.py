@@ -180,6 +180,14 @@ class BodyWeightIn(BaseModel):
     weight_kg: float
 
 
+class BodyFatIn(BaseModel):
+    body_fat_pct: float
+
+
+class WaterLogIn(BaseModel):
+    ounces: float
+
+
 class RecipeFitMacrosIn(BaseModel):
     target_protein_g: float
 

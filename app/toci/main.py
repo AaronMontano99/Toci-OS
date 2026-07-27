@@ -124,6 +124,54 @@ def _get_or_generate_recommendation(db: Session, date: dt.date):
 
 # ---------------------------------------------------------------- today ----
 
+def _today_workout_status(db: Session, reco, today: dt.date) -> dict:
+    """Real, derived state for the Today workout card -- never a client-side guess.
+    "active" vs "completed" comes straight from WorkoutSession.ended_at; a lift
+    session already in progress is reused (never duplicated) by the frontend."""
+    status = {
+        "state": "none", "session_id": None,
+        "completed_exercise_count": None, "total_exercise_count": None, "elapsed_min": None,
+    }
+    if reco.session_type == "lift":
+        status["total_exercise_count"] = len(reco.prescription.get("exercises", []))
+        session = (
+            db.query(models.WorkoutSession)
+            .filter_by(user_id=DEMO_USER_ID, date=today)
+            .order_by(models.WorkoutSession.id.desc())
+            .first()
+        )
+        if session:
+            completed_exercise_count = (
+                db.query(models.WorkoutSet.exercise_id)
+                .filter_by(workout_session_id=session.id)
+                .distinct()
+                .count()
+            )
+            elapsed_min = None
+            if session.started_at:
+                end = session.ended_at or dt.datetime.utcnow()
+                elapsed_min = max(0, round((end - session.started_at).total_seconds() / 60))
+            status.update({
+                "state": "completed" if session.ended_at else "active",
+                "session_id": session.id,
+                "completed_exercise_count": completed_exercise_count,
+                "elapsed_min": elapsed_min,
+            })
+    elif reco.session_type == "run":
+        session = (
+            db.query(models.CardioSession)
+            .filter_by(user_id=DEMO_USER_ID, date=today, activity_type="run")
+            .order_by(models.CardioSession.id.desc())
+            .first()
+        )
+        if session:
+            status.update({
+                "state": "completed", "session_id": session.id,
+                "elapsed_min": round(session.duration_seconds / 60),
+            })
+    return status
+
+
 @app.get("/api/today")
 def get_today(db: Session = Depends(get_db)):
     today = dt.date.today()
@@ -133,6 +181,7 @@ def get_today(db: Session = Depends(get_db)):
     checkin = db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=today).first()
     _, meso = _active_mesocycle(db)
     by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
+    today_pd = by_weekday.get(today.weekday())
 
     return {
         "date": today.isoformat(),
@@ -148,6 +197,9 @@ def get_today(db: Session = Depends(get_db)):
             "prescription": reco.prescription,
             "reasoning": reco.reasoning,
         },
+        "workout_status": _today_workout_status(db, reco, today),
+        "mobility_items": today_pd.template.get("mobility_items", []) if today_pd else [],
+        "conditioning_items": today_pd.template.get("conditioning", {}).get("items", []) if today_pd else [],
         "week": _week_strip(db, today),
         "streak": _compute_streak(db, by_weekday, today),
     }
@@ -222,6 +274,34 @@ def start_workout(payload: schemas.WorkoutStartIn, db: Session = Depends(get_db)
     db.commit()
     db.refresh(session)
     return {"id": session.id}
+
+
+@app.get("/api/workouts/{session_id}")
+def get_workout_session(session_id: int, db: Session = Depends(get_db)):
+    """Used to resume an in-progress session (Today's "Resume Workout") without
+    creating a duplicate WorkoutSession row for the same day."""
+    session = db.query(models.WorkoutSession).get(session_id)
+    if not session:
+        raise HTTPException(404, "Workout session not found")
+    rows = (
+        db.query(models.WorkoutSet, models.Exercise.name)
+        .join(models.Exercise, models.WorkoutSet.exercise_id == models.Exercise.id)
+        .filter(models.WorkoutSet.workout_session_id == session_id)
+        .order_by(models.WorkoutSet.id)
+        .all()
+    )
+    by_exercise: dict[int, dict] = {}
+    for s, name in rows:
+        entry = by_exercise.setdefault(s.exercise_id, {"exercise_id": s.exercise_id, "name": name, "logged_sets": []})
+        entry["logged_sets"].append({
+            "id": s.id, "set_number": s.set_index,
+            "weight_kg": s.actual_load_kg, "reps": s.actual_reps, "rest_seconds": s.rest_seconds,
+        })
+    return {
+        "id": session.id, "label": session.label, "date": session.date.isoformat(),
+        "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+        "exercises_with_sets": list(by_exercise.values()),
+    }
 
 
 @app.post("/api/workouts/{session_id}/sets")
@@ -952,6 +1032,65 @@ def _log_body_weight(db: Session, weight_kg: float, date: dt.date):
 def log_body_weight(payload: schemas.BodyWeightIn, db: Session = Depends(get_db)):
     _log_body_weight(db, payload.weight_kg, dt.date.today())
     return {"ok": True}
+
+
+@app.get("/api/body-fat")
+def get_body_fat(db: Session = Depends(get_db)):
+    row = (
+        db.query(models.BodyMetric)
+        .filter(models.BodyMetric.user_id == DEMO_USER_ID, models.BodyMetric.body_fat_pct.isnot(None))
+        .order_by(models.BodyMetric.date.desc())
+        .first()
+    )
+    return {"body_fat_pct": row.body_fat_pct if row else None, "date": row.date.isoformat() if row else None}
+
+
+@app.post("/api/body-fat")
+def log_body_fat(payload: schemas.BodyFatIn, db: Session = Depends(get_db)):
+    today = dt.date.today()
+    row = db.query(models.BodyMetric).filter_by(user_id=DEMO_USER_ID, date=today).first()
+    if row is None:
+        row = models.BodyMetric(user_id=DEMO_USER_ID, date=today)
+        db.add(row)
+    row.body_fat_pct = payload.body_fat_pct
+    db.commit()
+    return {"body_fat_pct": row.body_fat_pct, "date": today.isoformat()}
+
+
+# Water: no stored per-user goal field exists (same convention as the calorie
+# goal's macro split) -- default hydration target is derived from bodyweight
+# using the common "half your bodyweight in lb, in oz" rule of thumb.
+def _hydration_goal_oz(db: Session) -> float:
+    latest_weight = (
+        db.query(models.BodyMetric)
+        .filter(models.BodyMetric.user_id == DEMO_USER_ID, models.BodyMetric.weight_kg.isnot(None))
+        .order_by(models.BodyMetric.date.desc())
+        .first()
+    )
+    if not latest_weight:
+        return 100.0  # generic default when no bodyweight is on file yet
+    weight_lb = latest_weight.weight_kg / 0.45359237
+    return round(weight_lb * 0.5)
+
+
+@app.get("/api/hydration/today")
+def get_hydration_today(db: Session = Depends(get_db)):
+    today = dt.date.today()
+    total = (
+        db.query(func.sum(models.WaterLogEntry.ounces))
+        .filter(models.WaterLogEntry.user_id == DEMO_USER_ID, models.WaterLogEntry.date == today)
+        .scalar()
+        or 0.0
+    )
+    return {"ounces": round(total, 1), "goal_oz": _hydration_goal_oz(db)}
+
+
+@app.post("/api/hydration/today")
+def log_hydration(payload: schemas.WaterLogIn, db: Session = Depends(get_db)):
+    row = models.WaterLogEntry(user_id=DEMO_USER_ID, date=dt.date.today(), ounces=payload.ounces)
+    db.add(row)
+    db.commit()
+    return get_hydration_today(db)
 
 
 @app.post("/api/settings/recalculate-calories")
