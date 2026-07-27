@@ -21,7 +21,7 @@ from . import models
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3.2"
-OLLAMA_TIMEOUT_S = 3.0
+OLLAMA_TIMEOUT_S = 120.0  # measured ~2 tok/s on CPU-only local hardware -- a ceiling, not a target
 MAX_OBSERVATIONS = 5
 
 

@@ -34,7 +34,10 @@ from . import models
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "llama3.2"
-OLLAMA_CHAT_TIMEOUT_S = 25.0
+OLLAMA_CHAT_TIMEOUT_S = 240.0  # a 7-day JSON proposal is a few hundred tokens; measured ~2 tok/s on
+# CPU-only local hardware makes this a multi-minute wait in the worst case -- a ceiling, not a target.
+# Faster hardware (or a smaller/quantized model) finishes well before it; this just keeps a legitimately
+# slow-but-working response from being cut off.
 HISTORY_MESSAGES_FOR_CONTEXT = 12
 VALID_DAY_TYPES = {"lift", "run", "rest", "recover"}
 
@@ -204,6 +207,58 @@ def validate_proposal(proposal: dict, exercise_names: set[str]) -> tuple[dict | 
     return {"days": normalized}, None
 
 
+_CHANGE_REQUEST_RE = re.compile(
+    r"\b(add|remove|swap|replace|change|increase|decrease|reduce|more|less|update|build|redesign|"
+    r"adjust|modify|rework)\b.*\b(program|day|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"exercise|set|rep|volume|split|routine|workout)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_change_request(message: str) -> bool:
+    return bool(_CHANGE_REQUEST_RE.search(message))
+
+
+def _request_structured_proposal(db: Session, user_id: int, message: str) -> dict | None:
+    """A dedicated follow-up call using Ollama's JSON-constrained decoding
+    (format="json") when the conversational reply didn't include a valid
+    proposal block but the request clearly asked for a program change.
+    Free-form prompting alone was unreliable at getting a small local model
+    to emit well-formed structured output for a 7-day schema -- constrained
+    decoding is meaningfully more reliable, at the cost of a second, equally
+    slow round-trip on this hardware.
+    """
+    catalog = _exercise_catalog(db)
+    context = _user_context_summary(db, user_id)
+    prompt = (
+        f"{context}\n\nExercises you may use (exact names only): {', '.join(catalog)}\n\n"
+        f'The user asked: "{message}"\n\n'
+        'Respond with ONLY a JSON object (no other text) of the shape: '
+        '{"days": [{"weekday": 0, "day_type": "lift", "label": "...", '
+        '"exercises": [{"exercise_name": "...", "sets": 3, "reps": 8}], '
+        '"mobility_items": [], "note": null}, ... exactly 7 entries, weekday 0=Monday..6=Sunday ...]}. '
+        "Keep all days from the current program the same except what the user asked to change. "
+        'day_type must be lift/run/rest/recover; only lift days use "exercises"; run days use '
+        '"run_type"/"duration_min"/"zone" instead; rest/recover days may use "mobility_items".'
+    )
+    try:
+        resp = httpx.post(
+            OLLAMA_CHAT_URL,
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "format": "json",
+                "stream": False,
+            },
+            timeout=OLLAMA_CHAT_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        raw = resp.json().get("message", {}).get("content", "").strip()
+        return json.loads(raw)
+    except (httpx.HTTPError, ValueError, KeyError):
+        return None
+
+
 def chat(db: Session, user_id: int, message: str) -> dict:
     """Returns {reply, proposal, blocked}. Always persists the exchange."""
     db.add(models.ProgramChatMessage(user_id=user_id, role="user", content=message))
@@ -242,11 +297,23 @@ def chat(db: Session, user_id: int, message: str) -> dict:
     proposal_raw = _extract_proposal(raw)
     reply_text = _strip_proposal_block(raw) or raw
     proposal, error = (None, None)
+    exercise_names = set(_exercise_catalog(db))
     if proposal_raw is not None:
-        exercise_names = set(_exercise_catalog(db))
         proposal, error = validate_proposal(proposal_raw, exercise_names)
         if error:
             reply_text += f"\n\n(I tried to draft a program update but it didn't come out right: {error} Feel free to ask again.)"
+
+    # The conversational reply sometimes describes a change without emitting
+    # the requested JSON block -- free-form prompting alone isn't reliable
+    # for structured output on a small local model. If this clearly was a
+    # change request, make one dedicated follow-up call with constrained
+    # JSON decoding before giving up on a proposal.
+    if proposal is None and _looks_like_change_request(message):
+        proposal_raw = _request_structured_proposal(db, user_id, message)
+        if proposal_raw is not None:
+            proposal, error = validate_proposal(proposal_raw, exercise_names)
+            if error and "didn't come out right" not in reply_text:
+                reply_text += f"\n\n(I tried to draft a program update but it didn't come out right: {error} Feel free to ask again.)"
 
     # Light second-pass safety net: if the message clearly matched an
     # off-topic pattern that somehow reached this point (it shouldn't, given
