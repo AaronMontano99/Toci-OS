@@ -23,9 +23,12 @@ Built so far, roughly in order:
 - Lift/run logging — units (lb/kg), rest timer, exercise picker, workout-split pictograms
 - Today tab — onboarding flow, real Spotify OAuth, wearable-connect stub, nutrition + check-in
 - Nutrition — food logging (barcode scan, custom foods, saved meals), smart search/favorites/restaurants, AI-personalized Recipe Hub, Smart Cart shopping list
-- **Program tab → coaching dashboard** (current) — collaborative Progression Decision Cards, goal tracking, weekly structure drill-down, deterministic Coach Observations with optional local-LLM narration
+- **Program tab → coaching dashboard** — collaborative Progression Decision Cards, goal tracking, weekly structure drill-down, deterministic Coach Observations with optional local-LLM narration
+- Seeded with a real training profile and 7-day split (not placeholder demo data) — see `app/toci/seed.py`
+- **Progress photo timeline** — explicit "Take Photo" (camera permission) or "Choose from Library" (native photo picker) actions, each photo optionally gets a best-effort qualitative AI impression from a local vision model, with a clear fallback message when that model isn't available. No photos are pre-seeded; the timeline starts empty for every user.
+- **Ask Toci** (current) — a conversational program-builder in the Program tab, scoped strictly to this user's own training/goals/history. Off-topic requests are declined before ever reaching the model (see `app/toci/coach_chat.py`); on-topic program-change requests get a structured proposal the user must explicitly Apply or Discard — never applied automatically.
 
-Still ahead for Program: an ongoing coach conversation ("Ask Toci"), physique photo progress tracking, adherence/consistency detail, recent-changes history, and page personalization — deferred from the current pass to keep each build reviewable.
+Still ahead for Program: adherence/consistency detail, recent-changes history, and page personalization — deferred to keep each build reviewable.
 
 ## Design
 

@@ -1,6 +1,6 @@
-"""Seed demo data: one user, an exercise library, an active hypertrophy
-program, two weeks of simulated recovery history, and a few past bench/squat
-sessions so progression and the progress chart have real history to work from.
+"""Seed real user data: profile, the actual 7-day training split, exercise
+library, recent logged history (matching stated current bests), and goals.
+Also seeds a recipe/food/restaurant library unrelated to the training profile.
 Safe to re-run — it's a no-op once a user already exists (use --reset to wipe)."""
 
 import argparse
@@ -9,6 +9,12 @@ import random
 
 from .database import Base, SessionLocal, engine
 from . import models, nutrition
+
+LB_PER_KG = 0.45359237
+
+
+def lb(pounds: float) -> float:
+    return round(pounds * LB_PER_KG, 1)
 
 
 def seed_recipes(db):
@@ -423,7 +429,6 @@ def seed_recipes(db):
     db.commit()
 
 
-
 def seed(reset: bool = False):
     if reset:
         Base.metadata.drop_all(bind=engine)
@@ -435,39 +440,54 @@ def seed(reset: bool = False):
             print("Already seeded — pass --reset to wipe and reseed.")
             return
 
+        # Real profile: 26M, 5'9", 201.3 lb (recent), ~14yr training history
+        # with varied consistency, historical bench max 305 lb. Goal is
+        # recomposition -- build a muscular/athletic physique and regain
+        # strength while losing fat without getting small -- so "hypertrophy"
+        # (labeled "Build a muscular, athletic physique") is the closest
+        # primary-goal fit, paired with a gradual, muscle-preserving cut pace.
         calorie_goal = nutrition.compute_calorie_goal(
-            sex="male", weight_kg=79.8, height_cm=177.8, age=27,
-            activity_level="active", goal_pace_key="gain_0_5",
+            sex="male", weight_kg=91.3, height_cm=175.26, age=26,
+            activity_level="very_active", goal_pace_key="lose_0_5",
         )
         db.add(models.User(
-            id=1, name="Aaron", age=27, height_cm=177.8,  # 5'10"
-            goal="hypertrophy", experience_level="intermediate", equipment="full_gym", units="imperial",
-            goal_weight_kg=83.9,  # 185 lb, matches the seeded hypertrophy goal
-            goal_pace_key="gain_0_5", activity_level="active",  # matches the seeded 6-day program
+            id=1, name="Aaron", age=26, height_cm=175.26,  # 5'9"
+            goal="hypertrophy", experience_level="advanced", equipment="full_gym", units="imperial",
+            goal_pace_key="lose_0_5", activity_level="very_active",
             onboarding_completed=True, sex="male", daily_calorie_goal_kcal=calorie_goal,
         ))
         db.commit()
 
-        # a slight upward trend over the past month, consistent with the seeded
-        # lean-gain goal, so the weight sparkline has something real to show
+        # Recent real trend: down from ~205 lb starting weight to a 201.3 lb last log.
         today = dt.date.today()
-        for days_ago, weight_lb in [(21, 173.0), (14, 174.5), (7, 175.2), (0, 176.0)]:
-            db.add(models.BodyMetric(user_id=1, date=today - dt.timedelta(days=days_ago), weight_kg=round(weight_lb * 0.45359237, 1)))
+        for days_ago, weight_lb in [(21, 205.0), (14, 203.5), (7, 202.0), (0, 201.3)]:
+            db.add(models.BodyMetric(user_id=1, date=today - dt.timedelta(days=days_ago), weight_kg=round(weight_lb * LB_PER_KG, 1)))
         db.commit()
 
         exercise_defs = [
             ("Barbell Bench Press", "horizontal_push", "chest"),
-            ("Neutral-Grip Dumbbell Press", "horizontal_push", "chest"),
             ("Incline Dumbbell Press", "horizontal_push", "chest"),
             ("Overhead Press", "vertical_push", "shoulders"),
             ("Landmine Press", "vertical_push", "shoulders"),
-            ("Barbell Back Squat", "squat", "quads"),
-            ("Romanian Deadlift", "hinge", "hamstrings"),
-            ("Barbell Row", "horizontal_pull", "back"),
-            ("Pull-Up", "vertical_pull", "back"),
-            ("Walking Lunge", "squat", "quads"),
-            ("Bicep Curl", "isolation", "arms"),
+            ("Lateral Raise", "isolation", "shoulders"),
+            ("Face Pulls", "isolation", "shoulders"),
+            ("Rear-Delt Fly", "isolation", "shoulders"),
             ("Triceps Pushdown", "isolation", "arms"),
+            ("Hammer Curl", "isolation", "arms"),
+            ("Barbell Back Squat", "squat", "quads"),
+            ("Bulgarian Split Squat", "squat", "quads"),
+            ("Walking Lunge", "squat", "quads"),
+            ("Leg Extension", "isolation", "quads"),
+            ("Romanian Deadlift", "hinge", "hamstrings"),
+            ("Leg Curl", "isolation", "hamstrings"),
+            ("Barbell Row", "horizontal_pull", "back"),
+            ("T-Bar Row", "horizontal_pull", "back"),
+            ("Seated Cable Row", "horizontal_pull", "back"),
+            ("Lat Pulldown", "vertical_pull", "back"),
+            ("Pull-Up", "vertical_pull", "back"),
+            ("Dead Hang", "isolation", "back"),
+            ("Farmer's Carry", "carry", "full_body"),
+            ("Hanging Knee Raise", "core", "core"),
             ("Plank", "core", "core"),
         ]
         ex_id = {}
@@ -478,48 +498,101 @@ def seed(reset: bool = False):
             ex_id[name] = e.id
         db.commit()
 
-        program = models.Program(user_id=1, name="Hypertrophy Block", started_at=dt.date.today() - dt.timedelta(days=14))
+        program = models.Program(user_id=1, name="Real Training Split", started_at=dt.date.today() - dt.timedelta(days=21))
         db.add(program)
         db.commit()
 
-        meso = models.Mesocycle(program_id=program.id, index=1, focus="hypertrophy", weeks=6, deload_week_index=6)
+        meso = models.Mesocycle(program_id=program.id, index=1, focus="recomposition", weeks=8, deload_week_index=8)
         db.add(meso)
         db.commit()
 
-        def lift_day(weekday, label, items):
-            return models.ProgramDay(mesocycle_id=meso.id, weekday=weekday, day_type="lift", label=label, template={"exercises": items})
+        def lift_day(weekday, label, items, conditioning=None, note=None):
+            template = {"exercises": items}
+            if conditioning:
+                template["conditioning"] = {"items": conditioning}
+            if note:
+                template["note"] = note
+            return models.ProgramDay(mesocycle_id=meso.id, weekday=weekday, day_type="lift", label=label, template=template)
 
+        def run_day(weekday, label, run_type, duration_min, zone, note=None):
+            template = {"run_type": run_type, "duration_min": duration_min, "zone": zone}
+            if note:
+                template["note"] = note
+            return models.ProgramDay(mesocycle_id=meso.id, weekday=weekday, day_type="run", label=label, template=template)
+
+        def rest_or_recover(weekday, label, day_type, mobility_items, note=None):
+            template = {"mobility_items": mobility_items}
+            if note:
+                template["note"] = note
+            return models.ProgramDay(mesocycle_id=meso.id, weekday=weekday, day_type=day_type, label=label, template=template)
+
+        e = ex_id
         days = [
-            lift_day(0, "Upper Push", [
-                {"exercise_id": ex_id["Barbell Bench Press"], "sets": 4, "reps": 6, "target_rir": 2, "starting_load_kg": 80},
-                {"exercise_id": ex_id["Overhead Press"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": 40},
-                {"exercise_id": ex_id["Triceps Pushdown"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": 25},
-            ]),
-            models.ProgramDay(mesocycle_id=meso.id, weekday=1, day_type="rest", label="Rest", template={}),
-            lift_day(2, "Lower Body", [
-                {"exercise_id": ex_id["Barbell Back Squat"], "sets": 4, "reps": 6, "target_rir": 2, "starting_load_kg": 100},
-                {"exercise_id": ex_id["Romanian Deadlift"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": 80},
-                {"exercise_id": ex_id["Walking Lunge"], "sets": 3, "reps": 10, "target_rir": 1, "starting_load_kg": 20},
-            ]),
-            lift_day(3, "Upper Pull", [
-                {"exercise_id": ex_id["Barbell Row"], "sets": 4, "reps": 8, "target_rir": 2, "starting_load_kg": 70},
-                {"exercise_id": ex_id["Pull-Up"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": 0},
-                {"exercise_id": ex_id["Bicep Curl"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": 14},
-            ]),
-            models.ProgramDay(mesocycle_id=meso.id, weekday=4, day_type="run", label="Easy Run", template={"run_type": "easy", "duration_min": 30, "zone": 2}),
-            lift_day(5, "Full Body", [
-                {"exercise_id": ex_id["Barbell Bench Press"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": 77.5},
-                {"exercise_id": ex_id["Barbell Back Squat"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": 95},
-                {"exercise_id": ex_id["Plank"], "sets": 3, "reps": 45, "target_rir": 0, "starting_load_kg": 0},
-            ]),
-            models.ProgramDay(mesocycle_id=meso.id, weekday=6, day_type="recover", label="Active Recovery", template={}),
+            rest_or_recover(0, "Recovery and Posture", "recover", [
+                "Easy walking or light Zone 2 activity",
+                "Shoulder and upper-back mobility",
+                "Chest stretching",
+                "Wall slides",
+                "Band pull-aparts",
+                "Face pulls",
+                "Hip mobility",
+                "Optional easy core work",
+            ], note="This should feel restorative, not like another workout you need to recover from."),
+
+            lift_day(1, "Pull Strength and Cardio", [
+                {"exercise_id": e["Pull-Up"], "sets": 4, "reps": 3, "target_rir": 2, "starting_load_kg": 0},
+                {"exercise_id": e["T-Bar Row"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": lb(70)},
+                {"exercise_id": e["Lat Pulldown"], "sets": 3, "reps": 10, "target_rir": 1, "starting_load_kg": lb(99)},
+                {"exercise_id": e["Seated Cable Row"], "sets": 3, "reps": 10, "target_rir": 1, "starting_load_kg": lb(121)},
+                {"exercise_id": e["Hammer Curl"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": lb(25)},
+                {"exercise_id": e["Face Pulls"], "sets": 3, "reps": 18, "target_rir": 1, "starting_load_kg": lb(25)},
+                {"exercise_id": e["Rear-Delt Fly"], "sets": 3, "reps": 13, "target_rir": 1, "starting_load_kg": lb(15)},
+                {"exercise_id": e["Dead Hang"], "sets": 2, "reps": 45, "target_rir": 0, "starting_load_kg": 0},
+                {"exercise_id": e["Hanging Knee Raise"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": 0},
+            ], conditioning=["Zone 2 run — ~15 min (last logged: 6.5 mph)"]),
+
+            lift_day(2, "Push Strength and Core", [
+                {"exercise_id": e["Barbell Bench Press"], "sets": 4, "reps": 5, "target_rir": 2, "starting_load_kg": lb(185)},
+                {"exercise_id": e["Overhead Press"], "sets": 3, "reps": 6, "target_rir": 2, "starting_load_kg": lb(95)},
+                {"exercise_id": e["Incline Dumbbell Press"], "sets": 3, "reps": 10, "target_rir": 1, "starting_load_kg": lb(55)},
+                {"exercise_id": e["Lateral Raise"], "sets": 3, "reps": 15, "target_rir": 1, "starting_load_kg": lb(15)},
+                {"exercise_id": e["Triceps Pushdown"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": lb(45)},
+                {"exercise_id": e["Plank"], "sets": 3, "reps": 45, "target_rir": 0, "starting_load_kg": 0},
+            ], conditioning=["Posture work: face pulls, wall slides, controlled rear-delt work", "Short run or conditioning depending on recovery"]),
+
+            run_day(3, "Running Development and Mobility", "progression", 20, 2,
+                    note="Easy run or run-walk progression -- building toward continuous 3 miles. "
+                         "Follow with hip/ankle/thoracic mobility; optional light core. "
+                         "Benchmarks: 1 mile at ~7.0 mph, 15 min at 6.5 mph."),
+
+            lift_day(4, "Full-Body Athletic Session", [
+                {"exercise_id": e["Walking Lunge"], "sets": 3, "reps": 10, "target_rir": 1, "starting_load_kg": lb(20)},
+                {"exercise_id": e["Landmine Press"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": lb(45)},
+                {"exercise_id": e["Barbell Row"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": lb(105)},
+                {"exercise_id": e["Farmer's Carry"], "sets": 3, "reps": 40, "target_rir": 1, "starting_load_kg": lb(50)},
+                {"exercise_id": e["Plank"], "sets": 3, "reps": 45, "target_rir": 0, "starting_load_kg": 0},
+            ], conditioning=["Short conditioning finisher"],
+               note="Adjustable based on fatigue -- can become a lighter performance day, a short full-body "
+                    "session, or an additional recovery day when needed."),
+
+            rest_or_recover(5, "Rest or Light Activity", "rest", [
+                "Walking", "Mobility", "Easy recreational activity",
+            ], note="No required hard training -- keeps you fresh enough to attack Sunday's leg workout."),
+
+            lift_day(6, "Lower Body Strength", [
+                {"exercise_id": e["Barbell Back Squat"], "sets": 4, "reps": 5, "target_rir": 2, "starting_load_kg": lb(205)},
+                {"exercise_id": e["Romanian Deadlift"], "sets": 3, "reps": 8, "target_rir": 2, "starting_load_kg": lb(165)},
+                {"exercise_id": e["Bulgarian Split Squat"], "sets": 3, "reps": 9, "target_rir": 1, "starting_load_kg": lb(35)},
+                {"exercise_id": e["Leg Curl"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": lb(85)},
+                {"exercise_id": e["Leg Extension"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": lb(90)},
+                {"exercise_id": e["Hanging Knee Raise"], "sets": 3, "reps": 12, "target_rir": 1, "starting_load_kg": 0},
+            ], conditioning=["Incline walk — 10 min (3.5 mph @ 5% incline)"]),
         ]
         db.add_all(days)
         db.commit()
 
         # two weeks of simulated recovery history, so rolling baselines have real data
         random.seed(7)
-        today = dt.date.today()
         for i in range(14, 0, -1):
             d = today - dt.timedelta(days=i)
             db.add(models.DailyRecoveryMetric(
@@ -531,43 +604,113 @@ def seed(reset: bool = False):
             ))
         db.commit()
 
-        # a progressing bench press history + one squat session, so the
-        # progress chart and progression rule both have real data to read
-        bench_id, squat_id = ex_id["Barbell Bench Press"], ex_id["Barbell Back Squat"]
-        for days_ago, load in [(12, 77.5), (9, 80), (5, 80), (2, 82.5), (1, 85)]:
-            d = today - dt.timedelta(days=days_ago)
-            session = models.WorkoutSession(user_id=1, date=d, label="Upper Push", started_at=dt.datetime.combine(d, dt.time(9, 0)))
-            db.add(session)
-            db.flush()
-            for i in range(4):
-                db.add(models.WorkoutSet(
-                    workout_session_id=session.id, exercise_id=bench_id, set_index=i + 1,
-                    prescribed_reps=6, prescribed_load_kg=load, actual_reps=6, actual_load_kg=load, rir=2.0,
-                ))
-        d = today - dt.timedelta(days=9)
-        session = models.WorkoutSession(user_id=1, date=d, label="Lower Body", started_at=dt.datetime.combine(d, dt.time(9, 0)))
-        db.add(session)
-        db.flush()
-        for i in range(4):
+        # Recent real logged sessions matching the stated current bests, with
+        # feel/confidence_next populated to actually exercise the collaborative
+        # progression engine (not just blank numbers).
+        def log_set(session_id, exercise_id, idx, reps, load_kg, rir=2.0, feel="clean", confidence="yes"):
             db.add(models.WorkoutSet(
-                workout_session_id=session.id, exercise_id=squat_id, set_index=i + 1,
-                prescribed_reps=6, prescribed_load_kg=100, actual_reps=6, actual_load_kg=100, rir=2.0,
+                workout_session_id=session_id, exercise_id=exercise_id, set_index=idx,
+                prescribed_reps=reps, prescribed_load_kg=load_kg,
+                actual_reps=reps, actual_load_kg=load_kg, rir=rir,
+                feel=feel, confidence_next=confidence,
             ))
+
+        # Lower Body Strength -- 9 days ago
+        d = today - dt.timedelta(days=9)
+        s = models.WorkoutSession(user_id=1, date=d, label="Lower Body Strength", started_at=dt.datetime.combine(d, dt.time(8, 0)))
+        db.add(s); db.flush()
+        for i in range(3):
+            log_set(s.id, ex_id["Barbell Back Squat"], i + 1, 5, lb(205), rir=2.0, feel="clean", confidence="yes")
+        log_set(s.id, ex_id["Barbell Back Squat"], 4, 5, lb(205), rir=1.0, feel="difficult", confidence="maybe")
+        for i in range(3):
+            log_set(s.id, ex_id["Romanian Deadlift"], i + 1, 8, lb(165), rir=2.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Bulgarian Split Squat"], i + 1, 9, lb(35), rir=1.5)
+        for i in range(3):
+            log_set(s.id, ex_id["Leg Curl"], i + 1, 12, lb(85), rir=1.5)
+        for i in range(3):
+            log_set(s.id, ex_id["Leg Extension"], i + 1, 12, lb(90), rir=1.5)
+        for i in range(3):
+            log_set(s.id, ex_id["Hanging Knee Raise"], i + 1, 12, 0, rir=1.0)
         db.commit()
 
-        # one active injury, to demo the substitution rule out of the box
-        db.add(models.Injury(user_id=1, body_region="left_shoulder", description="Mild strain — avoid heavy overhead pressing", active=True))
+        # Pull Strength and Cardio -- 7 days ago
+        d = today - dt.timedelta(days=7)
+        s = models.WorkoutSession(user_id=1, date=d, label="Pull Strength and Cardio", started_at=dt.datetime.combine(d, dt.time(8, 0)))
+        db.add(s); db.flush()
+        for i, (reps, feel, conf) in enumerate([(3, "clean", "yes"), (3, "clean", "yes"), (3, "difficult", "maybe"), (2, "partial", "no")]):
+            log_set(s.id, ex_id["Pull-Up"], i + 1, reps, 0, rir=1.0, feel=feel, confidence=conf)
+        for i in range(2):
+            log_set(s.id, ex_id["T-Bar Row"], i + 1, 8, lb(70), rir=2.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Lat Pulldown"], i + 1, 10, lb(99), rir=1.5)
+        for i in range(2):
+            log_set(s.id, ex_id["Seated Cable Row"], i + 1, 10, lb(121), rir=1.5)
+        for i in range(2):
+            log_set(s.id, ex_id["Hammer Curl"], i + 1, 12, lb(25), rir=1.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Face Pulls"], i + 1, 18, lb(25), rir=1.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Rear-Delt Fly"], i + 1, 13, lb(15), rir=1.0)
+        for i in range(2):
+            log_set(s.id, ex_id["Dead Hang"], i + 1, 45, 0, rir=0.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Hanging Knee Raise"], i + 1, 12, 0, rir=1.0)
+        db.add(models.CardioSession(
+            user_id=1, date=d, activity_type="run", duration_seconds=900,
+            distance_meters=2615, avg_hr=145, perceived_effort=5.0,
+        ))
         db.commit()
 
-        # goals for the Program dashboard -- primary tracks the seeded bench history above,
-        # secondary is a manually-tracked target (no exercise log backs pull-up reps yet)
+        # Push Strength and Core -- 5 days ago, with the real "fell off fast" story
+        d = today - dt.timedelta(days=5)
+        s = models.WorkoutSession(user_id=1, date=d, label="Push Strength and Core", started_at=dt.datetime.combine(d, dt.time(8, 0)))
+        db.add(s); db.flush()
+        bench_sets = [
+            (5, lb(185), 2.0, "clean", "yes"),
+            (4, lb(185), 1.0, "difficult", "maybe"),
+            (3, lb(185), 0.0, "sloppy", "no"),
+            (5, lb(155), 2.0, "clean", "yes"),
+            (5, lb(155), 2.0, "clean", "yes"),
+        ]
+        for i, (reps, load, rir, feel, conf) in enumerate(bench_sets):
+            log_set(s.id, ex_id["Barbell Bench Press"], i + 1, reps, load, rir=rir, feel=feel, confidence=conf)
+        for i, (reps, feel) in enumerate([(6, "clean"), (6, "clean"), (5, "difficult")]):
+            log_set(s.id, ex_id["Overhead Press"], i + 1, reps, lb(95), rir=1.5, feel=feel)
+        incline_sets = [(10, lb(55), "clean"), (10, lb(45), "clean"), (8, lb(45), "difficult")]
+        for i, (reps, load, feel) in enumerate(incline_sets):
+            log_set(s.id, ex_id["Incline Dumbbell Press"], i + 1, reps, load, rir=1.5, feel=feel)
+        for i, feel in enumerate(["clean", "clean", "difficult"]):
+            log_set(s.id, ex_id["Lateral Raise"], i + 1, 15, lb(15), rir=1.0, feel=feel)
+        for i in range(3):
+            log_set(s.id, ex_id["Triceps Pushdown"], i + 1, 12, lb(45), rir=1.0)
+        for i in range(3):
+            log_set(s.id, ex_id["Plank"], i + 1, 45, 0, rir=1.0)
+        db.commit()
+
+        # no active injuries in the real profile -- posture/rounded-shoulders is
+        # addressed via Monday's recovery mobility work above, not a substitution rule
+
+        # Goals matching the stated main goals. "Improve posture / rounded
+        # shoulders" and "beefy athletic physique" are intentionally not
+        # modeled as numeric Goal rows -- the Goal model only tracks a
+        # start/current/target progress bar, which doesn't fit a qualitative
+        # goal without inventing a fake metric. They're addressed instead by
+        # User.goal (primary program focus) and the Monday recovery day.
         db.add(models.Goal(
-            user_id=1, title="Bench Press 100kg for 6", kind="strength", unit="kg",
-            start_value=77.5, current_value=82.5, target_value=100, is_secondary=False, status="improving",
+            user_id=1, title="Bench Press Back to 305 lb", kind="strength", unit="kg",
+            start_value=lb(185), current_value=lb(185), target_value=lb(305),
+            is_secondary=False, status="stable",
+        ))
+        db.add(models.Goal(
+            user_id=1, title="Run 3 Miles Continuously", kind="endurance", unit="mi",
+            start_value=1.6, current_value=1.6, target_value=3.0,
+            is_secondary=False, status="stable",
         ))
         db.add(models.Goal(
             user_id=1, title="10 Strict Pull-Ups", kind="strength", unit="reps",
-            start_value=3, current_value=6, target_value=10, is_secondary=True, status="improving",
+            start_value=3, current_value=3, target_value=10,
+            is_secondary=True, status="stable",
         ))
         db.commit()
 
@@ -625,7 +768,7 @@ def seed(reset: bool = False):
 
         seed_recipes(db)
 
-        print("Seeded demo data for user 'Aaron'.")
+        print("Seeded real training profile for user 'Aaron'.")
     finally:
         db.close()
 

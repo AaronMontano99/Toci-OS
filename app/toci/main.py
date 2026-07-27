@@ -1,9 +1,10 @@
 import datetime as dt
 import random
+import uuid
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,12 +12,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import coach
+from . import coach_chat as coach_chat_client
 from . import engine as reco_engine
 from . import models, schemas
 from . import nutrition as nutrition_client
 from . import recipes as recipes_client
 from . import shopping as shopping_client
 from . import spotify as spotify_client
+from . import vision as vision_client
 from . import whoop as whoop_client
 from .database import Base
 from .database import engine as db_engine
@@ -28,6 +31,12 @@ Base.metadata.create_all(bind=db_engine)
 DEMO_USER_ID = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WEB_DIR = REPO_ROOT / "web"
+# Progress photos are personal -- stored on disk (not committed, see .gitignore),
+# filenames are always server-generated UUIDs, never derived from user input.
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads" / "progress_photos"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10MB
+ALLOWED_PHOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 # Must match exactly what's registered in the Spotify app's dashboard settings.
 # Use 127.0.0.1, not localhost, to open the app -- Spotify's own recommendation
 # for loopback redirect URIs, and it's what this string is fixed to.
@@ -383,6 +392,120 @@ def progress_weekly_summary(db: Session = Depends(get_db)):
     }
 
 
+def _photo_out(p: models.ProgressPhoto):
+    return {
+        "id": p.id,
+        "date": p.date.isoformat(),
+        "url": f"/uploads/progress_photos/{p.filename}",
+        "note": p.note,
+        "ai_impression": p.ai_impression,
+    }
+
+
+@app.get("/api/progress/photos")
+def list_progress_photos(db: Session = Depends(get_db)):
+    photos = (
+        db.query(models.ProgressPhoto)
+        .filter_by(user_id=DEMO_USER_ID)
+        .order_by(models.ProgressPhoto.date.desc(), models.ProgressPhoto.id.desc())
+        .all()
+    )
+    return [_photo_out(p) for p in photos]
+
+
+@app.post("/api/progress/photos")
+async def upload_progress_photo(
+    file: UploadFile = File(...),
+    date: str | None = Form(None),
+    note: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    if file.content_type not in ALLOWED_PHOTO_CONTENT_TYPES:
+        raise HTTPException(400, "Unsupported image type")
+    body = await file.read()
+    if len(body) > MAX_PHOTO_BYTES:
+        raise HTTPException(400, "Image too large (max 10MB)")
+
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic"}[file.content_type]
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    (UPLOADS_DIR / filename).write_bytes(body)
+
+    photo_date = dt.date.fromisoformat(date) if date else dt.date.today()
+    photo = models.ProgressPhoto(
+        user_id=DEMO_USER_ID, date=photo_date, filename=filename, note=note,
+        # Best-effort: if Ollama/the vision model isn't available or the call
+        # times out, ai_impression just stays null -- the photo still saves.
+        ai_impression=vision_client.generate_impression(body),
+        ai_impression_generated_at=dt.datetime.utcnow(),
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return _photo_out(photo)
+
+
+@app.delete("/api/progress/photos/{photo_id}")
+def delete_progress_photo(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(models.ProgressPhoto).filter_by(id=photo_id, user_id=DEMO_USER_ID).first()
+    if not photo:
+        raise HTTPException(404, "Photo not found")
+    (UPLOADS_DIR / photo.filename).unlink(missing_ok=True)
+    db.delete(photo)
+    db.commit()
+    return {"deleted": True}
+
+
+@app.get("/api/coach/chat")
+def get_chat_history(db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.ProgramChatMessage)
+        .filter_by(user_id=DEMO_USER_ID)
+        .filter(models.ProgramChatMessage.role.in_(["user", "assistant"]))
+        .order_by(models.ProgramChatMessage.id)
+        .all()
+    )
+    return [
+        {
+            "id": m.id, "role": m.role, "content": m.content,
+            "proposal": m.proposal_json, "proposal_status": m.proposal_status,
+        }
+        for m in rows
+    ]
+
+
+@app.post("/api/coach/chat")
+def post_chat_message(payload: dict, db: Session = Depends(get_db)):
+    message = (payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "Message can't be empty")
+    if len(message) > 1000:
+        raise HTTPException(400, "Message too long")
+    return coach_chat_client.chat(db, DEMO_USER_ID, message)
+
+
+@app.post("/api/coach/chat/{message_id}/apply")
+def apply_chat_proposal(message_id: int, db: Session = Depends(get_db)):
+    try:
+        return coach_chat_client.apply_proposal(db, DEMO_USER_ID, message_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/coach/chat/{message_id}/discard")
+def discard_chat_proposal(message_id: int, db: Session = Depends(get_db)):
+    try:
+        return coach_chat_client.discard_proposal(db, DEMO_USER_ID, message_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/coach/chat")
+def clear_chat_history(db: Session = Depends(get_db)):
+    db.query(models.ProgramChatMessage).filter_by(user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"cleared": True}
+
+
 @app.get("/api/workouts/last-session")
 def last_session_for_split(label: str, day_type: str, db: Session = Depends(get_db)):
     """Powers 'what did I do last time I trained this split' when tapping a
@@ -472,6 +595,14 @@ def _week_detail(db: Session, meso, today: dt.date):
             "is_today": d == today,
             "exercises": [],
             "run": None,
+            # Optional, free-form day content beyond formal sets/reps -- a cardio
+            # finisher tacked onto a lift day, or the mobility checklist on a
+            # recover/rest day. Kept as short strings rather than a rigid
+            # sub-schema since these days don't need to be "logged" the way
+            # prescribed sets do.
+            "conditioning_items": pd.template.get("conditioning", {}).get("items", []) if pd else [],
+            "mobility_items": pd.template.get("mobility_items", []) if pd else [],
+            "note": pd.template.get("note") if pd else None,
         }
         if pd and pd.day_type == "lift":
             entry["exercises"] = [
@@ -1279,6 +1410,8 @@ def whoop_callback_page():
     # frontend can read `?code=&state=` and complete the exchange itself.
     return FileResponse(str(WEB_DIR / "index.html"))
 
+
+app.mount("/uploads/progress_photos", StaticFiles(directory=str(UPLOADS_DIR)), name="progress_photos")
 
 # Mount the static frontend last so it doesn't shadow the /api/* routes above.
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

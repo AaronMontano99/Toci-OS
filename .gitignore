@@ -2,6 +2,7 @@ app/.venv/
 app/__pycache__/
 app/toci/__pycache__/
 app/*.db
+app/uploads/
 __pycache__/
 *.pyc
 .DS_Store

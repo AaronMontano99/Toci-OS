@@ -549,8 +549,47 @@
     <div class="set-group-label">Goal Progress</div>
     <div id="program-goals-list"><div class="empty-note">No goals set yet.</div></div>
 
+    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Progress Photos</span>
+      <div style="display:flex;gap:0.4rem;">
+        <button class="btn subtle small" onclick="openCameraCapture()">Take Photo</button>
+        <button class="btn subtle small" onclick="document.getElementById('photo-file-input').click()">Choose from Library</button>
+      </div>
+    </div>
+    <!-- Library picker: the browser/OS handles the actual photo-access permission
+         prompt (and, on iOS, its own limited/full-access picker UI) -- nothing
+         extra to implement here beyond triggering it as its own explicit action. -->
+    <input type="file" id="photo-file-input" accept="image/*" class="hidden" onchange="onPhotoFileSelected(event)">
+    <div id="photo-scroll-row" class="photo-scroll-row"></div>
+    <div id="photo-detail-card" class="card tight hidden" style="margin-top:0.6rem;"></div>
+
+    <!-- Take Photo: explicit getUserMedia() call so the browser's own camera
+         permission prompt appears; see openCameraCapture()/closeCameraCapture() -->
+    <div id="camera-overlay" class="camera-overlay hidden">
+      <div class="camera-overlay-header">
+        <div style="font-weight:600;">Take a Progress Photo</div>
+        <button class="btn gray small" onclick="closeCameraCapture()">Cancel</button>
+      </div>
+      <div id="camera-permission-note" class="empty-note hidden" style="margin:1rem 0;"></div>
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" class="hidden"></canvas>
+      <button class="btn primary" id="camera-capture-btn" style="margin-top:0.9rem;" onclick="captureCameraPhoto()">Capture</button>
+    </div>
+
     <div class="set-group-label">Coach Observations</div>
     <div class="card tight" id="program-observations-card"><div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div></div>
+
+    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Ask Toci</span>
+      <button class="btn gray small" onclick="clearCoachChat()">New Conversation</button>
+    </div>
+    <div class="empty-note" style="margin-bottom:0.5rem;">Toci only discusses your program, exercises, and goals here — nothing else.</div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <div id="chat-proposal-card" class="card tight hidden"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder='Ask Toci to change your program…' onkeydown="if(event.key==='Enter') sendCoachChat()">
+      <button class="btn primary small" id="chat-send-btn" onclick="sendCoachChat()">Send</button>
+    </div>
   </section>
 
   <!-- ============ SETTINGS ============ -->

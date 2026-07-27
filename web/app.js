@@ -1731,6 +1731,7 @@ const GOAL_STATUS_LABELS = { improving: "Improving", stable: "Stable", declining
 const PROGRESS_STATUS_LABELS = { ahead: "Ahead of Schedule", on_track: "On Track", behind: "Slightly Behind" };
 
 function fmtGoalValue(v, unit) {
+  if (unit === "kg") return fmtWeight(v); // canonical storage is kg; respect the user's display-unit preference
   const n = Number.isInteger(v) ? v : Math.round(v * 10) / 10;
   return n + (unit ? " " + unit : "");
 }
@@ -1762,12 +1763,21 @@ function renderProgramWeek(week) {
     .map((d, i) => {
       const dayName = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" });
       const nameColor = d.is_today ? "color:var(--brand-dark);" : "";
-      const hasDetail = d.exercises.length > 0 || d.run;
+      const hasDetail = d.exercises.length > 0 || d.run || d.mobility_items.length > 0 || d.conditioning_items.length > 0 || d.note;
       let detailHtml = "";
       if (d.exercises.length) {
         detailHtml = d.exercises.map((e) => '<div class="exercise-line">' + e.name + " — " + e.sets + " sets × " + e.reps + " reps</div>").join("");
       } else if (d.run) {
         detailHtml = '<div class="exercise-line">' + labelForRunType(d.run.run_type) + " — " + d.run.duration_min + " min · Zone " + d.run.zone + "</div>";
+      }
+      if (d.mobility_items.length) {
+        detailHtml += d.mobility_items.map((m) => '<div class="exercise-line">' + m + "</div>").join("");
+      }
+      if (d.conditioning_items.length) {
+        detailHtml += d.conditioning_items.map((c) => '<div class="exercise-line" style="opacity:0.8;">' + c + "</div>").join("");
+      }
+      if (d.note) {
+        detailHtml += '<div class="exercise-line" style="font-style:italic;opacity:0.75;margin-top:0.3rem;">' + d.note + "</div>";
       }
       return (
         '<div class="card tight">' +
@@ -1870,6 +1880,224 @@ async function loadProgram() {
   obsCard.innerHTML = data.coach_observations.length
     ? data.coach_observations.map((o) => '<div class="observation-row"><span class="dot"></span><span>' + o + "</span></div>").join("")
     : '<div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div>';
+
+  loadProgressPhotos();
+  loadCoachChat();
+}
+
+// --------------------------------------------------------------- progress photos ----
+
+let progressPhotos = [];
+
+async function loadProgressPhotos() {
+  progressPhotos = await api("/progress/photos");
+  renderProgressPhotos();
+}
+
+function renderProgressPhotos() {
+  const row = document.getElementById("photo-scroll-row");
+  const addTile = '<button class="photo-add-tile" onclick="document.getElementById(\'photo-file-input\').click()">+</button>';
+  if (!progressPhotos.length) {
+    row.innerHTML = addTile;
+    document.getElementById("photo-detail-card").classList.add("hidden");
+    return;
+  }
+  row.innerHTML =
+    progressPhotos
+      .map((p, i) => {
+        const d = new Date(p.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        return (
+          '<button class="photo-thumb" onclick="showPhotoDetail(' + i + ')">' +
+          '<img src="' + p.url + '" alt="Progress photo ' + d + '">' +
+          '<span class="date-chip">' + d + "</span></button>"
+        );
+      })
+      .join("") + addTile;
+}
+
+function showPhotoDetail(index) {
+  const p = progressPhotos[index];
+  const card = document.getElementById("photo-detail-card");
+  const d = new Date(p.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  card.classList.remove("hidden");
+  card.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+    '<div style="font-weight:600;font-size:0.9rem;">' + d + "</div>" +
+    '<button class="btn danger small" onclick="deleteProgressPhoto(' + p.id + ')">Delete</button></div>' +
+    (p.note ? '<div style="font-size:0.82rem;margin-top:0.4rem;">' + p.note + "</div>" : "") +
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.6rem;font-style:italic;">' +
+    (p.ai_impression || "No AI impression available for this photo (local vision model not running).") +
+    "</div>";
+}
+
+async function deleteProgressPhoto(id) {
+  await api("/progress/photos/" + id, { method: "DELETE" });
+  document.getElementById("photo-detail-card").classList.add("hidden");
+  loadProgressPhotos();
+}
+
+async function uploadProgressPhotoBlob(blob, filename) {
+  const formData = new FormData();
+  formData.append("file", blob, filename);
+  formData.append("date", new Date().toISOString().slice(0, 10));
+  const res = await fetch(API + "/progress/photos", { method: "POST", body: formData });
+  if (!res.ok) {
+    alert("Couldn't upload that photo. " + (await res.text()));
+    return;
+  }
+  await loadProgressPhotos();
+}
+
+async function onPhotoFileSelected(event) {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  await uploadProgressPhotoBlob(file, file.name);
+}
+
+// -- Take Photo: live camera capture. Requesting getUserMedia() is what
+// actually triggers the browser's own camera-permission prompt -- there's no
+// separate "ask permission" call, the prompt appears as a side effect of this
+// request, and its outcome (granted/denied/no camera) is handled below.
+let cameraStream = null;
+
+async function openCameraCapture() {
+  document.getElementById("camera-overlay").classList.remove("hidden");
+  const note = document.getElementById("camera-permission-note");
+  const video = document.getElementById("camera-video");
+  const captureBtn = document.getElementById("camera-capture-btn");
+  note.classList.add("hidden");
+  captureBtn.classList.remove("hidden");
+  video.classList.remove("hidden");
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    note.textContent = "Camera access isn't available in this browser. Use \"Choose from Library\" instead.";
+    note.classList.remove("hidden");
+    video.classList.add("hidden");
+    captureBtn.classList.add("hidden");
+    return;
+  }
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    video.srcObject = cameraStream;
+  } catch (err) {
+    // NotAllowedError = user denied the permission prompt (or blocked previously);
+    // NotFoundError = no camera device present. Either way, fail into the
+    // library picker rather than leaving a dead camera screen.
+    note.textContent =
+      err.name === "NotAllowedError"
+        ? "Camera access was denied. Enable it in your browser's site settings to take photos directly, or choose from your library instead."
+        : "Couldn't access a camera on this device. Choose from your library instead.";
+    note.classList.remove("hidden");
+    video.classList.add("hidden");
+    captureBtn.classList.add("hidden");
+  }
+}
+
+function closeCameraCapture() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((t) => t.stop());
+    cameraStream = null;
+  }
+  document.getElementById("camera-video").srcObject = null;
+  document.getElementById("camera-overlay").classList.add("hidden");
+}
+
+function captureCameraPhoto() {
+  const video = document.getElementById("camera-video");
+  const canvas = document.getElementById("camera-canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(async (blob) => {
+    closeCameraCapture();
+    if (blob) await uploadProgressPhotoBlob(blob, "camera-photo.jpg");
+  }, "image/jpeg", 0.9);
+}
+
+// --------------------------------------------------------------- Ask Toci chat ----
+
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+async function loadCoachChat() {
+  const messages = await api("/coach/chat");
+  renderChatMessages(messages);
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderChatMessages(messages) {
+  const el = document.getElementById("chat-messages");
+  if (!messages.length) {
+    el.innerHTML = '<div class="empty-note">Ask about your program — e.g. "give me a bit more pull volume" or "swap Friday for something easier."</div>';
+  } else {
+    el.innerHTML = messages
+      .map((m) => '<div class="chat-bubble ' + m.role + '">' + escapeHtml(m.content) + "</div>")
+      .join("");
+  }
+  el.scrollTop = el.scrollHeight;
+
+  const pending = [...messages].reverse().find((m) => m.proposal_status === "pending");
+  if (pending) {
+    renderProposalCard(pending.id, pending.proposal);
+  } else {
+    document.getElementById("chat-proposal-card").classList.add("hidden");
+  }
+}
+
+function renderProposalCard(messageId, proposal) {
+  const card = document.getElementById("chat-proposal-card");
+  card.classList.remove("hidden");
+  const rows = [...proposal.days]
+    .sort((a, b) => a.weekday - b.weekday)
+    .map((d) => '<div class="proposal-day-row"><span class="day">' + WEEKDAY_NAMES[d.weekday] + "</span><span>" + escapeHtml(d.label) + "</span></div>")
+    .join("");
+  card.innerHTML =
+    '<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.4rem;">Proposed program</div>' +
+    rows +
+    '<div class="btn-row" style="margin-top:0.7rem;">' +
+    '<button class="btn primary small" onclick="applyChatProposal(' + messageId + ')">Apply</button>' +
+    '<button class="btn gray small" onclick="discardChatProposal(' + messageId + ')">Discard</button>' +
+    "</div>";
+}
+
+async function sendCoachChat() {
+  const input = document.getElementById("chat-input");
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = "";
+  document.getElementById("chat-send-btn").disabled = true;
+  try {
+    await api("/coach/chat", { method: "POST", body: JSON.stringify({ message }) });
+    await loadCoachChat();
+  } finally {
+    document.getElementById("chat-send-btn").disabled = false;
+  }
+}
+
+async function applyChatProposal(messageId) {
+  try {
+    await api("/coach/chat/" + messageId + "/apply", { method: "POST" });
+    toast("Program updated");
+    await loadProgram();
+  } catch (err) {
+    alert("Couldn't apply that: " + err.message);
+  }
+}
+
+async function discardChatProposal(messageId) {
+  await api("/coach/chat/" + messageId + "/discard", { method: "POST" });
+  await loadCoachChat();
+}
+
+async function clearCoachChat() {
+  await api("/coach/chat", { method: "DELETE" });
+  await loadCoachChat();
 }
 
 // --------------------------------------------------------------- settings ----

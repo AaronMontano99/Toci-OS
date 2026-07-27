@@ -227,6 +227,29 @@ class BodyMetric(Base):
     weight_kg = Column(Float)
 
 
+class ProgramChatMessage(Base):
+    __tablename__ = "program_chat_messages"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String, nullable=False)  # "user" | "assistant" | "system_notice"
+    content = Column(String, nullable=False)
+    proposal_json = Column(JSON)  # a proposed program structure attached to an assistant message, or null
+    proposal_status = Column(String)  # "pending" | "applied" | "discarded" -- null when proposal_json is null
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class ProgressPhoto(Base):
+    __tablename__ = "progress_photos"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False, default=dt.date.today)
+    filename = Column(String, nullable=False)  # UUID-based; see uploads/ dir, never user-supplied
+    note = Column(String)  # user's own caption, optional
+    ai_impression = Column(String)  # local vision-model's qualitative note; null if unavailable/timed out
+    ai_impression_generated_at = Column(DateTime)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class FoodItem(Base):
     __tablename__ = "food_items"
     id = Column(Integer, primary_key=True)
