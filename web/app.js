@@ -12,6 +12,7 @@ const state = {
   settings: null,
   onboardingPace: "lose_1",
   onboardingActivity: "active",
+  programWeek: [],
 };
 
 const KG_PER_LB = 0.45359237;
@@ -61,6 +62,38 @@ function fmtRest(sec) {
   return m + ":" + String(s).padStart(2, "0");
 }
 
+// Small inline trend line for stat/goal cards -- values are plotted low-to-high
+// left-to-right with no axes, just a fading area fill and a highlighted endpoint.
+function sparklineSvg(values, opts = {}) {
+  const W = opts.width || 100, H = opts.height || 30;
+  if (!values || values.length < 2) {
+    return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '"></svg>';
+  }
+  const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+  const pad = (max - min) * 0.2 || 1;
+  const yMin = min - pad, yMax = max + pad;
+  const n = values.length;
+  const xFor = (i) => (i / (n - 1)) * W;
+  const yFor = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
+  const coords = values.map((v, i) => [xFor(i), yFor(v)]);
+  const line = coords.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+  const area = line + " L" + W + "," + H + " L0," + H + " Z";
+  const gid = "sk" + Math.random().toString(36).slice(2, 9);
+  return (
+    '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" style="overflow:visible;">' +
+    '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="var(--brand)" stop-opacity="0.25"/>' +
+    '<stop offset="100%" stop-color="var(--brand)" stop-opacity="0"/></linearGradient></defs>' +
+    '<path d="' + area + '" fill="url(#' + gid + ')" stroke="none"/>' +
+    '<path d="' + line + '" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + coords[n - 1][0] + '" cy="' + coords[n - 1][1] + '" r="3" fill="var(--brand)"/>' +
+    "</svg>"
+  );
+}
+
+// Shared checkmark glyph used by day-strip "done" dots.
+const CHECK_SVG = '<svg viewBox="0 0 20 20" fill="none"><path d="M4.5 10.5L8 14L15.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 // ---------------------------------------------------------------- helpers ----
 
 async function api(path, opts = {}) {
@@ -102,7 +135,8 @@ function labelForRunType(t) {
 }
 
 function fmtHours(min) {
-  if (!min) return "—";
+  if (min == null) return "—";
+  if (min === 0) return "0m";
   const h = Math.floor(min / 60);
   const m = min % 60;
   return h + "h" + (m ? " " + m + "m" : "");
@@ -114,11 +148,11 @@ document.querySelectorAll(".tab-bar .tab").forEach((t) => {
   t.addEventListener("click", () => {
     const id = t.dataset.tab;
     showView(id);
-    if (id === "view-today") { loadCalorieBudgetCard(); loadWeightProgressCard(); loadWeeklyProgressCard(); loadMusicCard(); loadWearableCard(); }
+    if (id === "view-today") { loadTodayMacroStats(); loadWeightProgressCard(); loadWeeklyProgressCard(); loadMusicCard(); loadWearableCard(); }
     if (id === "view-food") loadFoodToday();
     if (id === "view-progress") loadProgress();
     if (id === "view-program") loadProgram();
-    if (id === "view-settings") loadSettings();
+    if (id === "view-settings") { loadSettings().then(() => { loadProfileOverview(); loadProfileGoals(); }); }
     if (id === "view-log") loadLogChooser();
   });
 });
@@ -128,22 +162,30 @@ document.querySelectorAll("[data-back]").forEach((b) => {
 
 // ----------------------------------------------------------------- today ----
 
+function timeOfDayGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 async function loadToday() {
   const data = await api("/today");
   state.today = data;
 
   const d = new Date(data.date + "T00:00:00");
   document.getElementById("today-date").textContent = d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  const name = state.settings && state.settings.name ? state.settings.name.split(" ")[0] : "";
+  document.getElementById("today-greeting").textContent = timeOfDayGreeting() + (name ? ", " + name : "");
+  document.getElementById("today-streak-n").textContent = data.streak;
 
   const score = data.readiness.score;
   const band = data.readiness.band;
   document.getElementById("readiness-value").textContent = Math.round(score);
 
-  const badge = document.getElementById("readiness-badge");
-  const bandClass = band === "green" ? "success" : band === "amber" ? "warn" : "critical";
-  const bandWord = band === "green" ? "GO" : band === "amber" ? "EASY" : "REST";
-  badge.className = "badge " + bandClass;
-  badge.innerHTML = '<span class="dot"></span>' + bandWord;
+  const bandTitle = document.getElementById("readiness-band-title");
+  const bandWord = band === "green" ? "Good" : band === "amber" ? "Moderate" : "Low";
+  bandTitle.textContent = bandWord;
 
   const ringFill = document.getElementById("readiness-ring-fill");
   const circumference = 194.8;
@@ -155,7 +197,33 @@ async function loadToday() {
 
   renderRecommendation(data.recommendation);
   renderExerciseSummary(data.week);
+  renderThisWeekStreak(data.week);
   renderNotifications(data);
+}
+
+function renderThisWeekStreak(week) {
+  const body = document.getElementById("this-week-streak-body");
+  const planned = week.filter((d) => d.day_type === "lift" || d.day_type === "run");
+  const completed = planned.filter((d) => d.is_completed).length;
+  const pctDone = planned.length ? completed / planned.length : 0;
+  const caption = pctDone >= 0.8 ? "Great consistency" : pctDone >= 0.5 ? "Good pace" : "Let's build momentum";
+
+  const strip = week
+    .map((d) => {
+      const dname = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1).toUpperCase();
+      const isPlanned = d.day_type === "lift" || d.day_type === "run";
+      const cls = "mds-item" + (d.is_today ? " today" : "") + (d.is_completed ? " done" : "");
+      const dot = d.is_completed
+        ? '<div class="mds-dot">' + CHECK_SVG + "</div>"
+        : '<div class="mds-dot">' + (isPlanned ? "" : "") + "</div>";
+      return '<div class="' + cls + '"><div class="mds-letter">' + dname + "</div>" + dot + "</div>";
+    })
+    .join("");
+
+  body.innerHTML =
+    '<div class="mini-day-strip">' + strip + "</div>" +
+    '<div style="font-weight:800;font-family:var(--font-display);font-size:1.1rem;">' + completed + " of " + planned.length + " days</div>" +
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">' + caption + "</div>";
 }
 
 // Simple pictogram figures (circle head + line limbs), one per workout split --
@@ -229,6 +297,8 @@ function pictogramFor(reco) {
   return PICTOGRAMS.resting; // recover | rest
 }
 
+const META_CLOCK_SVG = '<svg viewBox="0 0 20 20" width="12" height="12" fill="none" style="vertical-align:-1.5px;margin-right:2px;"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 function renderRecommendation(reco) {
   const kicker = document.getElementById("reco-kicker");
   const body = document.getElementById("reco-body");
@@ -239,31 +309,34 @@ function renderRecommendation(reco) {
   document.getElementById("reco-ico").innerHTML = pictogramFor(reco);
 
   if (reco.session_type === "lift") {
-    kicker.textContent = "Lift — " + (p.label || "");
+    const estMin = Math.max(15, Math.round((p.exercises.reduce((s, e) => s + e.sets * 2.5, 0)) / 5) * 5);
+    kicker.textContent = "Today's Workout";
     const rows = p.exercises
-      .map((e) => '<div class="tnum" style="font-size:0.85rem;margin-top:0.25rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>")
+      .map((e) => '<div class="tnum" style="font-size:0.83rem;margin-top:0.2rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>")
       .join("");
     body.innerHTML =
-      '<div style="font-weight:700;font-size:1rem;">' + (p.exercises[0] ? p.exercises[0].name : "Lift session") + "</div>" +
+      '<div style="font-weight:700;font-size:1.08rem;">' + (p.exercises[0] ? p.exercises[0].name : "Lift session") + "</div>" +
+      '<div style="font-size:0.82rem;opacity:0.75;margin-top:0.1rem;">' + (p.label || "") + "</div>" +
+      '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.6rem;">' + META_CLOCK_SVG + "Est. " + estMin + " min · " + p.exercises.length + " exercises</div>" +
       rows +
-      '<div style="font-size:0.78rem;color:var(--neutral-2);font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
+      '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
     startBtn.textContent = "Start Workout";
     startBtn.classList.remove("hidden");
     startBtn.onclick = () => { showView("view-log"); loadLogChooser(); };
   } else if (reco.session_type === "run") {
-    kicker.textContent = "Run";
+    kicker.textContent = "Today's Workout";
     body.innerHTML =
-      '<div style="font-weight:700;font-size:1rem;">' + labelForRunType(p.run_type) + "</div>" +
-      '<div class="tnum" style="font-size:0.85rem;color:var(--neutral);margin-top:0.2rem;">' + p.duration_min + " min · Zone " + p.zone + "</div>" +
-      '<div style="font-size:0.78rem;color:var(--neutral-2);font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
+      '<div style="font-weight:700;font-size:1.08rem;">' + labelForRunType(p.run_type) + "</div>" +
+      '<div class="tnum" style="font-size:0.78rem;opacity:0.8;margin-top:0.6rem;">' + META_CLOCK_SVG + p.duration_min + " min · Zone " + p.zone + "</div>" +
+      '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
     startBtn.textContent = "Start Run";
     startBtn.classList.remove("hidden");
     startBtn.onclick = () => { showView("view-log"); loadLogChooser(); };
   } else {
     kicker.textContent = reco.session_type === "recover" ? "Recovery" : "Rest";
     body.innerHTML =
-      '<div style="font-weight:700;font-size:1rem;">' + (p.note || "Rest day") + "</div>" +
-      '<div style="font-size:0.78rem;color:var(--neutral-2);font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
+      '<div style="font-weight:700;font-size:1.08rem;">' + (p.note || "Rest day") + "</div>" +
+      '<div style="font-size:0.78rem;opacity:0.75;font-style:italic;margin-top:0.6rem;">“' + reasoning + "”</div>";
     startBtn.classList.add("hidden");
   }
 }
@@ -427,7 +500,47 @@ function loadLogChooser() {
   const runTitle = document.getElementById("log-run-title");
   liftTitle.textContent = reco.session_type === "lift" ? reco.prescription.label + " — recommended today" : "Log any exercise freely";
   runTitle.textContent = reco.session_type === "run" ? labelForRunType(reco.prescription.run_type) + " — recommended today" : "Log a run freely";
+  loadLogSummary(5);
 }
+
+async function loadLogSummary(recentLimit) {
+  const data = await api("/log/summary?recent_limit=" + recentLimit);
+  const row = document.getElementById("log-recent-sessions-row");
+  if (!data.recent_sessions.length) {
+    row.innerHTML = '<div class="empty-note">Nothing logged yet — start a session above.</div>';
+  } else {
+    row.innerHTML = data.recent_sessions
+      .map((s) => {
+        const icon = s.type === "lift" ? PROGRAM_TODAY_ICONS.lift : PROGRAM_TODAY_ICONS.run;
+        const dateLabel = new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+        return (
+          '<div class="log-session-card">' +
+          '<div class="icon-circle md">' + icon + "</div>" +
+          '<div class="name">' + escapeHtml(s.title) + "</div>" +
+          '<span class="date">' + dateLabel + "</span>" +
+          '<span class="chip">' + s.type.toUpperCase() + "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  const w = data.week;
+  const snapshotStat = (icon, num, lbl, goal) =>
+    '<div class="snapshot-stat"><div class="icon-circle sm">' + icon + '</div><div class="num tnum">' + num + '</div>' +
+    '<div class="lbl">' + lbl + '</div><div class="goal tnum">Goal ' + goal + "</div></div>";
+  document.getElementById("log-weekly-snapshot-card").innerHTML =
+    '<div class="snapshot-head"><span style="font-weight:700;font-size:0.95rem;">This Week</span></div>' +
+    '<div class="snapshot-row">' +
+    snapshotStat(PROGRAM_TODAY_ICONS.lift, w.lift_sessions, "Lift Sessions", w.lift_goal) +
+    snapshotStat(PROGRAM_TODAY_ICONS.run, w.runs, "Runs", w.run_goal) +
+    snapshotStat(META_CLOCK_SVG.replace('width="12" height="12"', 'width="16" height="16" style=""'), fmtHours(w.total_time_min), "Total Time", fmtHours(w.time_goal_min)) +
+    snapshotStat(GOAL_KIND_ICONS.consistency, w.est_calories.toLocaleString(), "Est. Calories", w.calorie_goal.toLocaleString()) +
+    "</div>" +
+    '<div class="streak-banner" style="margin-top:0.9rem;margin-bottom:0;"><span class="icon-circle sm">' + GOAL_KIND_ICONS.consistency + '</span><span class="streak-sub" style="color:var(--brand-subtle-text);font-weight:600;">' + escapeHtml(data.encouragement) + "</span></div>";
+}
+
+document.getElementById("btn-log-view-all").addEventListener("click", () => loadLogSummary(20));
 
 document.getElementById("btn-open-lift").addEventListener("click", () => { openLiftSession(); });
 document.getElementById("btn-open-run").addEventListener("click", () => {
@@ -752,18 +865,109 @@ function renderFoodEntryRow(e) {
   );
 }
 
+function ringSvg(pct, colorVar, size, strokeWidth) {
+  const r = (size - strokeWidth) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct || 0));
+  const offset = c * (1 - clamped / 100);
+  const cx = size / 2;
+  return (
+    '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + " " + size + '" style="transform:rotate(-90deg);">' +
+    '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + strokeWidth + '"/>' +
+    '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + colorVar + '" stroke-width="' + strokeWidth +
+    '" stroke-linecap="round" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '"/></svg>'
+  );
+}
+
+function macroRingItem(letter, pct) {
+  return '<div class="macro-ring-item"><div class="letter">' + letter + "</div>" + ringSvg(pct, "var(--brand)", 40, 4) + '<div class="pct tnum">' + Math.round(pct || 0) + "%</div></div>";
+}
+
+const MEAL_SLOT_SUN_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor"><circle cx="10" cy="10" r="3.5" stroke-width="1.5"/><path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M5.3 5.3l1 1M13.7 13.7l1 1M14.7 5.3l-1 1M6.3 13.7l-1 1" stroke-width="1.4" stroke-linecap="round"/></svg>';
+const MEAL_SLOT_MOON_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor"><path d="M15.5 11.5A6 6 0 118.5 4.5a5 5 0 007 7z" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+const MEAL_SLOT_ICONS = {
+  breakfast: MEAL_SLOT_SUN_ICON,
+  lunch: MEAL_SLOT_SUN_ICON,
+  dinner: MEAL_SLOT_MOON_ICON,
+  snack: MEAL_SLOT_MOON_ICON,
+};
+
 async function loadFoodToday() {
   const data = await api("/nutrition/today");
   const d = new Date(data.date + "T00:00:00");
   document.getElementById("food-date").textContent = d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
-  document.getElementById("food-total-calories").textContent = Math.round(data.totals.calories);
-  document.getElementById("food-total-protein").textContent = Math.round(data.totals.protein_g) + "g";
-  document.getElementById("food-total-carbs").textContent = Math.round(data.totals.carbs_g) + "g";
-  document.getElementById("food-total-fat").textContent = Math.round(data.totals.fat_g) + "g";
+  const totals = data.totals;
+  document.getElementById("food-total-calories").textContent = Math.round(totals.calories);
+  document.getElementById("food-total-protein").textContent = Math.round(totals.protein_g) + "g";
+  document.getElementById("food-total-carbs").textContent = Math.round(totals.carbs_g) + "g";
+  document.getElementById("food-total-fat").textContent = Math.round(totals.fat_g) + "g";
   document.getElementById("food-micro-line").textContent =
-    "Fiber " + Math.round(data.totals.fiber_g) + "g · Sugar " + Math.round(data.totals.sugar_g) +
-    "g · Sodium " + Math.round(data.totals.sodium_mg) + "mg";
+    "Fiber " + Math.round(totals.fiber_g) + "g · Sugar " + Math.round(totals.sugar_g) +
+    "g · Sodium " + Math.round(totals.sodium_mg) + "mg";
+
+  const goal = state.settings && state.settings.daily_calorie_goal_kcal;
+  const proteinTarget = goal ? (goal * MACRO_SPLIT.protein) / MACRO_KCAL_PER_G.protein : null;
+  const carbsTarget = goal ? (goal * MACRO_SPLIT.carbs) / MACRO_KCAL_PER_G.carbs : null;
+  const fatTarget = goal ? (goal * MACRO_SPLIT.fat) / MACRO_KCAL_PER_G.fat : null;
+  const setSub = (key, target, unit) => {
+    document.getElementById("food-" + key + "-sub").textContent = target ? "/ " + Math.round(target).toLocaleString() + (unit || "") : "/ —";
+    document.getElementById("food-" + key + "-bar").style.width = (target ? Math.min(100, Math.round(100 * (key === "calories" ? totals.calories : totals[key + "_g"]) / target)) : 0) + "%";
+  };
+  setSub("calories", goal, "");
+  setSub("protein", proteinTarget, "g");
+  setSub("carbs", carbsTarget, "g");
+  setSub("fat", fatTarget, "g");
+
+  const proteinKcal = totals.protein_g * MACRO_KCAL_PER_G.protein;
+  const carbsKcal = totals.carbs_g * MACRO_KCAL_PER_G.carbs;
+  const fatKcal = totals.fat_g * MACRO_KCAL_PER_G.fat;
+  const kcalSum = proteinKcal + carbsKcal + fatKcal || 1;
+  document.getElementById("log-food-rings").innerHTML =
+    macroRingItem("C", (100 * carbsKcal) / kcalSum) + macroRingItem("P", (100 * proteinKcal) / kcalSum) + macroRingItem("F", (100 * fatKcal) / kcalSum);
+
+  const recentMealsRow = document.getElementById("recent-meals-row");
+  const mealGroups = {};
+  data.entries.forEach((e) => {
+    const slot = MEAL_SLOTS.includes(e.meal_slot) ? e.meal_slot : "snack";
+    (mealGroups[slot] = mealGroups[slot] || []).push(e);
+  });
+  const activeSlots = MEAL_SLOTS.filter((slot) => mealGroups[slot] && mealGroups[slot].length);
+  if (!activeSlots.length) {
+    recentMealsRow.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
+  } else {
+    recentMealsRow.innerHTML = activeSlots
+      .map((slot) => {
+        const items = mealGroups[slot];
+        const kcal = Math.round(items.reduce((s, e) => s + e.calories, 0));
+        const p = Math.round(items.reduce((s, e) => s + e.protein_g, 0));
+        const c = Math.round(items.reduce((s, e) => s + e.carbs_g, 0));
+        const f = Math.round(items.reduce((s, e) => s + e.fat_g, 0));
+        const title = items.length === 1 ? items[0].name : items[0].name + " + " + (items.length - 1) + " more";
+        return (
+          '<div class="log-session-card" style="width:170px;">' +
+          '<div style="display:flex;align-items:center;gap:0.35rem;color:var(--brand);font-size:0.7rem;font-weight:700;text-transform:uppercase;">' + MEAL_SLOT_ICONS[slot] + MEAL_SLOT_LABELS[slot] + "</div>" +
+          '<div class="name" style="margin-top:0.4rem;">' + escapeHtml(title) + "</div>" +
+          '<div class="date tnum">' + kcal + " kcal · " + p + "P " + c + "C " + f + "F</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  const tipsBody = document.getElementById("nutrition-tips-body");
+  tipsBody.innerHTML = data.coaching && data.coaching.length
+    ? data.coaching.map((msg) => "<div style='margin-top:0.3rem;'>" + escapeHtml(msg) + "</div>").join("")
+    : "Log a meal to see personalized tips here.";
+
+  const dailyPct = goal ? Math.min(100, Math.round((100 * totals.calories) / goal)) : 0;
+  document.getElementById("daily-progress-ring").innerHTML = ringSvg(dailyPct, "var(--brand)", 56, 6);
+  document.getElementById("daily-progress-pct").textContent = goal ? dailyPct + "%" : "—";
+
+  const streak = data.logging_streak || 0;
+  document.getElementById("food-streak-title").textContent = streak + " Day Streak";
+  document.getElementById("food-streak-banner").querySelector(".streak-sub").textContent =
+    streak > 0 ? "Keep it going! You're building great habits." : "Log a meal today to start building a streak.";
 
   const list = document.getElementById("food-log-list");
   if (!data.entries.length) {
@@ -808,6 +1012,13 @@ async function loadFoodToday() {
 document.getElementById("btn-open-add-food").addEventListener("click", () => {
   resetFoodAddView();
   showView("view-food-add");
+});
+document.getElementById("btn-open-add-food-icon").addEventListener("click", () => {
+  resetFoodAddView();
+  showView("view-food-add");
+});
+document.getElementById("btn-food-see-all").addEventListener("click", () => {
+  document.getElementById("food-log-list").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 document.getElementById("btn-fab-add-food").addEventListener("click", () => {
   resetFoodAddView();
@@ -1648,19 +1859,55 @@ async function loadProgress() {
   await renderPRs();
 }
 
+function renderProgressStatRow(data) {
+  const row = document.getElementById("progress-stat-row");
+  const trendIcon = data.trend === "up"
+    ? '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"><path d="M3 14L7.5 9L11 12L17 5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5 5H17V9.5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : data.trend === "down"
+    ? '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"><path d="M3 6L7.5 11L11 8L17 15" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5 15H17V10.5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"><path d="M3 10H17" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  const trendLabel = data.trend === "up" ? "Up" : data.trend === "down" ? "Down" : "Flat";
+  const stat = (icon, value, label) =>
+    '<div class="stat-tile" style="text-align:center;"><div class="icon-circle sm" style="margin:0 auto 0.4rem;">' + icon + "</div>" +
+    '<div class="value tnum" style="font-size:0.95rem;">' + value + "</div><div class=\"label\" style=\"text-transform:none;font-weight:500;\">" + label + "</div></div>";
+  row.innerHTML =
+    stat(GOAL_KIND_ICONS.consistency, data.consistency_pct + "%", "Consistency") +
+    stat(CHECK_SVG.replace('viewBox="0 0 20 20"', 'viewBox="0 0 20 20" width="15" height="15"'), data.best_lift_kg != null ? fmtWeight(data.best_lift_kg) : "—", "Best Lift") +
+    stat(trendIcon, trendLabel, "Trend");
+}
+
 async function renderProgressChart(exerciseId) {
-  document.getElementById("chart-kicker").textContent = "Est. 1RM (" + weightUnit() + ")";
+  document.getElementById("chart-kicker").textContent = "1RM Estimate";
   const data = await api("/progress/strength/" + exerciseId);
   const svg = document.getElementById("prog-chart");
   const emptyNote = document.getElementById("chart-empty");
   svg.innerHTML = "";
 
+  const trendBadge = document.getElementById("chart-trend-badge");
+  const heroValue = document.getElementById("chart-hero-value");
+  const heroUnit = document.getElementById("chart-hero-unit");
+
   if (!data.points.length) {
     emptyNote.classList.remove("hidden");
+    heroValue.textContent = "—";
+    heroUnit.textContent = "";
+    trendBadge.classList.add("hidden");
+    document.getElementById("progress-stat-row").innerHTML = "";
     return;
   }
   emptyNote.classList.add("hidden");
   data.points.forEach((p) => { p.est_1rm_display = kgToDisplay(p.est_1rm_kg); });
+
+  heroValue.textContent = data.points[data.points.length - 1].est_1rm_display;
+  heroUnit.textContent = weightUnit();
+  if (data.pct_change_28d != null) {
+    trendBadge.classList.remove("hidden");
+    trendBadge.className = "badge " + (data.pct_change_28d > 0 ? "success" : data.pct_change_28d < 0 ? "warn" : "neutral");
+    trendBadge.textContent = (data.pct_change_28d > 0 ? "▲ " : data.pct_change_28d < 0 ? "▼ " : "") + Math.abs(data.pct_change_28d) + "% vs 4wk ago";
+  } else {
+    trendBadge.classList.add("hidden");
+  }
+  renderProgressStatRow(data);
 
   const W = 280, H = 120;
   const values = data.points.map((p) => p.est_1rm_display);
@@ -1705,8 +1952,16 @@ async function renderProgressChart(exerciseId) {
   svg.onmouseleave = () => { tip.style.opacity = "0"; };
 }
 
-async function renderPRs() {
-  const data = await api("/prs");
+function pictogramForExerciseName(name) {
+  if (/bench|press/i.test(name)) return PICTOGRAMS.bench;
+  if (/deadlift|row|pull/i.test(name)) return PICTOGRAMS.deadlift;
+  if (/squat|leg/i.test(name)) return PICTOGRAMS.squat;
+  if (/pace|run/i.test(name)) return PICTOGRAMS.running;
+  return PICTOGRAMS.fullbody;
+}
+
+async function renderPRs(limit) {
+  const data = await api("/prs?limit=" + (limit || 10));
   const el = document.getElementById("pr-list");
   if (!data.prs.length) {
     el.innerHTML = '<div class="empty-note">Nothing logged yet.</div>';
@@ -1715,11 +1970,18 @@ async function renderPRs() {
   el.innerHTML = data.prs
     .map((p) => {
       const val = p.est_1rm_kg != null ? fmtWeight(p.est_1rm_kg) : p.pace_per_km + " /km";
-      return '<div class="pr-row"><div><div class="name">' + p.exercise + '</div><div class="date">' + p.date + "</div></div>" +
-        '<div class="val">▲ ' + val + "</div></div>";
+      const delta = p.delta_kg ? '<div class="date" style="color:var(--success-text);">▲ ' + fmtWeight(Math.abs(p.delta_kg)) + "</div>" : "";
+      return (
+        '<div class="pr-row"><div style="display:flex;align-items:center;gap:0.65rem;min-width:0;">' +
+        '<div class="icon-circle sm" style="flex:none;background:var(--ink);color:var(--brand);">' + pictogramForExerciseName(p.exercise) + "</div>" +
+        '<div style="min-width:0;"><div class="name">' + p.exercise + '</div><div class="date">1RM · ' + p.date + "</div></div></div>" +
+        '<div style="text-align:right;flex:none;"><div class="val">' + val + "</div>" + delta + "</div></div>"
+      );
     })
     .join("");
 }
+
+document.getElementById("btn-prs-view-all").addEventListener("click", () => renderPRs(30));
 
 // --------------------------------------------------------------- program ----
 
@@ -1736,24 +1998,77 @@ function fmtGoalValue(v, unit) {
   return n + (unit ? " " + unit : "");
 }
 
-function renderProgramToday(today) {
+const PROGRAM_TODAY_ICONS = {
+  lift: '<svg viewBox="0 0 20 20" fill="none"><path d="M2 10H4M16 10H18M4 10H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/></svg>',
+  run: '<svg viewBox="0 0 20 20" fill="none"><circle cx="13" cy="4.5" r="1.5" fill="currentColor"/><path d="M9 8L12 9.5L11 13L14 15.5M9 8L6.5 10.5L8 12.5M9 8L11 6.5M6.5 10.5L4 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  rest: '<svg viewBox="0 0 20 20" fill="none"><path d="M15.5 11.5A6 6 0 118.5 4.5a5 5 0 007 7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  person: '<svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M4 17C4 13.6863 6.68629 11 10 11C13.3137 11 16 13.6863 16 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+};
+
+function renderProgramToday(today, progressStatus) {
   const card = document.getElementById("program-today-card");
   const reasoning = (today.reasoning || []).join(" ");
   const p = today.prescription;
+  const statusLabel = PROGRESS_STATUS_LABELS[progressStatus] || "On Track";
+  const statusCls = progressStatus === "behind" ? "warn" : "success";
+  const statusIcon = progressStatus === "behind"
+    ? '<svg viewBox="0 0 20 20" width="11" height="11" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6.5V10.5L12.5 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+    : CHECK_SVG.replace('viewBox="0 0 20 20"', 'viewBox="0 0 20 20" width="11" height="11"');
+  const badge = '<span class="badge ' + statusCls + '">' + statusLabel + " " + statusIcon + "</span>";
+
+  const head = (icon, title, meta) => (
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.6rem;">' +
+    '<div style="display:flex;gap:0.75rem;align-items:flex-start;min-width:0;">' +
+    '<div class="icon-circle md">' + icon + "</div>" +
+    '<div style="min-width:0;">' +
+    '<span class="kicker" style="margin-bottom:0.15rem;">Today\'s Workout</span>' +
+    '<div style="font-weight:700;font-size:1.02rem;">' + title + "</div>" +
+    (meta ? '<div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.2rem;">' + meta + "</div>" : "") +
+    "</div></div>" + badge + "</div>"
+  );
+
   if (today.session_type === "lift") {
+    const estMin = Math.max(15, Math.round((p.exercises.reduce((s, e) => s + e.sets * 2.5, 0)) / 5) * 5);
     card.innerHTML =
-      '<div style="font-weight:700;font-size:0.95rem;">' + (p.label || "Lift") + "</div>" +
-      p.exercises.map((e) => '<div class="tnum" style="font-size:0.82rem;margin-top:0.25rem;">' + e.name + " — " + fmtWeight(e.load_kg) + " × " + e.sets + " sets × " + e.reps + " reps</div>").join("") +
-      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+      head(PROGRAM_TODAY_ICONS.lift, p.label || "Lift", "Est. " + estMin + " min · " + p.exercises.length + " exercise" + (p.exercises.length === 1 ? "" : "s")) +
+      '<div class="tnum" style="font-size:0.8rem;color:var(--neutral);margin-top:0.75rem;line-height:1.5;">' + p.exercises.map((e) => e.name).join(" · ") + "</div>" +
+      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>" +
+      '<div class="btn-row" style="margin-top:0.9rem;">' +
+      '<button class="btn outline" id="btn-program-view-workout">View Workout</button>' +
+      '<button class="btn primary" id="btn-program-start-workout">Start Workout →</button>' +
+      "</div>";
   } else if (today.session_type === "run") {
     card.innerHTML =
-      '<div style="font-weight:700;font-size:0.95rem;">' + labelForRunType(p.run_type) + "</div>" +
-      '<div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-top:0.2rem;">' + p.duration_min + " min · Zone " + p.zone + "</div>" +
-      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+      head(PROGRAM_TODAY_ICONS.run, labelForRunType(p.run_type), p.duration_min + " min · Zone " + p.zone) +
+      '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>" +
+      '<div class="btn-row" style="margin-top:0.9rem;">' +
+      '<button class="btn outline" id="btn-program-view-workout">View Workout</button>' +
+      '<button class="btn primary" id="btn-program-start-workout">Start Run →</button>' +
+      "</div>";
   } else {
     card.innerHTML =
-      '<div style="font-weight:700;font-size:0.95rem;">' + (p.note || "Rest day") + "</div>" +
+      head(PROGRAM_TODAY_ICONS.rest, p.note || "Rest day", null) +
       '<div style="font-size:0.76rem;color:var(--neutral-2);font-style:italic;margin-top:0.55rem;">“' + reasoning + "”</div>";
+  }
+
+  const viewBtn = document.getElementById("btn-program-view-workout");
+  const startBtn = document.getElementById("btn-program-start-workout");
+  if (viewBtn) {
+    viewBtn.addEventListener("click", () => {
+      switchProgramSegment("schedule");
+      const todayRow = document.querySelector('#program-week-list [data-day-idx].expanded, #program-week-list .day-row');
+      const idx = state.programWeek ? state.programWeek.findIndex((d) => d.is_today) : -1;
+      const detail = idx >= 0 ? document.getElementById("program-day-detail-" + idx) : null;
+      if (detail) {
+        document.querySelectorAll(".day-detail").forEach((el) => el.classList.add("hidden"));
+        document.querySelectorAll(".day-row").forEach((el) => el.classList.remove("expanded"));
+        detail.classList.remove("hidden");
+        detail.closest(".card").querySelector(".day-row").classList.add("expanded");
+      }
+    });
+  }
+  if (startBtn) {
+    startBtn.addEventListener("click", () => { showView("view-log"); loadLogChooser(); });
   }
 }
 
@@ -1836,10 +2151,12 @@ async function loadProgram() {
   const data = await api("/program");
   const id = data.identity;
 
-  document.getElementById("program-focus").textContent = id.program_name + " — " + id.focus;
   document.getElementById("program-week-title").textContent = "Week " + id.current_week + " of " + id.total_weeks;
+  document.getElementById("program-week-title-2").textContent = "Week " + id.current_week + " of " + id.total_weeks;
   document.getElementById("program-name").textContent = id.program_name;
-  document.getElementById("program-phase-line").textContent = "Week " + id.current_week + " of " + id.total_weeks + " — " + id.focus + " phase";
+  document.getElementById("program-name-2").textContent = id.program_name;
+  document.getElementById("program-phase-line").textContent = titleCase(id.focus) + " Focus";
+  document.getElementById("program-phase-line-2").textContent = "Week " + id.current_week + " of " + id.total_weeks + " — " + id.focus + " phase";
   document.getElementById("program-primary-goal").textContent = GOAL_LABELS[id.primary_goal] || id.primary_goal;
 
   const secWrap = document.getElementById("program-secondary-goals-wrap");
@@ -1872,9 +2189,12 @@ async function loadProgram() {
   statusBadge.textContent = PROGRESS_STATUS_LABELS[p.status] || "On Track";
   statusBadge.className = "badge " + (p.status === "behind" ? "warn" : "success");
 
-  renderProgramToday(data.today);
+  state.programWeek = data.week;
+  renderProgramToday(data.today, p.status);
   renderProgramWeek(data.week);
+  renderProgramDayStrip(data.week);
   renderProgramGoals(data.goals);
+  renderProgramGoalSummary(data.goals);
 
   const obsCard = document.getElementById("program-observations-card");
   obsCard.innerHTML = data.coach_observations.length
@@ -1883,6 +2203,65 @@ async function loadProgram() {
 
   loadProgressPhotos();
   loadCoachChat();
+}
+
+function switchProgramSegment(segment) {
+  document.querySelectorAll("#program-segmented-tabs .seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.segment === segment));
+  document.querySelectorAll(".program-segment").forEach((el) => el.classList.toggle("hidden", el.dataset.segment !== segment));
+}
+document.getElementById("program-segmented-tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg-btn");
+  if (btn) switchProgramSegment(btn.dataset.segment);
+});
+document.querySelectorAll("[data-goto-segment]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    switchProgramSegment(btn.dataset.gotoSegment);
+    if (btn.dataset.gotoSegment === "coach") document.getElementById("chat-input").focus();
+  });
+});
+
+function renderProgramDayStrip(week) {
+  const el = document.getElementById("program-day-strip");
+  el.innerHTML = week
+    .map((d) => {
+      const dname = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3).toUpperCase();
+      const cls = "day-strip-item" + (d.is_today ? " today" : "") + (d.is_completed ? " done" : "");
+      const dot = d.is_completed ? '<div class="ddot">' + CHECK_SVG + "</div>" : '<div class="ddot"><span class="pip"></span></div>';
+      return '<div class="' + cls + '"><div class="dname">' + dname + '</div><div class="dlabel">' + d.label + "</div>" + dot + "</div>";
+    })
+    .join("");
+}
+
+const GOAL_KIND_ICONS = {
+  strength: PROGRAM_TODAY_ICONS.lift,
+  endurance: PROGRAM_TODAY_ICONS.run,
+  consistency: '<svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z" fill="currentColor"/></svg>',
+  custom: '<svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="1" fill="currentColor"/></svg>',
+};
+
+function renderProgramGoalSummary(goals) {
+  const row = document.getElementById("program-goal-summary-row");
+  if (!goals.length) {
+    row.innerHTML = '<div class="empty-note">No goals set yet.</div>';
+    return;
+  }
+  row.innerHTML = goals
+    .slice(0, 3)
+    .map((g) => {
+      const icon = GOAL_KIND_ICONS[g.kind] || GOAL_KIND_ICONS.custom;
+      const spark = g.start_value != null && g.current_value != null ? sparklineSvg([g.start_value, g.current_value], { width: 92, height: 26 }) : "";
+      const valueLine = g.current_value != null ? fmtGoalValue(g.current_value, g.unit) : "—";
+      const targetLine = g.target_value != null ? "Target " + fmtGoalValue(g.target_value, g.unit) : "";
+      return (
+        '<div class="sparkline-card">' +
+        '<div class="sk-head"><span class="icon-circle sm">' + icon + '</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(g.title) + "</span></div>" +
+        '<div class="sk-value tnum">' + valueLine + "</div>" +
+        '<div class="sk-target tnum">' + targetLine + "</div>" +
+        spark +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 // --------------------------------------------------------------- progress photos ----
@@ -2023,6 +2402,27 @@ const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "
 async function loadCoachChat() {
   const messages = await api("/coach/chat");
   renderChatMessages(messages);
+  renderCoachNotesCard(messages);
+}
+
+function renderCoachNotesCard(messages) {
+  const card = document.getElementById("program-coach-notes-card");
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  if (!lastAssistant) {
+    card.innerHTML =
+      '<div style="display:flex;gap:0.7rem;align-items:flex-start;">' +
+      '<div class="icon-circle sm" style="flex:none;">' + PROGRAM_TODAY_ICONS.person + "</div>" +
+      '<div class="empty-note" style="padding:0;">Ask Toci a question about your program and its replies will show up here.</div>' +
+      "</div>";
+    return;
+  }
+  card.innerHTML =
+    '<div style="display:flex;gap:0.7rem;align-items:flex-start;">' +
+    '<div class="icon-circle sm" style="flex:none;">' + PROGRAM_TODAY_ICONS.person + "</div>" +
+    '<div style="min-width:0;">' +
+    '<div style="font-size:0.85rem;line-height:1.42;">' + escapeHtml(lastAssistant.content) + "</div>" +
+    '<div style="font-size:0.75rem;color:var(--brand);font-weight:700;margin-top:0.45rem;">Coach Toci</div>' +
+    "</div></div>";
 }
 
 function escapeHtml(s) {
@@ -2131,7 +2531,29 @@ async function loadSettings() {
   document.querySelectorAll("#set-sex-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.val === (data.sex || "male")));
   document.getElementById("set-calorie-goal-display").textContent = data.daily_calorie_goal_kcal != null ? Math.round(data.daily_calorie_goal_kcal) + " kcal" : "Not set yet";
 
-  document.getElementById("btn-avatar").textContent = (data.name || "?").trim().charAt(0).toUpperCase();
+  const initial = (data.name || "?").trim().charAt(0).toUpperCase();
+  document.getElementById("btn-avatar").textContent = initial;
+  document.getElementById("profile-avatar-lg").textContent = initial;
+  document.getElementById("profile-name-lg").textContent = data.name || "—";
+  document.getElementById("profile-age").textContent = data.age ?? "—";
+  document.getElementById("profile-age-sub").textContent = data.age != null ? "years" : "";
+  if (data.height_cm != null) {
+    if (state.units === "imperial") {
+      const totalIn = data.height_cm / 2.54;
+      const ft = Math.floor(totalIn / 12), inch = Math.round(totalIn % 12);
+      document.getElementById("profile-height").textContent = ft + "'" + inch + '"';
+    } else {
+      document.getElementById("profile-height").textContent = Math.round(data.height_cm);
+    }
+    document.getElementById("profile-height-sub").textContent = state.units === "imperial" ? Math.round(data.height_cm) + " cm" : "cm";
+  } else {
+    document.getElementById("profile-height").textContent = "—";
+    document.getElementById("profile-height-sub").textContent = "";
+  }
+  document.getElementById("profile-weight").textContent = data.current_weight_kg != null ? kgToDisplay(data.current_weight_kg) : "—";
+  document.getElementById("profile-weight-unit").textContent = weightUnit();
+  document.getElementById("profile-goal-label").textContent = GOAL_LABELS[data.goal] || titleCase(data.goal);
+
   document.getElementById("premium-banner").classList.toggle("hidden", !!data.is_premium);
   setNotifToggle(document.getElementById("toggle-premium"), data.is_premium);
 
@@ -2197,6 +2619,134 @@ function renderDietPreferenceChips(selected) {
   document.querySelectorAll("#diet-preference-chips .chip").forEach((c) => {
     c.classList.toggle("active", selected.includes(c.dataset.val));
   });
+}
+
+// ------------------------------------------------------------------- profile ----
+
+function switchProfileSegment(segment) {
+  document.querySelectorAll("#profile-segmented-tabs .seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.pseg === segment));
+  document.querySelectorAll(".profile-segment").forEach((el) => el.classList.toggle("hidden", el.dataset.pseg !== segment));
+}
+document.getElementById("profile-segmented-tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg-btn");
+  if (btn) switchProfileSegment(btn.dataset.pseg);
+});
+document.querySelectorAll("[data-goto-profile-segment]").forEach((btn) => {
+  btn.addEventListener("click", () => switchProfileSegment(btn.dataset.gotoProfileSegment));
+});
+
+const appearanceChips = document.querySelectorAll("#appearance-chips .chip");
+appearanceChips.forEach((c) => c.classList.toggle("active", c.dataset.val === (localStorage.getItem("toci_appearance") || "dark")));
+appearanceChips.forEach((c) => {
+  c.addEventListener("click", () => {
+    appearanceChips.forEach((x) => x.classList.remove("active"));
+    c.classList.add("active");
+    const mode = c.dataset.val;
+    localStorage.setItem("toci_appearance", mode);
+    const resolved = mode === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode;
+    document.documentElement.setAttribute("data-theme", resolved);
+  });
+});
+
+async function loadProfileOverview() {
+  const [weekly, weightHistory] = await Promise.all([api("/progress/weekly-summary"), api("/body-weight/history?days=7")]);
+  const goal = state.settings && state.settings.daily_calorie_goal_kcal;
+
+  const statRow = document.getElementById("profile-current-stats-row");
+  const stat = (icon, value, sub, label) =>
+    '<div class="stat-tile" style="text-align:center;"><div class="icon-circle sm" style="margin:0 auto 0.4rem;">' + icon + "</div>" +
+    '<div class="value tnum" style="font-size:0.92rem;">' + value + "</div>" +
+    '<div class="label" style="text-transform:none;font-weight:500;">' + label + "</div>" +
+    '<div class="sub tnum">' + sub + "</div></div>";
+  statRow.innerHTML =
+    stat(GOAL_KIND_ICONS.consistency, weekly.avg_daily_calories.toLocaleString(), "avg / day", "Calories") +
+    stat(PROGRAM_TODAY_ICONS.lift, weekly.avg_daily_protein_g + "g", "avg / day", "Protein") +
+    stat('<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor"><path d="M4 17c1-6 2-9 6-9s5 3 6 9" stroke-width="1.5" stroke-linecap="round"/></svg>', "—", "not tracked", "Steps") +
+    stat(PROGRAM_TODAY_ICONS.rest, "—", "not tracked", "Sleep");
+
+  const svg = document.getElementById("profile-weight-sparkline");
+  const daysEl = document.getElementById("profile-weight-sparkline-days");
+  if (weightHistory.points.length >= 2) {
+    svg.style.display = "";
+    const W = 280, H = 70;
+    const values = weightHistory.points.map((p) => kgToDisplay(p.weight_kg));
+    const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    const pad = (max - min) * 0.25 || 2;
+    const yMin = min - pad, yMax = max + pad;
+    const n = values.length;
+    const xFor = (i) => (n === 1 ? W : (i / (n - 1)) * W);
+    const yFor = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
+    const coords = values.map((v, i) => [xFor(i), yFor(v)]);
+    const line = coords.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+    svg.innerHTML =
+      '<path d="' + line + '" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      coords.map((c, i) => '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="' + (i === n - 1 ? 5 : 3) + '" fill="var(--brand)"' + (i === n - 1 ? ' stroke="var(--surface)" stroke-width="2"' : "") + "/>").join("");
+    daysEl.innerHTML = weightHistory.points.map((p) => '<span>' + new Date(p.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "narrow" }) + "</span>").join("");
+  } else {
+    svg.innerHTML = "";
+    daysEl.innerHTML = '<span style="color:var(--neutral-2);">Log your weight a few times to see a trend.</span>';
+  }
+
+  const targetBody = document.getElementById("profile-daily-target-body");
+  const targetBar = (icon, label, value, pct) =>
+    '<div style="margin-bottom:0.8rem;"><div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;margin-bottom:0.3rem;">' +
+    '<span style="display:flex;align-items:center;gap:0.4rem;"><span class="icon-circle sm" style="width:26px;height:26px;">' + icon + "</span>" + label + "</span>" +
+    '<span class="tnum" style="font-weight:700;">' + value + "</span></div>" +
+    '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;"></div></div></div>';
+  if (goal) {
+    const proteinTarget = Math.round((goal * MACRO_SPLIT.protein) / MACRO_KCAL_PER_G.protein);
+    targetBody.innerHTML =
+      targetBar(GOAL_KIND_ICONS.consistency, "Calories", Math.round(goal).toLocaleString() + " kcal", 100) +
+      targetBar(PROGRAM_TODAY_ICONS.lift, "Protein", proteinTarget + " g", 100) +
+      '<div class="empty-note" style="padding:0.2rem 0;">Steps and water targets aren\'t tracked yet.</div>';
+  } else {
+    targetBody.innerHTML = '<div class="empty-note">Complete onboarding to set daily targets.</div>';
+  }
+
+  const activityBody = document.getElementById("profile-activity-body");
+  const activityLabels = {
+    sedentary: ["Not Much Activity", "Little to no structured exercise"],
+    lightly_active: ["Lightly Active", "1–2 workouts per week"],
+    active: ["Active", "3–5 workouts per week"],
+    very_active: ["Very Active", "6+ workouts per week"],
+  };
+  const level = (state.settings && state.settings.activity_level) || "active";
+  const [levelTitle, levelSub] = activityLabels[level] || activityLabels.active;
+  const trainingPct = weekly.planned_days ? Math.round(100 * weekly.matched_days / weekly.planned_days) : 0;
+  activityBody.innerHTML =
+    '<div style="display:flex;align-items:center;gap:0.7rem;background:var(--brand-subtle-bg);border-radius:14px;padding:0.7rem 0.8rem;margin-bottom:0.8rem;">' +
+    '<span class="icon-circle sm">' + PROGRAM_TODAY_ICONS.run + '</span>' +
+    '<div><div style="font-weight:700;font-size:0.85rem;color:var(--brand-subtle-text);">' + levelTitle + '</div>' +
+    '<div style="font-size:0.76rem;color:var(--neutral);">' + levelSub + "</div></div></div>" +
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.6rem;">This helps us personalize your plans and daily targets.</div>' +
+    '<div class="bar-track"><div class="bar-fill" style="width:' + trainingPct + '%;"></div></div>' +
+    '<div class="tnum" style="font-size:0.76rem;color:var(--neutral-2);margin-top:0.4rem;">' + weekly.matched_days + " of " + weekly.planned_days + " planned training days done this week</div>";
+}
+
+async function loadProfileGoals() {
+  const goals = await api("/goals");
+  const list = document.getElementById("profile-goals-list");
+  if (!goals.length) {
+    list.innerHTML = '<div class="empty-note">No goals set yet.</div>';
+    return;
+  }
+  list.innerHTML = goals
+    .map((g) => {
+      const pct = g.progress_pct != null ? g.progress_pct : 0;
+      const valueLine = g.current_value != null && g.target_value != null
+        ? fmtGoalValue(g.current_value, g.unit) + " → " + fmtGoalValue(g.target_value, g.unit) + " · "
+        : "";
+      return (
+        '<div class="card tight" style="margin-bottom:0.6rem;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">' +
+        '<span style="font-size:0.85rem;font-weight:600;">' + escapeHtml(g.title) + "</span>" +
+        '<span class="badge neutral" style="font-size:0.62rem;">' + (GOAL_STATUS_LABELS[g.status] || "Stable") + "</span></div>" +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;"></div></div>' +
+        '<div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.35rem;">' + valueLine + pct + "% there</div>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 const FIXED_RESTRICTION_VALS = ["shellfish", "peanuts", "dairy", "gluten", "eggs", "pork", "beef"];
@@ -2501,40 +3051,41 @@ document.querySelectorAll("[data-stub-note]").forEach((btn) => {
   btn.addEventListener("click", () => toast(btn.dataset.stubNote));
 });
 
-async function loadCalorieBudgetCard() {
-  const body = document.getElementById("calorie-budget-body");
+// Toci doesn't store explicit protein/carb/fat targets (only the overall
+// calorie goal computed at onboarding) -- these are a standard macro split
+// derived from that goal, the same convention as the goal itself, just to
+// give the 4 stat cards something to show progress against.
+const MACRO_SPLIT = { protein: 0.30, carbs: 0.40, fat: 0.30 };
+const MACRO_KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 };
+
+function setMacroTile(key, value, target, unit) {
+  document.getElementById("macro-" + key + "-val").textContent = Math.round(value).toLocaleString() + (unit || "");
+  document.getElementById("macro-" + key + "-sub").textContent = target ? "of " + Math.round(target).toLocaleString() + (unit || "") : "—";
+  const pct = target ? Math.min(100, Math.round(100 * value / target)) : 0;
+  document.getElementById("macro-" + key + "-bar").style.width = pct + "%";
+}
+
+async function loadTodayMacroStats() {
   const [nutrition, wearable] = await Promise.all([api("/nutrition/today"), api("/wearable/today")]);
   const goal = state.settings && state.settings.daily_calorie_goal_kcal;
   const food = nutrition.totals.calories;
   const exercise = wearable.exercise_calories_burned || 0;
 
-  if (!goal) {
-    body.innerHTML = '<div class="empty-note">Complete onboarding to set a calorie goal.</div>';
-    return;
+  setMacroTile("calories", food, goal, "");
+  if (goal) {
+    setMacroTile("protein", nutrition.totals.protein_g, (goal * MACRO_SPLIT.protein) / MACRO_KCAL_PER_G.protein, "g");
+    setMacroTile("carbs", nutrition.totals.carbs_g, (goal * MACRO_SPLIT.carbs) / MACRO_KCAL_PER_G.carbs, "g");
+    setMacroTile("fat", nutrition.totals.fat_g, (goal * MACRO_SPLIT.fat) / MACRO_KCAL_PER_G.fat, "g");
+  } else {
+    setMacroTile("protein", nutrition.totals.protein_g, null, "g");
+    setMacroTile("carbs", nutrition.totals.carbs_g, null, "g");
+    setMacroTile("fat", nutrition.totals.fat_g, null, "g");
   }
-  const remaining = Math.round(goal - food + exercise);
-  const row = (label, value, big) =>
-    '<div class="set-row"' + (big ? ' style="border-bottom:none;"' : "") + '><span class="k">' + label + '</span>' +
-    '<span class="v tnum"' + (big ? ' style="font-weight:800;font-size:1rem;color:var(--brand-dark);"' : "") + '>' + value + "</span></div>";
 
-  const foodLink = !nutrition.entries.length ? ' · <a href="#" id="calorie-goto-food">log a meal</a>' : "";
-  const coaching = (nutrition.coaching || [])
-    .map((msg) => '<div class="tnum" style="font-size:0.78rem;color:var(--brand-dark);margin-top:0.35rem;">' + msg + "</div>")
-    .join("");
-  body.innerHTML =
-    row("Goal", Math.round(goal).toLocaleString()) +
-    row("Food", Math.round(food).toLocaleString()) +
-    row("Exercise", (exercise ? "+" : "") + Math.round(exercise).toLocaleString()) +
-    row("Remaining", remaining.toLocaleString(), true) +
-    '<div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.5rem;">P ' +
-    Math.round(nutrition.totals.protein_g) + "g · C " + Math.round(nutrition.totals.carbs_g) + "g · F " +
-    Math.round(nutrition.totals.fat_g) + "g" + foodLink + "</div>" + coaching;
-
-  if (!nutrition.entries.length) {
-    document.getElementById("calorie-goto-food").addEventListener("click", (e) => {
-      e.preventDefault();
-      document.querySelector('.tab-bar [data-tab="view-food"]').click();
-    });
+  const coaching = (nutrition.coaching || []).join(" ");
+  if (exercise || coaching) {
+    document.getElementById("macro-calories-sub").textContent =
+      (goal ? "of " + Math.round(goal).toLocaleString() : "—") + (exercise ? " (+" + Math.round(exercise) + " burned)" : "");
   }
 }
 
@@ -2841,7 +3392,7 @@ function showOnboarding() {
 
 async function finishOnboardingIntoToday() {
   await loadToday();
-  await loadCalorieBudgetCard();
+  await loadTodayMacroStats();
   await loadWeightProgressCard();
   await loadWeeklyProgressCard();
   await loadMusicCard();
@@ -2895,7 +3446,7 @@ document.getElementById("btn-onboarding-continue").addEventListener("click", asy
     showOnboarding();
   } else {
     await loadToday();
-    await loadCalorieBudgetCard();
+    await loadTodayMacroStats();
     await loadWeightProgressCard();
     await loadWeeklyProgressCard();
     await loadMusicCard();

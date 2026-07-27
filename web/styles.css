@@ -419,3 +419,164 @@ select.chip-select { padding: 0.5rem 0.7rem; border-radius: 10px; border: 1px so
 .observation-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
 .observation-row:last-child { border-bottom: none; }
 .observation-row .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); margin-top: 0.45rem; }
+
+/* ------------------------------------------------------ shared: hero photo card --- */
+.hero-photo-card {
+  position: relative; border-radius: 24px; overflow: hidden; margin-bottom: 0.7rem;
+  /* No real photo asset here (see progress-photo feature notes on not using
+     personal images as decorative stock art) -- an on-brand gradient stands
+     in for the reference mockup's photo background. */
+  background: radial-gradient(120% 140% at 100% 0%, #6b4426 0%, #2a1c12 45%, #1a120c 100%);
+  border: 1px solid var(--border); box-shadow: var(--shadow-subtle);
+  min-height: 190px; display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 1.1rem 1.2rem; color: #fff;
+}
+.hero-photo-card .hero-photo-bg {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  z-index: 0;
+}
+.hero-photo-card .hero-photo-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(20,14,10,0.1) 0%, rgba(20,14,10,0.45) 55%, rgba(15,10,8,0.8) 100%);
+}
+.hero-photo-card > * { position: relative; z-index: 2; }
+.hero-photo-card .kicker { color: var(--brand); }
+.hero-photo-card .hero-title { font-family: var(--font-display); font-weight: 800; font-size: 1.35rem; letter-spacing: -0.01em; }
+.hero-photo-card .hero-sub { font-size: 0.82rem; opacity: 0.88; margin-top: 0.15rem; }
+.hero-photo-card .hero-bar-track { background: rgba(255,255,255,0.22); border-radius: 9999px; height: 6px; overflow: hidden; margin-top: 0.9rem; }
+.hero-photo-card .hero-bar-fill { background: var(--brand); height: 100%; border-radius: 9999px; }
+.hero-photo-card .hero-bar-row { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; font-size: 0.78rem; }
+.hero-photo-card .hero-bar-row .pct { color: var(--brand); font-weight: 700; }
+
+/* ------------------------------------------------------ shared: segmented tabs --- */
+.segmented-tabs {
+  display: flex; gap: 0.2rem; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9999px; padding: 0.3rem; margin-bottom: 0.7rem; overflow-x: auto;
+}
+.segmented-tabs::-webkit-scrollbar { display: none; }
+.segmented-tabs .seg-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.25rem;
+  white-space: nowrap; padding: 0.5rem 0.4rem; border-radius: 9999px;
+  font-size: 0.74rem; font-weight: 700; color: var(--neutral-2); background: none;
+}
+.segmented-tabs .seg-btn svg { width: 15px; height: 15px; flex: none; }
+.segmented-tabs .seg-btn.active { background: var(--brand); color: var(--on-accent); }
+
+/* ------------------------------------------------------ shared: day strip --- */
+.day-strip { display: flex; gap: 0.4rem; }
+.day-strip .day-strip-item {
+  flex: 1; text-align: center; padding: 0.6rem 0.15rem; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--border); cursor: default;
+}
+.day-strip .day-strip-item.today { border-color: var(--brand); }
+.day-strip .dname { font-size: 0.62rem; font-weight: 700; color: var(--neutral-2); text-transform: uppercase; letter-spacing: 0.02em; }
+.day-strip .dlabel { font-size: 0.62rem; color: var(--neutral); margin-top: 0.3rem; line-height: 1.25; min-height: 2.1em; }
+.day-strip .ddot {
+  width: 18px; height: 18px; border-radius: 50%; margin: 0.4rem auto 0; display: flex;
+  align-items: center; justify-content: center; background: var(--neutral-badge-bg);
+}
+.day-strip .ddot svg { width: 11px; height: 11px; color: var(--success-text); }
+.day-strip .day-strip-item.done .ddot { background: var(--success-bg); }
+.day-strip .day-strip-item.today .ddot { background: var(--brand); }
+.day-strip .day-strip-item.today.done .ddot svg { color: var(--on-accent); }
+.day-strip .day-strip-item.today .ddot .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--on-accent); }
+.day-strip .day-strip-item .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--neutral-2); margin: 0 auto; }
+
+/* ------------------------------------------------------ shared: mini sparkline card --- */
+.sparkline-card { flex: 1 1 0; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 0.7rem 0.65rem; box-shadow: var(--shadow-micro); }
+.sparkline-card .sk-head { display: flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; color: var(--neutral); font-weight: 600; min-width: 0; }
+.sparkline-card .sk-head .icon-circle { width: 22px; height: 22px; flex: none; }
+.sparkline-card .sk-head .icon-circle svg { width: 12px; height: 12px; }
+.sparkline-card .sk-value { font-family: var(--font-display); font-weight: 800; font-size: 0.92rem; margin-top: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sparkline-card .sk-target { font-size: 0.64rem; color: var(--neutral-2); margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sparkline-card svg { display: block; margin-top: 0.4rem; overflow: visible; max-width: 100%; }
+#program-goal-summary-row { flex-wrap: nowrap; }
+
+/* ------------------------------------------------------ shared: donut ring --- */
+.donut-ring-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+.donut-ring-wrap svg { transform: rotate(-90deg); }
+.donut-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.donut-ring-label .n { font-family: var(--font-display); font-weight: 800; font-size: 0.95rem; }
+.donut-ring-label .u { font-size: 0.6rem; color: var(--neutral-2); }
+
+/* ------------------------------------------------------ shared: action card (Log) --- */
+.action-card {
+  display: flex; align-items: center; gap: 0.9rem; padding: 1.05rem 1.1rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: var(--shadow-subtle); margin-bottom: 0.7rem; text-align: left;
+}
+.action-card .icon-circle { flex: none; }
+.action-card .action-title { font-weight: 700; font-size: 0.98rem; }
+.action-card .action-sub { font-size: 0.78rem; color: var(--neutral-2); margin-top: 0.15rem; }
+.action-card .action-arrow { flex: none; color: var(--neutral-2); }
+
+/* ------------------------------------------------------ shared: streak banner --- */
+.streak-banner {
+  display: flex; align-items: center; gap: 0.7rem; background: var(--brand-subtle-bg);
+  border: 1px solid var(--brand); border-radius: 16px; padding: 0.75rem 0.9rem; margin-bottom: 0.7rem;
+}
+.streak-banner .icon-circle { flex: none; }
+.streak-banner .streak-title { font-weight: 700; font-size: 0.85rem; color: var(--brand-subtle-text); }
+.streak-banner .streak-sub { font-size: 0.74rem; color: var(--neutral); margin-top: 0.1rem; }
+
+/* ------------------------------------------------------ shared: session-row (Log recent) --- */
+.session-row { display: flex; align-items: center; gap: 0.7rem; padding: 0.65rem 0.1rem; border-bottom: 1px solid var(--border); }
+.session-row:last-child { border-bottom: none; }
+.session-row .icon-circle { flex: none; }
+.session-row .name { font-size: 0.85rem; font-weight: 600; }
+.session-row .meta { font-size: 0.72rem; color: var(--neutral-2); margin-top: 0.1rem; }
+.session-row .val { font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; text-align: right; flex: none; }
+
+/* ------------------------------------------------------ Today: header + streak --- */
+.home-header-mid .greeting { display: block; font-size: 0.78rem; color: var(--neutral-2); font-weight: 500; }
+.home-header-mid .date { display: block; font-size: 1.02rem; font-weight: 800; font-family: var(--font-display); color: var(--ink); margin-top: 0.05rem; }
+.streak-pill {
+  display: flex; align-items: center; gap: 0.5rem; flex: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.4rem 0.65rem;
+  box-shadow: var(--shadow-micro);
+}
+.streak-pill .icon-circle { width: 30px; height: 30px; }
+.streak-pill .icon-circle svg { width: 15px; height: 15px; }
+.streak-pill .n { font-family: var(--font-display); font-weight: 800; font-size: 0.95rem; line-height: 1.1; }
+.streak-pill .lbl { font-size: 0.6rem; color: var(--neutral-2); font-weight: 600; white-space: nowrap; }
+
+.stat-tile .bar-track { height: 5px; }
+
+.mini-day-strip { display: flex; gap: 0.3rem; margin: 0.5rem 0 0.7rem; }
+.mini-day-strip .mds-item { flex: 1; text-align: center; }
+.mini-day-strip .mds-letter { font-size: 0.6rem; font-weight: 700; color: var(--neutral-2); }
+.mini-day-strip .mds-dot {
+  width: 22px; height: 22px; border-radius: 50%; margin: 0.3rem auto 0; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; background: var(--neutral-badge-bg); border: 1.5px solid transparent;
+}
+.mini-day-strip .mds-dot svg { width: 12px; height: 12px; color: var(--success-text); }
+.mini-day-strip .mds-item.done .mds-dot { background: var(--success-bg); }
+.mini-day-strip .mds-item.today .mds-dot { border-color: var(--brand); }
+.mini-day-strip .mds-item.today.done .mds-dot { background: var(--brand); border-color: var(--brand); }
+.mini-day-strip .mds-item.today.done .mds-dot svg { color: var(--on-accent); }
+
+/* ------------------------------------------------------ Log tab --- */
+.log-session-card {
+  flex: none; width: 150px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 0.8rem 0.85rem; box-shadow: var(--shadow-micro);
+}
+.log-session-card .icon-circle { margin-bottom: 0.55rem; }
+.log-session-card .name { font-weight: 700; font-size: 0.84rem; line-height: 1.25; }
+.log-session-card .date { font-size: 0.7rem; color: var(--neutral-2); margin-top: 0.3rem; display: block; }
+.log-session-card .chip { margin-top: 0.5rem; padding: 0.2rem 0.55rem; font-size: 0.65rem; }
+
+.snapshot-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.9rem; }
+.snapshot-row { display: flex; gap: 0.4rem; }
+.snapshot-stat { flex: 1; text-align: center; min-width: 0; }
+.snapshot-stat .icon-circle { margin: 0 auto 0.5rem; }
+.snapshot-stat .num { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; }
+.snapshot-stat .lbl { font-size: 0.66rem; color: var(--neutral); margin-top: 0.25rem; }
+.snapshot-stat .goal { font-size: 0.64rem; color: var(--neutral-2); margin-top: 0.1rem; }
+
+/* ------------------------------------------------------ Nutrition tab --- */
+.macro-ring-row { display: flex; gap: 0.6rem; flex: none; }
+.macro-ring-item { text-align: center; }
+.macro-ring-item .letter { font-size: 0.64rem; color: var(--neutral-2); font-weight: 700; margin-bottom: 0.2rem; }
+.macro-ring-item .pct { font-size: 0.68rem; font-weight: 700; margin-top: 0.2rem; }
+button.icon-circle { cursor: pointer; }
+button.card { cursor: pointer; font-family: inherit; }

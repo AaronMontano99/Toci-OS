@@ -52,7 +52,14 @@
     <div class="home-header">
       <button class="avatar-btn" id="btn-avatar" aria-label="Profile">—</button>
       <div class="home-header-mid">
+        <span class="greeting" id="today-greeting">Good day</span>
         <span class="date" id="today-date">—</span>
+      </div>
+      <div class="streak-pill" id="today-streak-pill">
+        <span class="icon-circle sm">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z" fill="currentColor"/></svg>
+        </span>
+        <div><div class="n tnum" id="today-streak-n">0</div><div class="lbl">Day streak</div></div>
       </div>
       <div class="notif-wrap">
         <button class="bell-btn" id="btn-notifications" aria-label="Notifications">
@@ -65,7 +72,6 @@
         <div class="notif-panel hidden" id="notif-panel"><div class="empty-note">Nothing new.</div></div>
       </div>
     </div>
-    <h1 class="h1">Today</h1>
 
     <div class="card premium-banner hidden" id="premium-banner">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:0.7rem;">
@@ -77,46 +83,65 @@
       </div>
     </div>
 
-    <div class="card" style="position:relative;display:flex;align-items:center;gap:0.9rem;">
-      <button class="btn small subtle hidden" id="btn-goto-checkin" style="position:absolute;top:0.7rem;right:0.7rem;width:auto;">Check In</button>
+    <div class="hero-photo-card" id="readiness-hero-card" style="flex-direction:row;align-items:center;gap:0.9rem;min-height:auto;padding:1rem 1.1rem;">
+      <button class="btn small subtle hidden" id="btn-goto-checkin" style="position:absolute;top:0.6rem;right:0.6rem;width:auto;">Check In</button>
       <div class="ring-wrap">
         <svg width="74" height="74" viewBox="0 0 74 74">
-          <circle cx="37" cy="37" r="31" fill="none" stroke="var(--border)" stroke-width="7"/>
+          <circle cx="37" cy="37" r="31" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="7"/>
           <circle id="readiness-ring-fill" cx="37" cy="37" r="31" fill="none" stroke="var(--success)" stroke-width="7"
                   stroke-linecap="round" stroke-dasharray="194.8" stroke-dashoffset="194.8"/>
         </svg>
-        <div class="ring-value" id="readiness-value">--</div>
+        <div class="ring-value" id="readiness-value" style="color:#fff;">--</div>
       </div>
-      <div>
-        <span class="badge success" id="readiness-badge"><span class="dot"></span>--</span>
-        <div style="font-size:0.78rem;color:var(--neutral);margin-top:0.4rem;" id="readiness-summary">Loading…</div>
+      <div style="flex:1;min-width:0;">
+        <span class="kicker">Readiness</span>
+        <div class="hero-title" id="readiness-band-title" style="font-size:1.05rem;">—</div>
+        <div class="hero-sub" id="readiness-summary">Loading…</div>
       </div>
     </div>
 
-    <div class="card" id="reco-card">
-      <div class="reco-header">
-        <div class="reco-ico" id="reco-ico"></div>
+    <div class="hero-photo-card" id="reco-card" style="min-height:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.7rem;">
         <div style="min-width:0;flex:1;">
           <span class="kicker" id="reco-kicker">—</span>
           <div id="reco-body">Loading…</div>
         </div>
+        <div class="icon-circle md" id="reco-ico" style="flex:none;background:rgba(255,255,255,0.14);"></div>
       </div>
-      <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.8rem;">Start</button>
+      <button class="btn primary hidden" id="btn-start-session" style="margin-top:0.9rem;">Start</button>
     </div>
 
-    <div class="card" id="calorie-budget-card">
-      <span class="kicker">Calorie Budget</span>
-      <div id="calorie-budget-body">Loading…</div>
+    <div class="stat-row" id="today-macro-stat-row">
+      <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="macro-calories-val">0</div><div class="sub tnum" id="macro-calories-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-calories-bar" style="width:0%;"></div></div></div>
+      <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="macro-protein-val">0g</div><div class="sub tnum" id="macro-protein-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-protein-bar" style="width:0%;"></div></div></div>
+      <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="macro-carbs-val">0g</div><div class="sub tnum" id="macro-carbs-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-carbs-bar" style="width:0%;"></div></div></div>
+      <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="macro-fat-val">0g</div><div class="sub tnum" id="macro-fat-sub">of —</div><div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="macro-fat-bar" style="width:0%;"></div></div></div>
     </div>
 
-    <div class="card" id="weight-progress-card">
-      <span class="kicker">Weight Progress</span>
-      <div id="weight-progress-body">Loading…</div>
+    <div style="display:flex;gap:0.7rem;align-items:stretch;">
+      <div class="card" id="weight-progress-card" style="flex:1;min-width:0;">
+        <span class="kicker">Weight Trend</span>
+        <div id="weight-progress-body">Loading…</div>
+      </div>
+      <div class="card" id="this-week-streak-card" style="flex:1;min-width:0;">
+        <span class="kicker">This Week</span>
+        <div id="this-week-streak-body">Loading…</div>
+      </div>
     </div>
 
-    <div class="card tight" id="steps-card">
-      <span class="kicker">Steps</span>
-      <div class="empty-note">Not available from any connected source yet.</div>
+    <div class="stat-row">
+      <div class="stat-tile" id="steps-card">
+        <div class="label">Steps</div>
+        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not connected yet.</div>
+      </div>
+      <div class="stat-tile" id="water-card">
+        <div class="label">Water</div>
+        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not tracked yet.</div>
+      </div>
+      <div class="stat-tile" id="bodyfat-card">
+        <div class="label">Body Fat</div>
+        <div class="empty-note" style="padding:0.3rem 0 0;font-size:0.72rem;">Not tracked yet.</div>
+      </div>
     </div>
 
     <div class="set-group-label">This Week's Training</div>
@@ -183,16 +208,38 @@
   <section class="view" id="view-log">
     <span class="kicker">Log</span>
     <h1 class="h1">What are you doing today?</h1>
-    <div class="card">
-      <span class="kicker">Lift</span>
-      <div style="font-weight:700;" id="log-lift-title">—</div>
-      <button class="btn primary" style="margin-top:0.7rem;" id="btn-open-lift">Log a Lift Session</button>
+    <div style="font-size:0.85rem;color:var(--neutral-2);margin:-0.6rem 0 1rem;">Track your training and keep building.</div>
+
+    <button type="button" class="action-card" id="btn-open-lift" style="width:100%;">
+      <div class="icon-circle lg">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M2 10H4M16 10H18M4 10H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="action-title">Log Lift Session</div>
+        <div class="action-sub" id="log-lift-title">—</div>
+      </div>
+      <div class="action-arrow"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </button>
+
+    <button type="button" class="action-card" id="btn-open-run" style="width:100%;">
+      <div class="icon-circle lg">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="13" cy="4.5" r="1.5" fill="currentColor"/><path d="M9 8L12 9.5L11 13L14 15.5M9 8L6.5 10.5L8 12.5M9 8L11 6.5M6.5 10.5L4 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="action-title">Log a Run</div>
+        <div class="action-sub" id="log-run-title">—</div>
+      </div>
+      <div class="action-arrow"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </button>
+
+    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Recent Sessions</span>
+      <button type="button" class="btn subtle small" id="btn-log-view-all" style="width:auto;">View all</button>
     </div>
-    <div class="card">
-      <span class="kicker">Run</span>
-      <div style="font-weight:700;" id="log-run-title">—</div>
-      <button class="btn primary" style="margin-top:0.7rem;" id="btn-open-run">Log a Run</button>
-    </div>
+    <div id="log-recent-sessions-row" class="photo-scroll-row"><div class="empty-note">Loading…</div></div>
+
+    <div class="set-group-label">Weekly Snapshot</div>
+    <div class="card" id="log-weekly-snapshot-card"><div class="empty-note">Loading…</div></div>
   </section>
 
   <!-- ============ LOG A LIFT ============ -->
@@ -236,20 +283,115 @@
     <h1 class="h1">Nutrition</h1>
 
     <div class="stat-row">
-      <div class="stat-tile"><div class="label">Calories</div><div class="value tnum" id="food-total-calories">0</div></div>
-      <div class="stat-tile"><div class="label">Protein</div><div class="value tnum" id="food-total-protein">0g</div></div>
-      <div class="stat-tile"><div class="label">Carbs</div><div class="value tnum" id="food-total-carbs">0g</div></div>
-      <div class="stat-tile"><div class="label">Fat</div><div class="value tnum" id="food-total-fat">0g</div></div>
+      <div class="stat-tile">
+        <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z"/></svg>Calories</div>
+        <div class="value tnum" id="food-total-calories">0</div>
+        <div class="sub tnum" id="food-calories-sub">/ —</div>
+        <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-calories-bar" style="width:0%;"></div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M6 14L14 6M8 8a2 2 0 100-4 2 2 0 000 4zM16 16a2 2 0 100-4 2 2 0 000 4z" stroke-width="1.5" stroke-linecap="round"/></svg>Protein</div>
+        <div class="value tnum" id="food-total-protein">0g</div>
+        <div class="sub tnum" id="food-protein-sub">/ —</div>
+        <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-protein-bar" style="width:0%;"></div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M5 15C5 8 11 4 16 4C16 9 12 15 5 15Z" stroke-width="1.4" stroke-linejoin="round"/><path d="M5 15C7 12 10 9 14 7" stroke-width="1.2" stroke-linecap="round"/></svg>Carbs</div>
+        <div class="value tnum" id="food-total-carbs">0g</div>
+        <div class="sub tnum" id="food-carbs-sub">/ —</div>
+        <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-carbs-bar" style="width:0%;"></div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M10 3C10 3 5 9.5 5 13a5 5 0 0010 0c0-3.5-5-10-5-10z" stroke-width="1.5" stroke-linejoin="round"/></svg>Fat</div>
+        <div class="value tnum" id="food-total-fat">0g</div>
+        <div class="sub tnum" id="food-fat-sub">/ —</div>
+        <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-fat-bar" style="width:0%;"></div></div>
+      </div>
     </div>
-    <div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin:-0.4rem 0 0.9rem;" id="food-micro-line">Fiber 0g · Sugar 0g · Sodium 0mg</div>
+    <div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin:-0.4rem 0 0.9rem;" id="food-micro-line">Fiber 0g · Sugar 0g · Sodium 0mg</div>
 
-    <div class="btn-row" style="margin-bottom:0.6rem;">
-      <button class="btn primary" id="btn-open-add-food">+ Add Food</button>
-      <button class="btn subtle" id="btn-open-saved-meals">Saved Meals</button>
-      <button class="btn subtle" id="btn-open-recipes">Recipes</button>
-      <button class="btn subtle" id="btn-open-shopping-cart">Smart Cart</button>
+    <div class="segmented-tabs" id="food-segmented-tabs">
+      <button type="button" class="seg-btn active" data-food-seg="food">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M5 3V9.5C5 10.6 5.9 11.5 7 11.5C8.1 11.5 9 10.6 9 9.5V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 11.5V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M13.5 3C12 3 11 4.5 11 6.5C11 8 11.8 9 13 9.3V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Food
+      </button>
+      <button type="button" class="seg-btn" id="btn-open-saved-meals">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="7" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.6"/></svg>
+        Saved Meals
+      </button>
+      <button type="button" class="seg-btn" id="btn-open-recipes">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 3v14" stroke="currentColor" stroke-width="1.6"/></svg>
+        Recipes
+      </button>
+      <button type="button" class="seg-btn" id="btn-open-shopping-cart">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M3 4H4.5L6 13H15.5L17 6.5H5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="14" cy="16" r="1.2" fill="currentColor"/></svg>
+        Smart Cart
+      </button>
     </div>
-    <div class="btn-row" style="margin-bottom:0.9rem;">
+
+    <div class="card" id="log-food-card" style="display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:0.85rem;">
+        <button type="button" class="icon-circle lg" id="btn-open-add-food-icon" aria-label="Add food">
+          <svg viewBox="0 0 20 20" width="22" height="22" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.95rem;">Log Food</div>
+          <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">Quickly add foods and keep your macros on track.</div>
+        </div>
+        <div class="macro-ring-row" id="log-food-rings"></div>
+      </div>
+      <button type="button" class="btn primary" id="btn-open-add-food" style="margin-top:1rem;">+ Add Food</button>
+    </div>
+
+    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Recent Meals</span>
+      <button type="button" class="btn subtle small" id="btn-food-see-all" style="width:auto;">See all ›</button>
+    </div>
+    <div id="recent-meals-row" class="photo-scroll-row"><div class="empty-note">Loading…</div></div>
+
+    <div class="card" id="nutrition-tips-card">
+      <div style="display:flex;align-items:flex-start;gap:0.8rem;">
+        <div class="icon-circle md" style="flex:none;">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path d="M10 3l1.2 3.8L15 8l-3.8 1.2L10 13l-1.2-3.8L5 8l3.8-1.2z"/></svg>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:700;font-size:0.92rem;">Nutrition Tips</div>
+          <div id="nutrition-tips-body" style="font-size:0.82rem;color:var(--neutral-2);margin-top:0.3rem;line-height:1.4;">Log a meal to see personalized tips here.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.7rem;align-items:stretch;">
+      <button type="button" class="card" id="daily-progress-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;text-align:left;">
+        <div class="donut-ring-wrap" id="daily-progress-ring" style="width:56px;height:56px;flex:none;"></div>
+        <div style="min-width:0;">
+          <div style="font-size:0.76rem;color:var(--neutral-2);">Daily Progress</div>
+          <div style="font-weight:800;font-family:var(--font-display);font-size:1.05rem;" id="daily-progress-pct">—</div>
+          <div style="font-size:0.68rem;color:var(--neutral-2);">of calorie goal</div>
+        </div>
+      </button>
+      <div class="card" id="hydration-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;">
+        <div class="icon-circle md" style="flex:none;">
+          <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor"><path d="M10 3C10 3 5 9.5 5 13a5 5 0 0010 0c0-3.5-5-10-5-10z" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="min-width:0;">
+          <div style="font-size:0.76rem;color:var(--neutral-2);">Hydration</div>
+          <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.15rem;">Not tracked yet</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="streak-banner" id="food-streak-banner" style="margin-top:0.7rem;">
+      <span class="icon-circle sm">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z"/></svg>
+      </span>
+      <div>
+        <div class="streak-title" id="food-streak-title">0 Day Streak</div>
+        <div class="streak-sub">Log a meal today to start building a streak.</div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin:0.9rem 0 0.4rem;">
       <button class="btn outline small" id="btn-copy-yesterday" style="width:auto;">Copy Yesterday</button>
     </div>
 
@@ -494,80 +636,184 @@
   <!-- ============ PROGRESS ============ -->
   <section class="view" id="view-progress">
     <h1 class="h1">Progress</h1>
-    <select class="chip-select" id="progress-exercise-select"></select>
-    <div class="card">
-      <span class="kicker" id="chart-kicker">Est. 1RM</span>
-      <div class="chart-wrap">
+    <div style="font-size:0.85rem;color:var(--neutral-2);margin:-0.6rem 0 1rem;">Track your strength. Celebrate your wins.</div>
+
+    <div class="card tight" style="display:flex;align-items:center;gap:0.7rem;padding:0.65rem 0.8rem;">
+      <div class="icon-circle sm" style="flex:none;">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M2 10H4M16 10H18M4 10H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/></svg>
+      </div>
+      <select class="chip-select" id="progress-exercise-select" style="margin-bottom:0;border:none;background:none;flex:1;padding:0.3rem 0;"></select>
+    </div>
+
+    <div class="card" id="progress-hero-card">
+      <span class="kicker" id="chart-kicker">1RM Estimate</span>
+      <div style="display:flex;align-items:baseline;gap:0.4rem;flex-wrap:wrap;">
+        <span class="hero-number tnum" id="chart-hero-value" style="font-size:2.1rem;">—</span>
+        <span style="font-size:0.9rem;color:var(--neutral-2);font-weight:600;" id="chart-hero-unit"></span>
+        <span class="badge hidden" id="chart-trend-badge" style="margin-left:0.4rem;"></span>
+      </div>
+      <div class="chart-wrap" style="margin-top:0.7rem;">
         <svg id="prog-chart" width="100%" height="120" viewBox="0 0 280 120" preserveAspectRatio="none" style="overflow:visible;"></svg>
         <div class="chart-tip" id="chart-tip"></div>
       </div>
       <div id="chart-empty" class="empty-note hidden">No logged sets for this exercise yet — go log a workout.</div>
+
+      <div class="stat-row" id="progress-stat-row" style="margin-top:1rem;margin-bottom:0;"></div>
     </div>
-    <div class="set-group-label">Recent PRs</div>
+
+    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Recent PRs</span>
+      <button type="button" class="btn subtle small" id="btn-prs-view-all" style="width:auto;">View all ›</button>
+    </div>
     <div class="card tight" id="pr-list"><div class="empty-note">Nothing logged yet.</div></div>
   </section>
 
   <!-- ============ PROGRAM ============ -->
   <section class="view" id="view-program">
-    <span class="kicker" id="program-focus">—</span>
-    <h1 class="h1" id="program-week-title">Week — of —</h1>
-
-    <div class="card" id="program-identity-card">
-      <div style="font-weight:700;font-size:1.05rem;" id="program-name">—</div>
-      <div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-top:0.2rem;" id="program-phase-line">—</div>
-      <div style="font-size:0.8rem;margin-top:0.7rem;">
-        <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Primary goal</span>
-        <div style="font-weight:600;margin-top:0.1rem;" id="program-primary-goal">—</div>
-      </div>
-      <div id="program-secondary-goals-wrap" class="hidden" style="margin-top:0.6rem;">
-        <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Secondary goals</span>
-        <div style="font-size:0.82rem;margin-top:0.2rem;" id="program-secondary-goals"></div>
-      </div>
-      <div style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.7rem;" id="program-reassessment">—</div>
-    </div>
-
-    <div class="card tight hidden" id="deload-card" style="display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:0.85rem;font-weight:600;">Deload scheduled</span>
-      <span class="badge warn" id="deload-week-badge">—</span>
-    </div>
-
-    <div class="set-group-label">Progress</div>
-    <div class="card" id="program-progress-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
-        <span style="font-size:0.82rem;font-weight:600;">Program Completion</span>
-        <span class="tnum" style="font-size:0.82rem;font-weight:700;" id="progress-completion-pct">—</span>
-      </div>
-      <div class="bar-track"><div class="bar-fill" id="progress-completion-bar" style="width:0%;"></div></div>
-      <div class="stat-row" style="margin-top:0.9rem;margin-bottom:0;">
-        <div class="stat-tile"><div class="label">Workouts</div><div class="value tnum" id="progress-workouts">—</div></div>
-        <div class="stat-tile"><div class="label">Adherence</div><div class="value tnum" id="progress-adherence">—</div></div>
-        <div class="stat-tile"><div class="label">Streak</div><div class="value tnum" id="progress-streak">—</div></div>
-      </div>
-      <div style="margin-top:0.8rem;"><span class="badge neutral" id="progress-status-badge">—</span></div>
-    </div>
-
-    <div class="set-group-label">Today's Workout</div>
-    <div class="card tight" id="program-today-card"></div>
-
-    <div class="set-group-label">Weekly Structure</div>
-    <div id="program-week-list"></div>
-
-    <div class="set-group-label">Goal Progress</div>
-    <div id="program-goals-list"><div class="empty-note">No goals set yet.</div></div>
-
-    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Progress Photos</span>
-      <div style="display:flex;gap:0.4rem;">
-        <button class="btn subtle small" onclick="openCameraCapture()">Take Photo</button>
-        <button class="btn subtle small" onclick="document.getElementById('photo-file-input').click()">Choose from Library</button>
+    <div class="home-header">
+      <h1 class="h1" style="margin-bottom:0;">Program</h1>
+      <div class="notif-wrap" style="margin-left:auto;">
+        <button class="bell-btn" id="btn-program-notifications" aria-label="Notifications">
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="19" height="19">
+            <path d="M5 8a5 5 0 0110 0c0 3.5 1.2 4.8 1.5 5.3H3.5C3.8 12.8 5 11.5 5 8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M8.2 16a1.8 1.8 0 003.6 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
-    <!-- Library picker: the browser/OS handles the actual photo-access permission
-         prompt (and, on iOS, its own limited/full-access picker UI) -- nothing
-         extra to implement here beyond triggering it as its own explicit action. -->
-    <input type="file" id="photo-file-input" accept="image/*" class="hidden" onchange="onPhotoFileSelected(event)">
-    <div id="photo-scroll-row" class="photo-scroll-row"></div>
-    <div id="photo-detail-card" class="card tight hidden" style="margin-top:0.6rem;"></div>
+
+    <div class="hero-photo-card" id="program-hero-card">
+      <span class="kicker">Current Program</span>
+      <div class="hero-title" id="program-name">—</div>
+      <div class="hero-sub" id="program-phase-line">—</div>
+      <div class="hero-bar-track"><div class="hero-bar-fill" id="progress-completion-bar" style="width:0%;"></div></div>
+      <div class="hero-bar-row">
+        <span id="program-week-title">Week — of —</span>
+        <span class="pct" id="progress-completion-pct">—</span>
+      </div>
+    </div>
+
+    <div class="segmented-tabs" id="program-segmented-tabs">
+      <button type="button" class="seg-btn active" data-segment="overview">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M7 5H17M7 10H17M7 15H17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="3.3" cy="5" r="1.1" fill="currentColor"/><circle cx="3.3" cy="10" r="1.1" fill="currentColor"/><circle cx="3.3" cy="15" r="1.1" fill="currentColor"/></svg>
+        Overview
+      </button>
+      <button type="button" class="seg-btn" data-segment="schedule">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4.5" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3 8.5H17" stroke="currentColor" stroke-width="1.7"/><path d="M7 3V5.5M13 3V5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        Schedule
+      </button>
+      <button type="button" class="seg-btn" data-segment="goals">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3.8" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="1" fill="currentColor"/></svg>
+        Goals
+      </button>
+      <button type="button" class="seg-btn" data-segment="coach">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M4 17C4 13.6863 6.68629 11 10 11C13.3137 11 16 13.6863 16 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        Coach
+      </button>
+    </div>
+
+    <!-- ---------------- Overview ---------------- -->
+    <div class="program-segment" data-segment="overview">
+      <div class="card" id="program-today-card"></div>
+
+      <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>This Week</span>
+        <span class="tnum" style="font-weight:600;color:var(--neutral-2);font-size:0.78rem;" id="program-week-title-2">Week — of —</span>
+      </div>
+      <div class="day-strip" id="program-day-strip"></div>
+
+      <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Goal Progress</span>
+        <button type="button" class="btn subtle small" data-goto-segment="goals" style="width:auto;">Edit Goals ›</button>
+      </div>
+      <div class="stat-row" id="program-goal-summary-row" style="align-items:stretch;"><div class="empty-note">No goals set yet.</div></div>
+
+      <div class="set-group-label">Track Your Progress</div>
+      <div class="card" id="program-photos-prompt-card" style="display:flex;align-items:center;gap:0.85rem;">
+        <div class="icon-circle md">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M3 7.5C3 6.67 3.67 6 4.5 6H6L7 4.5H13L14 6H15.5C16.33 6 17 6.67 17 7.5V14.5C17 15.33 16.33 16 15.5 16H4.5C3.67 16 3 15.33 3 14.5V7.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="3" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.9rem;">Track your progress</div>
+          <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">Add progress photos to see your growth over time.</div>
+        </div>
+        <button type="button" class="btn primary small" style="width:auto;flex:none;" onclick="document.getElementById('photo-file-input').click()">Add Photos</button>
+      </div>
+      <div style="display:flex;gap:0.4rem;margin:-0.3rem 0 0.5rem;">
+        <button type="button" class="btn subtle small" style="width:auto;" onclick="openCameraCapture()">Take Photo</button>
+        <button type="button" class="btn subtle small" style="width:auto;" onclick="document.getElementById('photo-file-input').click()">Choose from Library</button>
+      </div>
+      <!-- Library picker: the browser/OS handles the actual photo-access permission
+           prompt (and, on iOS, its own limited/full-access picker UI) -- nothing
+           extra to implement here beyond triggering it as its own explicit action. -->
+      <input type="file" id="photo-file-input" accept="image/*" class="hidden" onchange="onPhotoFileSelected(event)">
+      <div id="photo-scroll-row" class="photo-scroll-row"></div>
+      <div id="photo-detail-card" class="card tight hidden" style="margin-top:0.6rem;"></div>
+
+      <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Coach Notes</span>
+        <button type="button" class="btn subtle small" data-goto-segment="coach" style="width:auto;">New Message</button>
+      </div>
+      <div class="card" id="program-coach-notes-card"></div>
+    </div>
+
+    <!-- ---------------- Schedule ---------------- -->
+    <div class="program-segment hidden" data-segment="schedule">
+      <div class="card" id="program-identity-card">
+        <div style="font-weight:700;font-size:1.05rem;" id="program-name-2">—</div>
+        <div class="tnum" style="font-size:0.82rem;color:var(--neutral);margin-top:0.2rem;" id="program-phase-line-2">—</div>
+        <div style="font-size:0.8rem;margin-top:0.7rem;">
+          <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Primary goal</span>
+          <div style="font-weight:600;margin-top:0.1rem;" id="program-primary-goal">—</div>
+        </div>
+        <div id="program-secondary-goals-wrap" class="hidden" style="margin-top:0.6rem;">
+          <span style="color:var(--neutral-2);font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Secondary goals</span>
+          <div style="font-size:0.82rem;margin-top:0.2rem;" id="program-secondary-goals"></div>
+        </div>
+        <div style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.7rem;" id="program-reassessment">—</div>
+      </div>
+
+      <div class="card tight hidden" id="deload-card" style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.85rem;font-weight:600;">Deload scheduled</span>
+        <span class="badge warn" id="deload-week-badge">—</span>
+      </div>
+
+      <div class="set-group-label">Program Completion</div>
+      <div class="card" id="program-progress-card">
+        <div class="stat-row" style="margin-bottom:0;">
+          <div class="stat-tile"><div class="label">Workouts</div><div class="value tnum" id="progress-workouts">—</div></div>
+          <div class="stat-tile"><div class="label">Adherence</div><div class="value tnum" id="progress-adherence">—</div></div>
+          <div class="stat-tile"><div class="label">Streak</div><div class="value tnum" id="progress-streak">—</div></div>
+        </div>
+        <div style="margin-top:0.8rem;"><span class="badge neutral" id="progress-status-badge">—</span></div>
+      </div>
+
+      <div class="set-group-label">Weekly Structure</div>
+      <div id="program-week-list"></div>
+    </div>
+
+    <!-- ---------------- Goals ---------------- -->
+    <div class="program-segment hidden" data-segment="goals">
+      <div id="program-goals-list"><div class="empty-note">No goals set yet.</div></div>
+    </div>
+
+    <!-- ---------------- Coach ---------------- -->
+    <div class="program-segment hidden" data-segment="coach">
+      <div class="set-group-label">Coach Observations</div>
+      <div class="card tight" id="program-observations-card"><div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div></div>
+
+      <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Ask Toci</span>
+        <button type="button" class="btn gray small" onclick="clearCoachChat()">New Conversation</button>
+      </div>
+      <div class="empty-note" style="margin-bottom:0.5rem;">Toci only discusses your program, exercises, and goals here — nothing else.</div>
+      <div id="chat-messages" class="chat-messages"></div>
+      <div id="chat-proposal-card" class="card tight hidden"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder='Ask Toci to change your program…' onkeydown="if(event.key==='Enter') sendCoachChat()">
+        <button type="button" class="btn primary small" id="chat-send-btn" onclick="sendCoachChat()">Send</button>
+      </div>
+    </div>
 
     <!-- Take Photo: explicit getUserMedia() call so the browser's own camera
          permission prompt appears; see openCameraCapture()/closeCameraCapture() -->
@@ -581,253 +827,328 @@
       <canvas id="camera-canvas" class="hidden"></canvas>
       <button class="btn primary" id="camera-capture-btn" style="margin-top:0.9rem;" onclick="captureCameraPhoto()">Capture</button>
     </div>
-
-    <div class="set-group-label">Coach Observations</div>
-    <div class="card tight" id="program-observations-card"><div class="empty-note">Nothing notable yet — keep logging and patterns will show up here.</div></div>
-
-    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Ask Toci</span>
-      <button class="btn gray small" onclick="clearCoachChat()">New Conversation</button>
-    </div>
-    <div class="empty-note" style="margin-bottom:0.5rem;">Toci only discusses your program, exercises, and goals here — nothing else.</div>
-    <div id="chat-messages" class="chat-messages"></div>
-    <div id="chat-proposal-card" class="card tight hidden"></div>
-    <div class="chat-input-row">
-      <input type="text" id="chat-input" placeholder='Ask Toci to change your program…' onkeydown="if(event.key==='Enter') sendCoachChat()">
-      <button class="btn primary small" id="chat-send-btn" onclick="sendCoachChat()">Send</button>
-    </div>
   </section>
 
-  <!-- ============ SETTINGS ============ -->
+  <!-- ============ SETTINGS / PROFILE ============ -->
   <section class="view" id="view-settings">
-    <h1 class="h1">Settings</h1>
-
-    <div class="set-group-label">Units</div>
-    <div class="card tight">
-      <div class="chip-row" id="units-chips">
-        <button class="chip" data-val="imperial">lb / in</button>
-        <button class="chip" data-val="metric">kg / cm</button>
-      </div>
+    <div class="home-header">
+      <h1 class="h1" style="margin-bottom:0;">Profile</h1>
+      <button type="button" class="bell-btn" style="margin-left:auto;" data-goto-profile-segment="account" aria-label="Account settings">
+        <svg viewBox="0 0 20 20" width="19" height="19" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4M15.1 15.1l-1.4-1.4M6.3 6.3L4.9 4.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
     </div>
 
-    <div class="set-group-label">Profile</div>
-    <div class="card">
-      <div class="field"><label>Name</label><input type="text" id="set-input-name"></div>
-      <div class="field"><label>Age</label><input type="number" id="set-input-age" min="13" max="100"></div>
-      <div class="field"><label>Height (<span id="height-unit-label">in</span>)</label><input type="number" step="0.1" id="set-input-height"></div>
-      <div class="field">
-        <label>Goal</label>
-        <select class="chip-select" id="set-input-goal" style="margin-bottom:0;">
-          <option value="strength">Build strength</option>
-          <option value="hypertrophy">Build muscle</option>
-          <option value="endurance">Improve endurance</option>
-          <option value="general_fitness">General fitness</option>
-          <option value="fat_loss">Lose fat</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Experience</label>
-        <select class="chip-select" id="set-input-experience" style="margin-bottom:0;">
-          <option value="beginner">Beginner</option>
-          <option value="intermediate">Intermediate</option>
-          <option value="advanced">Advanced</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Equipment</label>
-        <select class="chip-select" id="set-input-equipment" style="margin-bottom:0;">
-          <option value="full_gym">Full gym</option>
-          <option value="home_gym">Home gym</option>
-          <option value="minimal">Minimal / bodyweight</option>
-        </select>
-      </div>
-      <div class="field"><label>Goal weight (<span id="set-weight-unit-label">lb</span>)</label><input type="number" step="0.1" id="set-input-goal-weight"></div>
-      <div class="field">
-        <label>Goal Pace</label>
-        <select class="chip-select" id="set-input-goal-pace" style="margin-bottom:0;">
-          <option value="lose_2">Lose 2 lb/week</option>
-          <option value="lose_1_5">Lose 1.5 lb/week</option>
-          <option value="lose_1">Lose 1 lb/week</option>
-          <option value="lose_0_5">Lose 0.5 lb/week</option>
-          <option value="maintain">Maintain weight</option>
-          <option value="gain_0_5">Gain 0.5 lb/week</option>
-          <option value="gain_1">Gain 1 lb/week</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Activity Level</label>
-        <select class="chip-select" id="set-input-activity" style="margin-bottom:0;">
-          <option value="sedentary">Not Much Activity</option>
-          <option value="lightly_active">Lightly Active</option>
-          <option value="active">Active</option>
-          <option value="very_active">Very Active</option>
-        </select>
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Sex (used only for your calorie calculation)</label>
-        <div class="chip-row" id="set-sex-chips">
-          <button type="button" class="chip" data-val="male">Male</button>
-          <button type="button" class="chip" data-val="female">Female</button>
+    <div class="card hero" id="profile-hero-card" style="border-color:var(--brand);">
+      <div style="display:flex;gap:1rem;align-items:center;">
+        <div class="avatar-btn" id="profile-avatar-lg" style="width:64px;height:64px;font-size:1.7rem;flex:none;position:static;">—</div>
+        <div style="min-width:0;">
+          <div style="font-weight:800;font-size:1.2rem;font-family:var(--font-display);" id="profile-name-lg">—</div>
+          <span class="kicker" style="margin:0.25rem 0 0;">Toci Member</span>
+          <div style="font-size:0.8rem;color:var(--neutral-2);margin-top:0.1rem;">Consistency is your advantage.</div>
         </div>
       </div>
-      <button class="btn primary" id="btn-save-profile" style="margin-top:0.9rem;">Save Profile</button>
-    </div>
-
-    <div class="set-group-label">Body Weight</div>
-    <div class="card tight">
-      <div class="set-row"><span class="k">Current</span><span class="v tnum" id="set-current-weight-display">—</span></div>
-      <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.7rem;">
-        <div class="field" style="margin-bottom:0;flex:1;"><label>Log new weight (<span id="set-weight-unit-label-2">lb</span>)</label><input type="number" step="0.1" id="set-input-log-weight"></div>
-        <button class="btn subtle" id="btn-log-weight" style="width:auto;padding:0.6rem 0.9rem;">Log</button>
+      <div class="stat-row" style="margin-top:1.1rem;margin-bottom:0;">
+        <div class="stat-tile" style="text-align:center;background:none;box-shadow:none;border:none;padding:0;"><div class="label">Age</div><div class="value tnum" id="profile-age">—</div><div class="sub" id="profile-age-sub">years</div></div>
+        <div class="stat-tile" style="text-align:center;background:none;box-shadow:none;border:none;padding:0;"><div class="label">Height</div><div class="value tnum" id="profile-height">—</div><div class="sub tnum" id="profile-height-sub"></div></div>
+        <div class="stat-tile" style="text-align:center;background:none;box-shadow:none;border:none;padding:0;"><div class="label">Weight</div><div class="value tnum" id="profile-weight">—</div><div class="sub" id="profile-weight-unit"></div></div>
+        <div class="stat-tile" style="text-align:center;background:none;box-shadow:none;border:none;padding:0;"><div class="label">Goal</div><div class="value" style="font-size:0.82rem;color:var(--brand);line-height:1.25;" id="profile-goal-label">—</div></div>
       </div>
     </div>
 
-    <div class="set-group-label">Calorie Goal</div>
-    <div class="card tight">
-      <div class="set-row"><span class="k">Daily Target</span><span class="v tnum" id="set-calorie-goal-display">—</span></div>
-      <button class="btn subtle" id="btn-recalculate-calories" style="margin-top:0.7rem;">Recalculate from Profile</button>
+    <div class="segmented-tabs" id="profile-segmented-tabs">
+      <button type="button" class="seg-btn active" data-pseg="overview">Overview</button>
+      <button type="button" class="seg-btn" data-pseg="goals">Goals</button>
+      <button type="button" class="seg-btn" data-pseg="preferences">Prefs</button>
+      <button type="button" class="seg-btn" data-pseg="devices">Devices</button>
+      <button type="button" class="seg-btn" data-pseg="account">Account</button>
     </div>
-    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Need to redo the initial setup? <a href="#" id="btn-redo-onboarding">Redo onboarding</a>.</div>
 
-    <div class="set-group-label">Diet Style</div>
-    <div class="card tight">
-      <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Pick any that apply — recipes matching these show up first in the Recipe Hub.</div>
-      <div class="chip-row" id="diet-preference-chips" style="padding:0.6rem 0.9rem 0.9rem;">
-        <button type="button" class="chip" data-val="high_protein">High Protein</button>
-        <button type="button" class="chip" data-val="mediterranean">Mediterranean</button>
-        <button type="button" class="chip" data-val="pescatarian">Pescatarian</button>
-        <button type="button" class="chip" data-val="vegetarian">Vegetarian</button>
-        <button type="button" class="chip" data-val="vegan">Vegan</button>
-        <button type="button" class="chip" data-val="keto">Keto</button>
-        <button type="button" class="chip" data-val="paleo">Paleo</button>
-        <button type="button" class="chip" data-val="low_carb">Low Carb</button>
-        <button type="button" class="chip" data-val="gluten_free">Gluten Free</button>
-        <button type="button" class="chip" data-val="dairy_free">Dairy Free</button>
-        <button type="button" class="chip" data-val="fat_loss">Fat Loss</button>
-        <button type="button" class="chip" data-val="muscle_gain">Muscle Gain</button>
+    <!-- ---------------- Overview ---------------- -->
+    <div class="profile-segment" data-pseg="overview">
+      <div class="card" id="profile-current-stats-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+          <span style="font-weight:700;font-size:0.92rem;">Current Stats</span>
+          <span style="font-size:0.75rem;color:var(--neutral-2);">This week</span>
+        </div>
+        <div class="stat-row" id="profile-current-stats-row" style="margin-bottom:0;"></div>
+        <div class="sparkline-wrap" style="margin-top:0.8rem;height:70px;"><svg id="profile-weight-sparkline" width="100%" height="70" viewBox="0 0 280 70" preserveAspectRatio="none"></svg></div>
+        <div id="profile-weight-sparkline-days" style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--neutral-2);margin-top:0.3rem;"></div>
+      </div>
+
+      <div class="card" id="profile-daily-target-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+          <span style="font-weight:700;font-size:0.92rem;">Daily Target</span>
+          <button type="button" class="btn subtle small" data-goto-profile-segment="account" style="width:auto;">Edit</button>
+        </div>
+        <div id="profile-daily-target-body"></div>
+      </div>
+
+      <div class="card" id="profile-activity-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+          <span style="font-weight:700;font-size:0.92rem;">Activity Level</span>
+          <button type="button" class="btn subtle small" data-goto-profile-segment="account" style="width:auto;">Edit</button>
+        </div>
+        <div id="profile-activity-body"></div>
       </div>
     </div>
 
-    <div class="set-group-label">Food Restrictions</div>
-    <div class="card tight">
-      <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Recipes containing these are excluded entirely from your Recipe Hub.</div>
-      <div class="chip-row" id="food-restriction-chips" style="padding:0.6rem 0.9rem 0.9rem;">
-        <button type="button" class="chip" data-val="shellfish">Shellfish</button>
-        <button type="button" class="chip" data-val="peanuts">Peanuts</button>
-        <button type="button" class="chip" data-val="dairy">Dairy</button>
-        <button type="button" class="chip" data-val="gluten">Gluten</button>
-        <button type="button" class="chip" data-val="eggs">Eggs</button>
-        <button type="button" class="chip" data-val="pork">Pork</button>
-        <button type="button" class="chip" data-val="beef">Beef</button>
-      </div>
-      <div style="display:flex;gap:0.5rem;align-items:flex-end;padding:0 0.9rem 0.9rem;">
-        <div class="field" style="margin-bottom:0;flex:1;"><input type="text" id="custom-restriction-input" placeholder="Add another…"></div>
-        <button class="btn subtle" id="btn-add-custom-restriction" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
-      </div>
+    <!-- ---------------- Goals ---------------- -->
+    <div class="profile-segment hidden" data-pseg="goals">
+      <div id="profile-goals-list"><div class="empty-note">No goals set yet.</div></div>
     </div>
-    <button class="btn primary" id="btn-save-diet-prefs" style="margin-top:0.6rem;">Save Diet Preferences</button>
 
-    <div class="set-group-label">Smart Cart</div>
-    <div class="card tight">
-      <div class="field" style="padding:0.7rem 0.9rem 0;margin-bottom:0.3rem;"><label>Weekly Budget ($, optional)</label><input type="number" step="1" id="set-input-shopping-budget"></div>
-      <div style="padding:0 0.9rem 0.9rem;">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--neutral);display:block;margin-bottom:0.4rem;">Household Size</label>
-        <div class="servings-stepper">
-          <button type="button" id="btn-household-minus">−</button>
-          <span class="val tnum" id="set-household-size-display">1</span>
-          <button type="button" id="btn-household-plus">+</button>
+    <!-- ---------------- Preferences ---------------- -->
+    <div class="profile-segment hidden" data-pseg="preferences">
+      <div class="set-group-label">Units</div>
+      <div class="card tight">
+        <div class="chip-row" id="units-chips">
+          <button class="chip" data-val="imperial">lb / in</button>
+          <button class="chip" data-val="metric">kg / cm</button>
+        </div>
+      </div>
+
+      <div class="set-group-label">Diet Style</div>
+      <div class="card tight">
+        <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Pick any that apply — recipes matching these show up first in the Recipe Hub.</div>
+        <div class="chip-row" id="diet-preference-chips" style="padding:0.6rem 0.9rem 0.9rem;">
+          <button type="button" class="chip" data-val="high_protein">High Protein</button>
+          <button type="button" class="chip" data-val="mediterranean">Mediterranean</button>
+          <button type="button" class="chip" data-val="pescatarian">Pescatarian</button>
+          <button type="button" class="chip" data-val="vegetarian">Vegetarian</button>
+          <button type="button" class="chip" data-val="vegan">Vegan</button>
+          <button type="button" class="chip" data-val="keto">Keto</button>
+          <button type="button" class="chip" data-val="paleo">Paleo</button>
+          <button type="button" class="chip" data-val="low_carb">Low Carb</button>
+          <button type="button" class="chip" data-val="gluten_free">Gluten Free</button>
+          <button type="button" class="chip" data-val="dairy_free">Dairy Free</button>
+          <button type="button" class="chip" data-val="fat_loss">Fat Loss</button>
+          <button type="button" class="chip" data-val="muscle_gain">Muscle Gain</button>
+        </div>
+      </div>
+
+      <div class="set-group-label">Food Restrictions</div>
+      <div class="card tight">
+        <div style="font-size:0.78rem;color:var(--neutral-2);padding:0.7rem 0.9rem 0;">Recipes containing these are excluded entirely from your Recipe Hub.</div>
+        <div class="chip-row" id="food-restriction-chips" style="padding:0.6rem 0.9rem 0.9rem;">
+          <button type="button" class="chip" data-val="shellfish">Shellfish</button>
+          <button type="button" class="chip" data-val="peanuts">Peanuts</button>
+          <button type="button" class="chip" data-val="dairy">Dairy</button>
+          <button type="button" class="chip" data-val="gluten">Gluten</button>
+          <button type="button" class="chip" data-val="eggs">Eggs</button>
+          <button type="button" class="chip" data-val="pork">Pork</button>
+          <button type="button" class="chip" data-val="beef">Beef</button>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;padding:0 0.9rem 0.9rem;">
+          <div class="field" style="margin-bottom:0;flex:1;"><input type="text" id="custom-restriction-input" placeholder="Add another…"></div>
+          <button class="btn subtle" id="btn-add-custom-restriction" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
+        </div>
+      </div>
+      <button class="btn primary" id="btn-save-diet-prefs" style="margin-top:0.6rem;">Save Diet Preferences</button>
+
+      <div class="set-group-label">Smart Cart</div>
+      <div class="card tight">
+        <div class="field" style="padding:0.7rem 0.9rem 0;margin-bottom:0.3rem;"><label>Weekly Budget ($, optional)</label><input type="number" step="1" id="set-input-shopping-budget"></div>
+        <div style="padding:0 0.9rem 0.9rem;">
+          <label style="font-size:0.78rem;font-weight:600;color:var(--neutral);display:block;margin-bottom:0.4rem;">Household Size</label>
+          <div class="servings-stepper">
+            <button type="button" id="btn-household-minus">−</button>
+            <span class="val tnum" id="set-household-size-display">1</span>
+            <button type="button" id="btn-household-plus">+</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn primary" id="btn-save-shopping-settings" style="margin-top:0.6rem;">Save Smart Cart Settings</button>
+
+      <div class="set-group-label">Notifications</div>
+      <div class="card tight">
+        <div class="set-row"><span class="k">Daily recommendation</span><span class="v"><button class="btn small subtle" id="toggle-notif-daily">—</button></span></div>
+        <div class="set-row"><span class="k">Readiness alerts</span><span class="v"><button class="btn small subtle" id="toggle-notif-readiness">—</button></span></div>
+      </div>
+
+      <div class="set-group-label">Demo Options</div>
+      <div class="card tight">
+        <div class="set-row"><span class="k">Simulate Premium</span><span class="v"><button class="btn small subtle" id="toggle-premium">—</button></span></div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">No real payment processor exists in this build — this only toggles the Today banner for demo purposes.</div>
+
+      <div class="card" id="appearance-card" style="margin-top:0.9rem;">
+        <div style="display:flex;align-items:center;gap:0.7rem;">
+          <div class="icon-circle sm" style="flex:none;">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor"><circle cx="10" cy="10" r="7" stroke-width="1.5"/><circle cx="10" cy="10" r="2" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.9rem;">Appearance</div>
+            <div style="font-size:0.76rem;color:var(--neutral-2);">Choose how Toci looks</div>
+          </div>
+        </div>
+        <div class="chip-row" id="appearance-chips" style="margin-top:0.8rem;">
+          <button type="button" class="chip" data-val="system">System</button>
+          <button type="button" class="chip" data-val="light">Light</button>
+          <button type="button" class="chip" data-val="dark">Dark</button>
         </div>
       </div>
     </div>
-    <button class="btn primary" id="btn-save-shopping-settings" style="margin-top:0.6rem;">Save Smart Cart Settings</button>
 
-    <div class="set-group-label">Demo Options</div>
-    <div class="card tight">
-      <div class="set-row"><span class="k">Simulate Premium</span><span class="v"><button class="btn small subtle" id="toggle-premium">—</button></span></div>
-    </div>
-    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">No real payment processor exists in this build — this only toggles the Today banner for demo purposes.</div>
-
-    <div class="set-group-label">Notifications</div>
-    <div class="card tight">
-      <div class="set-row"><span class="k">Daily recommendation</span><span class="v"><button class="btn small subtle" id="toggle-notif-daily">—</button></span></div>
-      <div class="set-row"><span class="k">Readiness alerts</span><span class="v"><button class="btn small subtle" id="toggle-notif-readiness">—</button></span></div>
-    </div>
-
-    <div class="set-group-label">Password</div>
-    <div class="card">
-      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">This demo has no login screen, so nothing checks this yet — it's saved for real, just not gating anything.</div>
-      <div class="field"><label>New password</label><input type="password" id="set-input-password" autocomplete="new-password"></div>
-      <div class="field"><label>Confirm new password</label><input type="password" id="set-input-password-confirm" autocomplete="new-password"></div>
-      <button class="btn outline" id="btn-save-password">Update Password</button>
-    </div>
-
-    <div class="set-group-label">Injuries</div>
-    <div class="card tight" id="injury-list"><div class="empty-note">None active.</div></div>
-    <div class="card">
-      <span class="kicker">Add Injury</span>
-      <div class="field">
-        <label>Body region</label>
-        <select id="injury-region" class="chip-select" style="margin-bottom:0;">
-          <option value="left_shoulder">Left shoulder</option>
-          <option value="right_shoulder">Right shoulder</option>
-          <option value="left_knee">Left knee</option>
-          <option value="right_knee">Right knee</option>
-          <option value="low_back">Low back</option>
-        </select>
+    <!-- ---------------- Devices ---------------- -->
+    <div class="profile-segment hidden" data-pseg="devices">
+      <div class="set-group-label">Connected Wearables</div>
+      <div class="card">
+        <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
+          This is a real Whoop connection, not a mock. Create a free app at
+          <a href="https://developer.whoop.com" target="_blank" rel="noopener">developer.whoop.com</a>,
+          add this exact Redirect URI to it, then paste the app's Client ID and Client Secret below:
+        </div>
+        <div class="tnum" id="whoop-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
+        <div class="field"><label>Whoop Client ID</label><input type="text" id="whoop-client-id-input" placeholder="paste from your Whoop app"></div>
+        <div class="field"><label>Whoop Client Secret</label><input type="password" id="whoop-client-secret-input" placeholder="paste from your Whoop app" autocomplete="off"></div>
+        <button class="btn subtle" id="btn-save-whoop-credentials">Save Credentials</button>
+        <hr class="hair">
+        <div id="whoop-connect-area"><div class="empty-note">Loading…</div></div>
       </div>
-      <div class="field"><label>Note</label><input type="text" id="injury-note" placeholder="e.g. mild strain"></div>
-      <button class="btn subtle" id="btn-add-injury">Add Injury</button>
-    </div>
 
-    <div class="set-group-label">Connected Wearables</div>
-    <div class="card">
-      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
-        This is a real Whoop connection, not a mock. Create a free app at
-        <a href="https://developer.whoop.com" target="_blank" rel="noopener">developer.whoop.com</a>,
-        add this exact Redirect URI to it, then paste the app's Client ID and Client Secret below:
+      <div class="card tight hidden" id="whoop-stats-card">
+        <span class="kicker">Today's Stats — pick up to 3</span>
+        <div class="chip-row" id="whoop-stats-chips"></div>
       </div>
-      <div class="tnum" id="whoop-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
-      <div class="field"><label>Whoop Client ID</label><input type="text" id="whoop-client-id-input" placeholder="paste from your Whoop app"></div>
-      <div class="field"><label>Whoop Client Secret</label><input type="password" id="whoop-client-secret-input" placeholder="paste from your Whoop app" autocomplete="off"></div>
-      <button class="btn subtle" id="btn-save-whoop-credentials">Save Credentials</button>
-      <hr class="hair">
-      <div id="whoop-connect-area"><div class="empty-note">Loading…</div></div>
-    </div>
 
-    <div class="card tight hidden" id="whoop-stats-card">
-      <span class="kicker">Today's Stats — pick up to 3</span>
-      <div class="chip-row" id="whoop-stats-chips"></div>
-    </div>
-
-    <div class="card tight">
-      <div class="set-row"><span class="k">Oura</span><span class="v"><button class="btn small gray" data-stub-note="Oura has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
-      <div class="set-row"><span class="k">Garmin</span><span class="v"><button class="btn small gray" data-stub-note="Garmin's Connect API requires an approved partner application — not available for a hobby project yet.">Connect</button></span></div>
-      <div class="set-row"><span class="k">Fitbit</span><span class="v"><button class="btn small gray" data-stub-note="Fitbit has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
-      <div class="set-row"><span class="k">Apple Watch</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
-      <div class="set-row"><span class="k">Health Connect</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
-    </div>
-    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Apple Watch and Health Connect only expose data to native on-device apps — not reachable from this web demo until the native app exists. The Recovery Check-in screen remains the manual fallback either way.</div>
-
-    <div class="set-group-label">Connected Music</div>
-    <div class="card">
-      <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
-        This is a real Spotify connection, not a mock. Create a free app at
-        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
-        add this exact Redirect URI to it, then paste the app's Client ID below:
+      <div class="card tight">
+        <div class="set-row"><span class="k">Oura</span><span class="v"><button class="btn small gray" data-stub-note="Oura has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
+        <div class="set-row"><span class="k">Garmin</span><span class="v"><button class="btn small gray" data-stub-note="Garmin's Connect API requires an approved partner application — not available for a hobby project yet.">Connect</button></span></div>
+        <div class="set-row"><span class="k">Fitbit</span><span class="v"><button class="btn small gray" data-stub-note="Fitbit has a real OAuth API — not wired up yet in this build.">Connect</button></span></div>
+        <div class="set-row"><span class="k">Apple Watch</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
+        <div class="set-row"><span class="k">Health Connect</span><span class="v"><span class="badge neutral">Needs native app</span></span></div>
       </div>
-      <div class="tnum" id="spotify-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
-      <div class="field"><label>Spotify Client ID</label><input type="text" id="spotify-client-id-input" placeholder="paste from your Spotify app"></div>
-      <button class="btn subtle" id="btn-save-spotify-client-id">Save Client ID</button>
-      <hr class="hair">
-      <div id="spotify-connect-area"><div class="empty-note">Loading…</div></div>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Apple Watch and Health Connect only expose data to native on-device apps — not reachable from this web demo until the native app exists. The Recovery Check-in screen remains the manual fallback either way.</div>
+
+      <div class="set-group-label">Connected Music</div>
+      <div class="card">
+        <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">
+          This is a real Spotify connection, not a mock. Create a free app at
+          <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
+          add this exact Redirect URI to it, then paste the app's Client ID below:
+        </div>
+        <div class="tnum" id="spotify-redirect-display" style="font-size:0.78rem;background:var(--bg);border:1px solid var(--border);padding:0.5rem 0.7rem;border-radius:8px;margin-bottom:0.8rem;word-break:break-all;">—</div>
+        <div class="field"><label>Spotify Client ID</label><input type="text" id="spotify-client-id-input" placeholder="paste from your Spotify app"></div>
+        <button class="btn subtle" id="btn-save-spotify-client-id">Save Client ID</button>
+        <hr class="hair">
+        <div id="spotify-connect-area"><div class="empty-note">Loading…</div></div>
+      </div>
+
+      <div class="card tight">
+        <div class="set-row"><span class="k">Apple Music</span><span class="v"><button class="btn small gray" data-stub-note="Needs a paid Apple Developer Program membership ($99/yr) plus MusicKit JS setup — not wired up yet.">Connect</button></span></div>
+        <div class="set-row"><span class="k">Pandora</span><span class="v"><button class="btn small gray" data-stub-note="Pandora has no public third-party OAuth API for consumer apps to connect to.">Connect</button></span></div>
+        <div class="set-row"><span class="k">SoundCloud</span><span class="v"><button class="btn small gray" data-stub-note="SoundCloud's API requires app approval before it can be used — not wired up yet.">Connect</button></span></div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">These three aren't functional yet — tap Connect to see what each actually needs.</div>
     </div>
 
-    <div class="card tight">
-      <div class="set-row"><span class="k">Apple Music</span><span class="v"><button class="btn small gray" data-stub-note="Needs a paid Apple Developer Program membership ($99/yr) plus MusicKit JS setup — not wired up yet.">Connect</button></span></div>
-      <div class="set-row"><span class="k">Pandora</span><span class="v"><button class="btn small gray" data-stub-note="Pandora has no public third-party OAuth API for consumer apps to connect to.">Connect</button></span></div>
-      <div class="set-row"><span class="k">SoundCloud</span><span class="v"><button class="btn small gray" data-stub-note="SoundCloud's API requires app approval before it can be used — not wired up yet.">Connect</button></span></div>
+    <!-- ---------------- Account ---------------- -->
+    <div class="profile-segment hidden" data-pseg="account">
+      <div class="set-group-label">Profile</div>
+      <div class="card">
+        <div class="field"><label>Name</label><input type="text" id="set-input-name"></div>
+        <div class="field"><label>Age</label><input type="number" id="set-input-age" min="13" max="100"></div>
+        <div class="field"><label>Height (<span id="height-unit-label">in</span>)</label><input type="number" step="0.1" id="set-input-height"></div>
+        <div class="field">
+          <label>Goal</label>
+          <select class="chip-select" id="set-input-goal" style="margin-bottom:0;">
+            <option value="strength">Build strength</option>
+            <option value="hypertrophy">Build muscle</option>
+            <option value="endurance">Improve endurance</option>
+            <option value="general_fitness">General fitness</option>
+            <option value="fat_loss">Lose fat</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Experience</label>
+          <select class="chip-select" id="set-input-experience" style="margin-bottom:0;">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Equipment</label>
+          <select class="chip-select" id="set-input-equipment" style="margin-bottom:0;">
+            <option value="full_gym">Full gym</option>
+            <option value="home_gym">Home gym</option>
+            <option value="minimal">Minimal / bodyweight</option>
+          </select>
+        </div>
+        <div class="field"><label>Goal weight (<span id="set-weight-unit-label">lb</span>)</label><input type="number" step="0.1" id="set-input-goal-weight"></div>
+        <div class="field">
+          <label>Goal Pace</label>
+          <select class="chip-select" id="set-input-goal-pace" style="margin-bottom:0;">
+            <option value="lose_2">Lose 2 lb/week</option>
+            <option value="lose_1_5">Lose 1.5 lb/week</option>
+            <option value="lose_1">Lose 1 lb/week</option>
+            <option value="lose_0_5">Lose 0.5 lb/week</option>
+            <option value="maintain">Maintain weight</option>
+            <option value="gain_0_5">Gain 0.5 lb/week</option>
+            <option value="gain_1">Gain 1 lb/week</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Activity Level</label>
+          <select class="chip-select" id="set-input-activity" style="margin-bottom:0;">
+            <option value="sedentary">Not Much Activity</option>
+            <option value="lightly_active">Lightly Active</option>
+            <option value="active">Active</option>
+            <option value="very_active">Very Active</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Sex (used only for your calorie calculation)</label>
+          <div class="chip-row" id="set-sex-chips">
+            <button type="button" class="chip" data-val="male">Male</button>
+            <button type="button" class="chip" data-val="female">Female</button>
+          </div>
+        </div>
+        <button class="btn primary" id="btn-save-profile" style="margin-top:0.9rem;">Save Profile</button>
+      </div>
+
+      <div class="set-group-label">Body Weight</div>
+      <div class="card tight">
+        <div class="set-row"><span class="k">Current</span><span class="v tnum" id="set-current-weight-display">—</span></div>
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.7rem;">
+          <div class="field" style="margin-bottom:0;flex:1;"><label>Log new weight (<span id="set-weight-unit-label-2">lb</span>)</label><input type="number" step="0.1" id="set-input-log-weight"></div>
+          <button class="btn subtle" id="btn-log-weight" style="width:auto;padding:0.6rem 0.9rem;">Log</button>
+        </div>
+      </div>
+
+      <div class="set-group-label">Calorie Goal</div>
+      <div class="card tight">
+        <div class="set-row"><span class="k">Daily Target</span><span class="v tnum" id="set-calorie-goal-display">—</span></div>
+        <button class="btn subtle" id="btn-recalculate-calories" style="margin-top:0.7rem;">Recalculate from Profile</button>
+      </div>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">Need to redo the initial setup? <a href="#" id="btn-redo-onboarding">Redo onboarding</a>.</div>
+
+      <div class="set-group-label">Password</div>
+      <div class="card">
+        <div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.8rem;">This demo has no login screen, so nothing checks this yet — it's saved for real, just not gating anything.</div>
+        <div class="field"><label>New password</label><input type="password" id="set-input-password" autocomplete="new-password"></div>
+        <div class="field"><label>Confirm new password</label><input type="password" id="set-input-password-confirm" autocomplete="new-password"></div>
+        <button class="btn outline" id="btn-save-password">Update Password</button>
+      </div>
+
+      <div class="set-group-label">Injuries</div>
+      <div class="card tight" id="injury-list"><div class="empty-note">None active.</div></div>
+      <div class="card">
+        <span class="kicker">Add Injury</span>
+        <div class="field">
+          <label>Body region</label>
+          <select id="injury-region" class="chip-select" style="margin-bottom:0;">
+            <option value="left_shoulder">Left shoulder</option>
+            <option value="right_shoulder">Right shoulder</option>
+            <option value="left_knee">Left knee</option>
+            <option value="right_knee">Right knee</option>
+            <option value="low_back">Low back</option>
+          </select>
+        </div>
+        <div class="field"><label>Note</label><input type="text" id="injury-note" placeholder="e.g. mild strain"></div>
+        <button class="btn subtle" id="btn-add-injury">Add Injury</button>
+      </div>
     </div>
-    <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.3rem;">These three aren't functional yet — tap Connect to see what each actually needs.</div>
   </section>
 
   <div class="tab-bar">

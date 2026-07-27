@@ -96,12 +96,17 @@ def _week_strip(db: Session, today: dt.date):
     for i in range(7):
         d = monday + dt.timedelta(days=i)
         pd = by_weekday.get(i)
+        is_completed = False
+        if pd and pd.day_type in ("lift", "run") and d <= today:
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            is_completed = db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first() is not None
         out.append({
             "date": d.isoformat(),
             "weekday": i,
             "day_type": pd.day_type if pd else "rest",
             "label": pd.label if pd else "Rest",
             "is_today": d == today,
+            "is_completed": is_completed,
         })
     return out
 
@@ -126,6 +131,8 @@ def get_today(db: Session = Depends(get_db)):
 
     recovery = db.query(models.DailyRecoveryMetric).filter_by(user_id=DEMO_USER_ID, date=today).first()
     checkin = db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=today).first()
+    _, meso = _active_mesocycle(db)
+    by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
 
     return {
         "date": today.isoformat(),
@@ -142,6 +149,7 @@ def get_today(db: Session = Depends(get_db)):
             "reasoning": reco.reasoning,
         },
         "week": _week_strip(db, today),
+        "streak": _compute_streak(db, by_weekday, today),
     }
 
 
@@ -256,6 +264,69 @@ def log_run(payload: schemas.RunIn, db: Session = Depends(get_db)):
     return {"id": row.id}
 
 
+# ------------------------------------------------------------------- log ----
+
+def _lift_session_duration_min(db: Session, session: "models.WorkoutSession") -> int:
+    if session.started_at and session.ended_at:
+        return max(1, round((session.ended_at - session.started_at).total_seconds() / 60))
+    set_count = db.query(models.WorkoutSet).filter_by(workout_session_id=session.id).count()
+    return max(15, round((set_count * 2.5) / 5) * 5)  # same rough estimate used elsewhere when no timestamps exist
+
+
+@app.get("/api/log/summary")
+def log_summary(recent_limit: int = 5, db: Session = Depends(get_db)):
+    today = dt.date.today()
+    week_start = today - dt.timedelta(days=today.weekday())
+
+    lifts = db.query(models.WorkoutSession).filter_by(user_id=DEMO_USER_ID).order_by(models.WorkoutSession.date.desc()).limit(max(10, recent_limit)).all()
+    runs = db.query(models.CardioSession).filter_by(user_id=DEMO_USER_ID).order_by(models.CardioSession.date.desc()).limit(max(10, recent_limit)).all()
+
+    recent = (
+        [{"type": "lift", "title": s.label or "Lift Session", "date": s.date.isoformat(), "duration_min": _lift_session_duration_min(db, s), "sort_key": (s.date.isoformat(), s.id)} for s in lifts]
+        + [{"type": "run", "title": "Run", "date": s.date.isoformat(), "duration_min": round(s.duration_seconds / 60), "sort_key": (s.date.isoformat(), s.id)} for s in runs]
+    )
+    recent.sort(key=lambda r: r["sort_key"], reverse=True)
+    for r in recent:
+        del r["sort_key"]
+    recent = recent[:recent_limit]
+
+    week_lifts = [s for s in lifts if s.date >= week_start]
+    week_runs = [s for s in runs if s.date >= week_start]
+    week_lift_min = sum(_lift_session_duration_min(db, s) for s in week_lifts)
+    week_run_min = sum(round(s.duration_seconds / 60) for s in week_runs)
+    # No calorie sensor data exists for lift/cardio sessions -- this is a rough
+    # MET-style estimate (same "estimate, not measurement" spirit as the
+    # duration fallback above), just enough to give the snapshot a number.
+    est_calories = round(week_lift_min * 6 + week_run_min * 10)
+
+    _, meso = _active_mesocycle(db)
+    by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
+    lift_goal = sum(1 for d in by_weekday.values() if d.day_type == "lift")
+    run_goal = sum(1 for d in by_weekday.values() if d.day_type == "run")
+    time_goal_min = lift_goal * 45 + run_goal * 30
+    calorie_goal = lift_goal * 6 * 45 + run_goal * 10 * 30
+
+    total_planned = lift_goal + run_goal
+    total_done = len(week_lifts) + len(week_runs)
+    if total_planned and total_done >= total_planned:
+        encouragement = "You're on track! Keep the momentum going."
+    elif total_planned and total_done >= total_planned * 0.5:
+        encouragement = "Good progress this week — a couple more sessions to hit your plan."
+    else:
+        encouragement = "Early in the week — let's get a session in."
+
+    return {
+        "recent_sessions": recent,
+        "week": {
+            "lift_sessions": len(week_lifts), "lift_goal": lift_goal,
+            "runs": len(week_runs), "run_goal": run_goal,
+            "total_time_min": week_lift_min + week_run_min, "time_goal_min": time_goal_min,
+            "est_calories": est_calories, "calorie_goal": calorie_goal,
+        },
+        "encouragement": encouragement,
+    }
+
+
 # -------------------------------------------------------------- progress ----
 
 @app.get("/api/progress/strength/{exercise_id}")
@@ -275,12 +346,41 @@ def progress_strength(exercise_id: int, db: Session = Depends(get_db)):
     for s, session_date in rows:
         if s.actual_reps and s.actual_load_kg:
             est_1rm = round(s.actual_load_kg * (1 + s.actual_reps / 30), 1)
-            points.append({"date": session_date.isoformat(), "est_1rm_kg": est_1rm})
-    return {"exercise_id": exercise_id, "points": points}
+            # one point per day -- keep the day's heaviest estimated 1RM if multiple sets were logged
+            if points and points[-1]["date"] == session_date.isoformat():
+                points[-1]["est_1rm_kg"] = max(points[-1]["est_1rm_kg"], est_1rm)
+            else:
+                points.append({"date": session_date.isoformat(), "est_1rm_kg": est_1rm})
+
+    best_lift_kg = max((p["est_1rm_kg"] for p in points), default=None)
+    pct_change = None
+    trend = "flat"
+    if len(points) >= 2:
+        current = points[-1]["est_1rm_kg"]
+        cutoff = (dt.date.fromisoformat(points[-1]["date"]) - dt.timedelta(days=28)).isoformat()
+        prior_candidates = [p for p in points if p["date"] <= cutoff]
+        baseline = prior_candidates[-1]["est_1rm_kg"] if prior_candidates else points[0]["est_1rm_kg"]
+        if baseline:
+            pct_change = round(100 * (current - baseline) / baseline, 1)
+            trend = "up" if pct_change > 1 else "down" if pct_change < -1 else "flat"
+
+    # "Consistency" here means adherence to the program's planned lift/run days,
+    # the same weekly_adherence_pct used on the Program tab -- reused so this
+    # number means the same thing everywhere it appears in the app.
+    today = dt.date.today()
+    program, meso = _active_mesocycle(db)
+    by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
+    consistency_pct = _program_progress(db, program, meso, by_weekday, today)["weekly_adherence_pct"]
+
+    return {
+        "exercise_id": exercise_id, "points": points,
+        "best_lift_kg": best_lift_kg, "pct_change_28d": pct_change, "trend": trend,
+        "consistency_pct": consistency_pct,
+    }
 
 
 @app.get("/api/prs")
-def get_prs(db: Session = Depends(get_db)):
+def get_prs(limit: int = 10, db: Session = Depends(get_db)):
     rows = (
         db.query(models.WorkoutSet, models.WorkoutSession.date, models.Exercise.name)
         .join(models.WorkoutSession, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
@@ -289,14 +389,16 @@ def get_prs(db: Session = Depends(get_db)):
         .order_by(models.WorkoutSession.date)
         .all()
     )
-    best = {}
+    best = {}  # ex_name -> (best_est, date, delta_kg vs the previous best when this PR happened)
     for s, session_date, ex_name in rows:
         if not (s.actual_reps and s.actual_load_kg):
             continue
         est = s.actual_load_kg * (1 + s.actual_reps / 30)
         prev = best.get(ex_name)
-        if prev is None or est > prev[0]:
-            best[ex_name] = (est, session_date)
+        if prev is None:
+            best[ex_name] = (est, session_date, None)
+        elif est > prev[0]:
+            best[ex_name] = (est, session_date, est - prev[0])
 
     runs = (
         db.query(models.CardioSession)
@@ -311,12 +413,12 @@ def get_prs(db: Session = Depends(get_db)):
             if best_pace is None or pace < best_pace[0]:
                 best_pace = (pace, r.date)
 
-    prs = [{"exercise": name, "date": date.isoformat(), "est_1rm_kg": round(est, 1)} for name, (est, date) in best.items()]
+    prs = [{"exercise": name, "date": date.isoformat(), "est_1rm_kg": round(est, 1), "delta_kg": round(delta, 1) if delta else None} for name, (est, date, delta) in best.items()]
     if best_pace:
         pace_sec, date = best_pace
-        prs.append({"exercise": "Best pace", "date": date.isoformat(), "pace_per_km": f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}"})
+        prs.append({"exercise": "Best pace", "date": date.isoformat(), "pace_per_km": f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}", "delta_kg": None})
     prs.sort(key=lambda p: p["date"], reverse=True)
-    return {"prs": prs[:10]}
+    return {"prs": prs[:limit]}
 
 
 @app.get("/api/body-weight/history")
@@ -343,8 +445,10 @@ def progress_weekly_summary(db: Session = Depends(get_db)):
         .all()
     )
     calories_this_week = sum(f.calories * e.servings for e, f in food_rows)
+    protein_this_week = sum(f.protein_g * e.servings for e, f in food_rows)
     days_logged = len({e.date for e, f in food_rows})
     avg_daily_calories = round(calories_this_week / days_logged) if days_logged else 0
+    avg_daily_protein_g = round(protein_this_week / days_logged) if days_logged else 0
 
     weight_rows = (
         db.query(models.BodyMetric)
@@ -380,7 +484,10 @@ def progress_weekly_summary(db: Session = Depends(get_db)):
     return {
         "calories_this_week": round(calories_this_week),
         "avg_daily_calories": avg_daily_calories,
+        "avg_daily_protein_g": avg_daily_protein_g,
         "days_logged": days_logged,
+        "matched_days": matched_days,
+        "planned_days": planned_days,
         "weight_delta_kg": weight_delta_kg,
         "consistency": {
             "score": score,
@@ -588,11 +695,16 @@ def _week_detail(db: Session, meso, today: dt.date):
     for i in range(7):
         d = monday + dt.timedelta(days=i)
         pd = by_weekday.get(i)
+        is_completed = False
+        if pd and pd.day_type in ("lift", "run") and d <= today:
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            is_completed = db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first() is not None
         entry = {
             "date": d.isoformat(), "weekday": i,
             "day_type": pd.day_type if pd else "rest",
             "label": pd.label if pd else "Rest",
             "is_today": d == today,
+            "is_completed": is_completed,
             "exercises": [],
             "run": None,
             # Optional, free-form day content beyond formal sets/reps -- a cardio
@@ -621,6 +733,21 @@ def _week_detail(db: Session, meso, today: dt.date):
             }
         out.append(entry)
     return out
+
+
+def _compute_streak(db: Session, by_weekday, today: dt.date) -> int:
+    streak = 0
+    d = today - dt.timedelta(days=1)  # today may not be logged yet -- don't penalize the streak for that
+    for _ in range(30):
+        pd = by_weekday.get(d.weekday())
+        if pd and pd.day_type in ("lift", "run"):
+            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
+            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
+                streak += 1
+            else:
+                break
+        d -= dt.timedelta(days=1)
+    return streak
 
 
 def _program_progress(db: Session, program, meso, by_weekday, today: dt.date):
@@ -652,17 +779,7 @@ def _program_progress(db: Session, program, meso, by_weekday, today: dt.date):
                 week_matched += 1
     weekly_adherence_pct = round(100 * week_matched / week_planned) if week_planned else 100
 
-    streak = 0
-    d = today - dt.timedelta(days=1)  # today may not be logged yet -- don't penalize the streak for that
-    for _ in range(30):
-        pd = by_weekday.get(d.weekday())
-        if pd and pd.day_type in ("lift", "run"):
-            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
-            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
-                streak += 1
-            else:
-                break
-        d -= dt.timedelta(days=1)
+    streak = _compute_streak(db, by_weekday, today)
 
     if workouts_planned_to_date and workouts_completed >= workouts_planned_to_date:
         status = "ahead" if workouts_completed > workouts_planned_to_date else "on_track"
@@ -917,8 +1034,10 @@ def remove_injury(injury_id: int, db: Session = Depends(get_db)):
 @app.get("/api/nutrition/today")
 def nutrition_today(db: Session = Depends(get_db)):
     user = db.query(models.User).get(DEMO_USER_ID)
-    summary = nutrition_client.today_summary(db, DEMO_USER_ID, dt.date.today())
+    today = dt.date.today()
+    summary = nutrition_client.today_summary(db, DEMO_USER_ID, today)
     summary["coaching"] = nutrition_client.generate_coaching_messages(summary["totals"], user.daily_calorie_goal_kcal)
+    summary["logging_streak"] = nutrition_client.compute_logging_streak(db, DEMO_USER_ID, today)
     return summary
 
 

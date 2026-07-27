@@ -167,6 +167,22 @@ FAT_KCAL_PER_G = 9
 FIBER_TARGET_G = 30
 
 
+def compute_logging_streak(db: Session, user_id: int, today: dt.date) -> int:
+    logged_dates = {
+        row[0]
+        for row in db.query(models.FoodLogEntry.date)
+        .filter(models.FoodLogEntry.user_id == user_id, models.FoodLogEntry.date <= today)
+        .distinct()
+        .all()
+    }
+    streak = 0
+    d = today
+    while d in logged_dates:
+        streak += 1
+        d -= dt.timedelta(days=1)
+    return streak
+
+
 def generate_coaching_messages(totals: dict, goal_kcal: float | None):
     if not goal_kcal:
         return []
