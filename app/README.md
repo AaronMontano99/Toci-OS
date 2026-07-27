@@ -3,7 +3,21 @@
 A real, running full-stack slice of Toci OS: FastAPI + SQLite backend implementing
 the actual readiness-scoring and progressive-overload rules from
 [`docs/architecture.md`](../docs/architecture.md), served alongside a vanilla
-JS/HTML frontend built on the [Subtle Gradient Design System](../docs/design-system.md).
+JS/HTML frontend built on the [Toci Pastel Apricot Design System](../docs/design-system.md)
+(dark by default).
+
+### UI status
+
+Every tab (Today, Log, Nutrition, Progress, Program, Profile) has been
+structurally rebuilt — not just recolored — to match the reference mockups in
+`docs/`: hero cards, segmented sub-tabs (e.g. Program's Overview/Schedule/Goals/Coach,
+Profile's Overview/Goals/Preferences/Devices/Account), day strips, sparkline stat
+cards, and macro donut rings. All of it renders real data from the existing
+endpoints — untracked metrics (steps, water, sleep) are labeled honestly rather
+than invented, and Profile now has a working Light/Dark/System appearance
+picker. A full pixel-exact pass against the original reference screenshots is
+still pending (structural layout matches; some spacing/icon/background details
+don't yet).
 
 ## Run it
 

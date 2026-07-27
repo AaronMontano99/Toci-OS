@@ -1,6 +1,6 @@
 # UI Concept
 
-High-fidelity concept for all 8 core Toci OS screens, built on the [Subtle Gradient Design System](design-system.md).
+High-fidelity concept for all 8 core Toci OS screens. **Superseded by the running app's actual UI**, which now follows the [Toci Pastel Apricot Design System](design-system.md) (dark by default) — see the Program/Today/Log/Nutrition/Progress/Profile tabs in `app/` for the current, real layout rather than this earlier concept artifact.
 
 **Live, interactive version: [Toci OS — UI Concept](https://claude.ai/code/artifact/d30e1511-5324-47f5-b913-b0a14a455339)**
 
