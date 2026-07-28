@@ -507,6 +507,15 @@ export function useLogSavedMeal() {
   });
 }
 
+export function useCreateSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { name: string; items: { food_item_id: number; servings: number }[] }) =>
+      api.post('/api/nutrition/meals', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['savedMeals'] }),
+  });
+}
+
 export function useDeleteSavedMeal() {
   const qc = useQueryClient();
   return useMutation({
