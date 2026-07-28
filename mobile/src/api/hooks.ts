@@ -465,6 +465,15 @@ export function useDeleteFoodLogEntry() {
   });
 }
 
+export function useUpdateFoodLogEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, servings }: { entryId: number; servings: number }) =>
+      api.patch(`/api/nutrition/log/${entryId}`, { servings }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nutritionToday'] }),
+  });
+}
+
 export function useQuickAddFood() {
   const qc = useQueryClient();
   return useMutation({
