@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { useCreateGoal, useSettings } from '@/api/hooks';
+import { useCreateGoal, useDeleteGoal, useSettings, useUpdateGoal } from '@/api/hooks';
 import { Goal } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
@@ -29,11 +30,59 @@ function displayGoalValue(value: number, unit: string, units: Units): { value: s
   return { value: `${value}`, unit };
 }
 
+// Tap a goal's title to rename it, or delete it outright -- previously a
+// custom goal could be added but never touched again once created.
 function GoalCard({ goal, units }: { goal: Goal; units: Units }) {
   const { colors } = useTheme();
+  const updateGoal = useUpdateGoal();
+  const deleteGoal = useDeleteGoal();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(goal.title);
+
+  if (editing) {
+    return (
+      <Card style={{ gap: SPACING.sm, backgroundColor: colors.backgroundSecondary }}>
+        <TextField value={title} onChangeText={setTitle} autoFocus />
+        <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+          <Button
+            label="Save"
+            size="compact"
+            fullWidth={false}
+            style={{ flex: 1 }}
+            loading={updateGoal.isPending}
+            onPress={async () => {
+              if (!title.trim()) return;
+              await updateGoal.mutateAsync({ id: goal.id, title: title.trim() });
+              setEditing(false);
+            }}
+          />
+          <Button
+            label="Cancel"
+            variant="tertiary"
+            size="compact"
+            fullWidth={false}
+            style={{ flex: 1 }}
+            onPress={() => {
+              setTitle(goal.title);
+              setEditing(false);
+            }}
+          />
+        </View>
+      </Card>
+    );
+  }
+
   return (
     <Card style={{ gap: SPACING.sm }}>
-      <Text variant="cardTitle">{goal.title}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Pressable onPress={() => setEditing(true)} style={{ flex: 1 }}>
+          <Text variant="cardTitle">{goal.title}</Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconButton name="pencil-outline" size={14} background={false} onPress={() => setEditing(true)} />
+          <IconButton name="trash-outline" size={14} background={false} onPress={() => deleteGoal.mutate(goal.id)} />
+        </View>
+      </View>
       {goal.start_value != null && goal.target_value != null ? (
         <>
           <ProgressBar progress={(goal.progress_pct ?? 0) / 100} />

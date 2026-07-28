@@ -295,6 +295,25 @@ export function useUpdateGoal() {
   });
 }
 
+export function useDeleteGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/goals/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['program'] });
+    },
+  });
+}
+
+export function useSwapScheduleDays() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { weekday_a: number; weekday_b: number }) => api.post('/api/program/schedule/swap', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['program'] }),
+  });
+}
+
 // ------------------------------------------------------------- coach chat ----
 
 export interface ChatMessage {
