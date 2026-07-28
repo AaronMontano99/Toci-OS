@@ -220,31 +220,40 @@
 
   <!-- ============ LOG (chooser) ============ -->
   <section class="view" id="view-log">
-    <span class="kicker">Log</span>
+    <div class="today-topbar">
+      <div>
+        <div class="toci-wordmark">TOCI</div>
+        <span class="kicker" style="margin-bottom:0;">Log</span>
+      </div>
+      <button type="button" class="bell-btn" id="btn-log-history" aria-label="Open activity history">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"><path d="M4 16V11M9 16V6M14 16V9M14 9L17.5 5.5M14 9L11 6.5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
     <h1 class="h1">What are you doing today?</h1>
     <div style="font-size:0.85rem;color:var(--neutral-2);margin:-0.6rem 0 1rem;">Track your training and keep building.</div>
 
-    <button type="button" class="action-card" id="btn-open-lift" style="width:100%;">
-      <div class="icon-circle lg">
-        <svg viewBox="0 0 20 20" fill="none"><path d="M2 10H4M16 10H18M4 10H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/></svg>
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div class="action-title">Log Lift Session</div>
-        <div class="action-sub" id="log-lift-title">—</div>
-      </div>
-      <div class="action-arrow"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    </button>
+    <div class="card resume-session-card hidden" id="log-resume-session-card"></div>
 
-    <button type="button" class="action-card" id="btn-open-run" style="width:100%;">
-      <div class="icon-circle lg">
-        <svg viewBox="0 0 20 20" fill="none"><circle cx="13" cy="4.5" r="1.5" fill="currentColor"/><path d="M9 8L12 9.5L11 13L14 15.5M9 8L6.5 10.5L8 12.5M9 8L11 6.5M6.5 10.5L4 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div class="action-title">Log a Run</div>
-        <div class="action-sub" id="log-run-title">—</div>
-      </div>
-      <div class="action-arrow"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    </button>
+    <div class="log-primary-row">
+      <button type="button" class="log-primary-card" id="btn-open-lift">
+        <div class="icon-circle lg">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M2 10H4M16 10H18M4 10H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="4.5" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/><rect x="13.3" y="7" width="2.2" height="6" rx="1.1" fill="currentColor"/></svg>
+        </div>
+        <div class="log-primary-title">Log Lift Session</div>
+        <div class="log-primary-sub" id="log-lift-title">Strength training, bodybuilding, HIIT</div>
+        <div class="log-primary-cta"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </button>
+
+      <button type="button" class="log-primary-card" id="btn-open-run">
+        <div class="icon-circle lg">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="13" cy="4.5" r="1.5" fill="currentColor"/><path d="M9 8L12 9.5L11 13L14 15.5M9 8L6.5 10.5L8 12.5M9 8L11 6.5M6.5 10.5L4 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="log-primary-title">Log a Run</div>
+        <div class="log-primary-sub" id="log-run-title">Outdoor or treadmill runs</div>
+        <div class="log-primary-cta"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </button>
+    </div>
 
     <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
       <span>Recent Sessions</span>
@@ -254,6 +263,38 @@
 
     <div class="set-group-label">Weekly Snapshot</div>
     <div class="card" id="log-weekly-snapshot-card"><div class="empty-note">Loading…</div></div>
+  </section>
+
+  <!-- ============ LOG: ACTIVITY HISTORY ============ -->
+  <section class="view" id="view-log-history">
+    <button class="back-btn" data-back="view-log">‹ Back</button>
+    <span class="kicker">Log</span>
+    <h1 class="h1">Activity History</h1>
+    <div id="log-history-list"><div class="empty-note">Loading…</div></div>
+  </section>
+
+  <!-- ============ START LIFT SESSION (chooser) ============ -->
+  <section class="view" id="view-lift-start">
+    <button class="back-btn" data-back="view-log">‹ Back</button>
+    <span class="kicker">Log Lift Session</span>
+    <h1 class="h1">Start Lift Session</h1>
+
+    <div class="card hidden" id="lift-start-recommended-card"></div>
+
+    <div class="set-group-label">Choose Saved Workout</div>
+    <div class="card tight" id="lift-start-saved-list"><div class="empty-note">Loading…</div></div>
+
+    <div class="set-group-label">Freeform</div>
+    <button type="button" class="action-card" id="btn-lift-start-empty" style="width:100%;">
+      <div class="icon-circle lg">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="action-title">Start Empty Session</div>
+        <div class="action-sub">Add exercises freely as you go</div>
+      </div>
+      <div class="action-arrow"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </button>
   </section>
 
   <!-- ============ LOG A LIFT ============ -->
@@ -291,126 +332,223 @@
     <button class="btn primary" id="btn-save-run">Save Run</button>
   </section>
 
-  <!-- ============ FOOD ============ -->
+  <!-- ============ NUTRITION ============ -->
   <section class="view" id="view-food">
-    <span class="kicker" id="food-date">—</span>
-    <h1 class="h1">Nutrition</h1>
+    <div class="nutrition-topbar">
+      <button type="button" class="bell-btn" id="btn-nutrition-date" aria-label="Choose date">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"><rect x="3" y="4.5" width="14" height="12" rx="2" stroke-width="1.7"/><path d="M3 8.5H17" stroke-width="1.7"/><path d="M7 3V5.5M13 3V5.5" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </button>
+      <div class="nutrition-topbar-title">
+        <button type="button" class="nutrition-date-label" id="nutrition-date-label">
+          <span id="nutrition-date-text">—</span>
+          <svg viewBox="0 0 20 20" width="12" height="12" fill="none"><path d="M5.5 8L10 12.5L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <h1 class="h1" style="margin-bottom:0;">Nutrition</h1>
+      </div>
+      <div class="notif-wrap">
+        <button type="button" class="bell-btn" id="btn-nutrition-overflow" aria-label="More nutrition actions">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><circle cx="4" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="16" cy="10" r="1.6"/></svg>
+        </button>
+        <div class="notif-panel hidden" id="nutrition-overflow-menu"></div>
+      </div>
+    </div>
+    <input type="date" id="nutrition-date-input" class="hidden" aria-hidden="true">
+
+    <div class="card tight hidden" id="nutrition-edit-targets-panel">
+      <span class="kicker">Edit Daily Targets</span>
+      <div style="font-size:0.78rem;color:var(--neutral-2);margin:0.2rem 0 0.7rem;">Protein, carbs, and fat targets are calculated from your calorie goal.</div>
+      <div class="field" style="margin-bottom:0.6rem;"><label>Daily calorie goal (kcal)</label><input type="number" step="10" id="edit-targets-calorie-input"></div>
+      <button class="btn primary small" id="btn-save-targets" style="width:auto;">Save Target</button>
+    </div>
+
+    <div class="card tight hidden" id="nutrition-copy-day-panel">
+      <span class="kicker">Copy Meals From Another Day</span>
+      <div class="field" style="margin:0.6rem 0;"><label>Copy from</label><input type="date" id="copy-day-from-input"></div>
+      <div class="field">
+        <label>Meal (optional — leave blank for the whole day)</label>
+        <div class="chip-row" id="copy-day-meal-chips">
+          <button type="button" class="chip active" data-val="">All meals</button>
+          <button type="button" class="chip" data-val="breakfast">Breakfast</button>
+          <button type="button" class="chip" data-val="lunch">Lunch</button>
+          <button type="button" class="chip" data-val="dinner">Dinner</button>
+          <button type="button" class="chip" data-val="snack">Snack</button>
+        </div>
+      </div>
+      <button class="btn primary small" id="btn-do-copy-day" style="width:auto;">Copy to Selected Date</button>
+    </div>
 
     <div class="stat-row">
-      <div class="stat-tile">
+      <button type="button" class="stat-tile tap-card" id="macro-card-calories" aria-label="Calorie details">
         <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z"/></svg>Calories</div>
         <div class="value tnum" id="food-total-calories">0</div>
         <div class="sub tnum" id="food-calories-sub">/ —</div>
         <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-calories-bar" style="width:0%;"></div></div>
-      </div>
-      <div class="stat-tile">
+      </button>
+      <button type="button" class="stat-tile tap-card" id="macro-card-protein" aria-label="Protein details">
         <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M6 14L14 6M8 8a2 2 0 100-4 2 2 0 000 4zM16 16a2 2 0 100-4 2 2 0 000 4z" stroke-width="1.5" stroke-linecap="round"/></svg>Protein</div>
         <div class="value tnum" id="food-total-protein">0g</div>
         <div class="sub tnum" id="food-protein-sub">/ —</div>
         <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-protein-bar" style="width:0%;"></div></div>
-      </div>
-      <div class="stat-tile">
+      </button>
+      <button type="button" class="stat-tile tap-card" id="macro-card-carbs" aria-label="Carbohydrate details">
         <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M5 15C5 8 11 4 16 4C16 9 12 15 5 15Z" stroke-width="1.4" stroke-linejoin="round"/><path d="M5 15C7 12 10 9 14 7" stroke-width="1.2" stroke-linecap="round"/></svg>Carbs</div>
         <div class="value tnum" id="food-total-carbs">0g</div>
         <div class="sub tnum" id="food-carbs-sub">/ —</div>
         <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-carbs-bar" style="width:0%;"></div></div>
-      </div>
-      <div class="stat-tile">
+      </button>
+      <button type="button" class="stat-tile tap-card" id="macro-card-fat" aria-label="Fat details">
         <div class="label"><svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor" style="vertical-align:-1px;margin-right:3px;color:var(--brand);"><path d="M10 3C10 3 5 9.5 5 13a5 5 0 0010 0c0-3.5-5-10-5-10z" stroke-width="1.5" stroke-linejoin="round"/></svg>Fat</div>
         <div class="value tnum" id="food-total-fat">0g</div>
         <div class="sub tnum" id="food-fat-sub">/ —</div>
         <div class="bar-track" style="margin-top:0.4rem;"><div class="bar-fill" id="food-fat-bar" style="width:0%;"></div></div>
-      </div>
+      </button>
     </div>
-    <div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin:-0.4rem 0 0.9rem;" id="food-micro-line">Fiber 0g · Sugar 0g · Sodium 0mg</div>
 
     <div class="segmented-tabs" id="food-segmented-tabs">
-      <button type="button" class="seg-btn active" data-food-seg="food">
+      <button type="button" class="seg-btn active" data-nutrition-seg="food">
         <svg viewBox="0 0 20 20" fill="none"><path d="M5 3V9.5C5 10.6 5.9 11.5 7 11.5C8.1 11.5 9 10.6 9 9.5V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 11.5V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M13.5 3C12 3 11 4.5 11 6.5C11 8 11.8 9 13 9.3V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Food
       </button>
-      <button type="button" class="seg-btn" id="btn-open-saved-meals">
+      <button type="button" class="seg-btn" data-nutrition-seg="savedMeals">
         <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="7" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.6"/></svg>
         Saved Meals
       </button>
-      <button type="button" class="seg-btn" id="btn-open-recipes">
+      <button type="button" class="seg-btn" data-nutrition-seg="recipes">
         <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 3v14" stroke="currentColor" stroke-width="1.6"/></svg>
         Recipes
       </button>
-      <button type="button" class="seg-btn" id="btn-open-shopping-cart">
+      <button type="button" class="seg-btn" data-nutrition-seg="smartCart">
         <svg viewBox="0 0 20 20" fill="none"><path d="M3 4H4.5L6 13H15.5L17 6.5H5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="14" cy="16" r="1.2" fill="currentColor"/></svg>
         Smart Cart
       </button>
     </div>
 
-    <div class="card" id="log-food-card" style="display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;gap:0.85rem;">
-        <button type="button" class="icon-circle lg" id="btn-open-add-food-icon" aria-label="Add food">
-          <svg viewBox="0 0 20 20" width="22" height="22" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <!-- ---------------- Food ---------------- -->
+    <div class="nutrition-segment" data-nutrition-seg="food">
+      <div class="card" id="log-food-card" style="display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:0.85rem;">
+          <button type="button" class="icon-circle lg" id="btn-open-add-food-icon" aria-label="Add food">
+            <svg viewBox="0 0 20 20" width="22" height="22" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.95rem;">Log Food</div>
+            <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">Quickly add foods and keep your macros on track.</div>
+          </div>
+          <div class="macro-ring-row" id="log-food-rings"></div>
+        </div>
+        <button type="button" class="btn primary" id="btn-open-add-food" style="margin-top:1rem;">+ Add Food</button>
+      </div>
+
+      <div class="set-group-label" id="logged-today-label">Logged Today</div>
+      <div id="food-log-list"><div class="empty-note">Nothing logged yet today.</div></div>
+
+      <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Recent Meals</span>
+        <button type="button" class="btn subtle small" id="btn-food-see-all" style="width:auto;">See all ›</button>
+      </div>
+      <div id="recent-meals-row" class="photo-scroll-row"><div class="empty-note">Loading…</div></div>
+      <div class="card tight hidden" id="recent-meal-confirm-panel"></div>
+
+      <div class="card" id="smart-nutrition-plan-card">
+        <div class="empty-note">Loading…</div>
+      </div>
+
+      <div style="display:flex;gap:0.7rem;align-items:stretch;">
+        <button type="button" class="card tap-card" id="daily-progress-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;text-align:left;">
+          <div class="donut-ring-wrap" id="daily-progress-ring" style="width:56px;height:56px;flex:none;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:0.76rem;color:var(--neutral-2);">Daily Progress</div>
+            <div style="font-weight:800;font-family:var(--font-display);font-size:1.05rem;" id="daily-progress-pct">—</div>
+            <div style="font-size:0.68rem;color:var(--neutral-2);">of calorie goal</div>
+          </div>
         </button>
+        <button type="button" class="card tap-card" id="hydration-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;">
+          <div class="donut-ring-wrap" id="hydration-ring" style="width:56px;height:56px;flex:none;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:0.76rem;color:var(--neutral-2);">Hydration</div>
+            <div style="font-weight:800;font-family:var(--font-display);font-size:1.05rem;" id="hydration-pct">—</div>
+            <div style="font-size:0.68rem;color:var(--neutral-2);" id="hydration-sub">of — goal</div>
+          </div>
+        </button>
+      </div>
+      <div class="quick-entry-panel card tight hidden" id="nutrition-hydration-quickadd-panel"></div>
+
+      <button type="button" class="streak-banner tap-card" id="nutrition-streak-card" style="margin-top:0.7rem;width:100%;">
+        <span class="icon-circle sm">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z"/></svg>
+        </span>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:0.95rem;">Log Food</div>
-          <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.1rem;">Quickly add foods and keep your macros on track.</div>
+          <div class="streak-title" id="food-streak-title">0 Day Streak</div>
+          <div class="streak-sub" id="food-streak-sub">Log a meal today to start building a streak.</div>
         </div>
-        <div class="macro-ring-row" id="log-food-rings"></div>
-      </div>
-      <button type="button" class="btn primary" id="btn-open-add-food" style="margin-top:1rem;">+ Add Food</button>
-    </div>
-
-    <div class="set-group-label" style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Recent Meals</span>
-      <button type="button" class="btn subtle small" id="btn-food-see-all" style="width:auto;">See all ›</button>
-    </div>
-    <div id="recent-meals-row" class="photo-scroll-row"><div class="empty-note">Loading…</div></div>
-
-    <div class="card" id="nutrition-tips-card">
-      <div style="display:flex;align-items:flex-start;gap:0.8rem;">
-        <div class="icon-circle md" style="flex:none;">
-          <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path d="M10 3l1.2 3.8L15 8l-3.8 1.2L10 13l-1.2-3.8L5 8l3.8-1.2z"/></svg>
-        </div>
-        <div style="min-width:0;flex:1;">
-          <div style="font-weight:700;font-size:0.92rem;">Nutrition Tips</div>
-          <div id="nutrition-tips-body" style="font-size:0.82rem;color:var(--neutral-2);margin-top:0.3rem;line-height:1.4;">Log a meal to see personalized tips here.</div>
-        </div>
-      </div>
-    </div>
-
-    <div style="display:flex;gap:0.7rem;align-items:stretch;">
-      <button type="button" class="card" id="daily-progress-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;text-align:left;">
-        <div class="donut-ring-wrap" id="daily-progress-ring" style="width:56px;height:56px;flex:none;"></div>
-        <div style="min-width:0;">
-          <div style="font-size:0.76rem;color:var(--neutral-2);">Daily Progress</div>
-          <div style="font-weight:800;font-family:var(--font-display);font-size:1.05rem;" id="daily-progress-pct">—</div>
-          <div style="font-size:0.68rem;color:var(--neutral-2);">of calorie goal</div>
-        </div>
+        <span class="chevron-affordance"><svg viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </button>
-      <div class="card" id="hydration-card" style="flex:1;min-width:0;display:flex;align-items:center;gap:0.7rem;">
-        <div class="icon-circle md" style="flex:none;">
-          <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor"><path d="M10 3C10 3 5 9.5 5 13a5 5 0 0010 0c0-3.5-5-10-5-10z" stroke-width="1.5" stroke-linejoin="round"/></svg>
-        </div>
-        <div style="min-width:0;">
-          <div style="font-size:0.76rem;color:var(--neutral-2);">Hydration</div>
-          <div style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.15rem;">Not tracked yet</div>
-        </div>
+      <div class="card tight hidden" id="nutrition-streak-detail-panel" style="margin-top:0.6rem;"></div>
+    </div>
+
+    <!-- ---------------- Saved Meals ---------------- -->
+    <div class="nutrition-segment hidden" data-nutrition-seg="savedMeals">
+      <div class="card tight" id="saved-meals-list"><div class="empty-note">No saved meals yet.</div></div>
+
+      <button class="btn subtle" id="btn-open-new-meal" style="margin-top:0.7rem;">+ New Meal</button>
+
+      <div id="new-meal-builder" class="hidden">
+        <div class="set-group-label">New Meal</div>
+        <div class="field"><label>Meal name</label><input type="text" id="new-meal-name" placeholder="e.g. Post-Workout Shake"></div>
+        <div class="field"><label>Add a food</label><input type="text" id="new-meal-search-input" placeholder="Search foods…"></div>
+        <div class="card tight hidden" id="new-meal-search-results"></div>
+        <div class="set-group-label">Items</div>
+        <div class="card tight" id="new-meal-items"><div class="empty-note">No items added yet.</div></div>
+        <button class="btn primary" id="btn-save-new-meal" style="margin-top:0.6rem;">Save Meal</button>
       </div>
     </div>
 
-    <div class="streak-banner" id="food-streak-banner" style="margin-top:0.7rem;">
-      <span class="icon-circle sm">
-        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2.5C10 2.5 6.5 6 6.5 10a3.5 3.5 0 007 0c0-1-.4-1.8-1-2.5.3 1.4-.6 2-1.2 1.5.6-2-1-4-1.3-6.5z"/></svg>
-      </span>
-      <div>
-        <div class="streak-title" id="food-streak-title">0 Day Streak</div>
-        <div class="streak-sub">Log a meal today to start building a streak.</div>
+    <!-- ---------------- Recipes ---------------- -->
+    <div class="nutrition-segment hidden" data-nutrition-seg="recipes">
+      <div class="set-group-label">Recommended for You</div>
+      <div class="recipe-scroll-row" id="recommended-recipes-row"><div class="empty-note">Loading…</div></div>
+
+      <div id="recipe-category-rows"><div class="empty-note">Loading…</div></div>
+    </div>
+
+    <!-- ---------------- Smart Cart ---------------- -->
+    <div class="nutrition-segment hidden" data-nutrition-seg="smartCart">
+      <div class="stat-row">
+        <div class="stat-tile"><div class="label">Est. Cost</div><div class="value tnum" id="cart-cost">$0</div></div>
+        <div class="stat-tile"><div class="label">Budget</div><div class="value tnum" id="cart-budget">—</div></div>
+        <div class="stat-tile"><div class="label">Items</div><div class="value tnum" id="cart-item-count">0</div></div>
+        <div class="stat-tile"><div class="label">Household</div><div class="value tnum" id="cart-household">1</div></div>
+      </div>
+
+      <div class="chip-row" id="cart-quick-actions" style="margin:0.9rem 0;">
+        <button type="button" class="chip" data-action="remove_seafood">Remove Seafood</button>
+        <button type="button" class="chip" data-action="reduce_cost">Reduce Cost</button>
+        <button type="button" class="chip" data-action="increase_protein">Increase Protein</button>
+        <button type="button" class="chip" data-action="clear_checked">Clear Checked</button>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-bottom:0.9rem;">
+        <div class="field" style="margin-bottom:0;flex:1;"><label>Add item</label><input type="text" id="cart-manual-item-input" placeholder="e.g. Paper towels"></div>
+        <button class="btn subtle" id="btn-add-cart-item" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
+      </div>
+
+      <div id="cart-categories"><div class="empty-note">Loading…</div></div>
+
+      <div class="set-group-label">Pantry — already have these</div>
+      <div class="card tight" id="pantry-list"><div class="empty-note">Nothing saved.</div></div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.6rem;">
+        <div class="field" style="margin-bottom:0;flex:1;"><input type="text" id="pantry-item-input" placeholder="e.g. Olive oil"></div>
+        <button class="btn subtle" id="btn-add-pantry-item" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
       </div>
     </div>
+  </section>
 
-    <div class="btn-row" style="margin:0.9rem 0 0.4rem;">
-      <button class="btn outline small" id="btn-copy-yesterday" style="width:auto;">Copy Yesterday</button>
-    </div>
-
-    <div class="set-group-label">Today's Log</div>
-    <div id="food-log-list"><div class="empty-note">Nothing logged yet today.</div></div>
+  <!-- ============ NUTRITION: RECENT MEALS (see all) ============ -->
+  <section class="view" id="view-nutrition-recent-meals">
+    <button class="back-btn" data-back="view-food">‹ Back</button>
+    <span class="kicker">Nutrition</span>
+    <h1 class="h1">Recent Meals</h1>
+    <div id="recent-meals-full-list"><div class="empty-note">Loading…</div></div>
   </section>
 
   <!-- ============ ADD FOOD ============ -->
@@ -522,42 +660,9 @@
     </div>
   </section>
 
-  <!-- ============ SAVED MEALS ============ -->
-  <section class="view" id="view-food-meals">
-    <button class="back-btn" data-back="view-food">‹ Back</button>
-    <span class="kicker">Saved Meals</span>
-    <h1 class="h1">Quick-log a meal</h1>
-
-    <div class="card tight" id="saved-meals-list"><div class="empty-note">No saved meals yet.</div></div>
-
-    <button class="btn subtle" id="btn-open-new-meal" style="margin-top:0.7rem;">+ New Meal</button>
-
-    <div id="new-meal-builder" class="hidden">
-      <div class="set-group-label">New Meal</div>
-      <div class="field"><label>Meal name</label><input type="text" id="new-meal-name" placeholder="e.g. Post-Workout Shake"></div>
-      <div class="field"><label>Add a food</label><input type="text" id="new-meal-search-input" placeholder="Search foods…"></div>
-      <div class="card tight hidden" id="new-meal-search-results"></div>
-      <div class="set-group-label">Items</div>
-      <div class="card tight" id="new-meal-items"><div class="empty-note">No items added yet.</div></div>
-      <button class="btn primary" id="btn-save-new-meal" style="margin-top:0.6rem;">Save Meal</button>
-    </div>
-  </section>
-
-  <!-- ============ RECIPE HUB ============ -->
-  <section class="view" id="view-food-recipes">
-    <button class="back-btn" data-back="view-food">‹ Back</button>
-    <span class="kicker">Recipes</span>
-    <h1 class="h1">What should you eat next?</h1>
-
-    <div class="set-group-label">Recommended for You</div>
-    <div class="recipe-scroll-row" id="recommended-recipes-row"><div class="empty-note">Loading…</div></div>
-
-    <div id="recipe-category-rows"><div class="empty-note">Loading…</div></div>
-  </section>
-
   <!-- ============ RECIPE DETAIL ============ -->
   <section class="view" id="view-recipe-detail">
-    <button class="back-btn" data-back="view-food-recipes">‹ Back</button>
+    <button class="back-btn" data-back="view-food">‹ Back</button>
 
     <div class="recipe-hero" id="recipe-detail-hero">
       <span id="recipe-detail-icon">🍽️</span>
@@ -609,41 +714,6 @@
         <button class="btn primary" id="btn-log-recipe">Log This</button>
         <button class="btn outline" id="btn-add-recipe-to-cart">+ Smart Cart</button>
       </div>
-    </div>
-  </section>
-
-  <!-- ============ SMART CART ============ -->
-  <section class="view" id="view-shopping-cart">
-    <button class="back-btn" data-back="view-food">‹ Back</button>
-    <span class="kicker">Smart Cart</span>
-    <h1 class="h1">This week's groceries</h1>
-
-    <div class="stat-row">
-      <div class="stat-tile"><div class="label">Est. Cost</div><div class="value tnum" id="cart-cost">$0</div></div>
-      <div class="stat-tile"><div class="label">Budget</div><div class="value tnum" id="cart-budget">—</div></div>
-      <div class="stat-tile"><div class="label">Items</div><div class="value tnum" id="cart-item-count">0</div></div>
-      <div class="stat-tile"><div class="label">Household</div><div class="value tnum" id="cart-household">1</div></div>
-    </div>
-
-    <div class="chip-row" id="cart-quick-actions" style="margin:0.9rem 0;">
-      <button type="button" class="chip" data-action="remove_seafood">Remove Seafood</button>
-      <button type="button" class="chip" data-action="reduce_cost">Reduce Cost</button>
-      <button type="button" class="chip" data-action="increase_protein">Increase Protein</button>
-      <button type="button" class="chip" data-action="clear_checked">Clear Checked</button>
-    </div>
-
-    <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-bottom:0.9rem;">
-      <div class="field" style="margin-bottom:0;flex:1;"><label>Add item</label><input type="text" id="cart-manual-item-input" placeholder="e.g. Paper towels"></div>
-      <button class="btn subtle" id="btn-add-cart-item" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
-    </div>
-
-    <div id="cart-categories"><div class="empty-note">Loading…</div></div>
-
-    <div class="set-group-label">Pantry — already have these</div>
-    <div class="card tight" id="pantry-list"><div class="empty-note">Nothing saved.</div></div>
-    <div style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.6rem;">
-      <div class="field" style="margin-bottom:0;flex:1;"><input type="text" id="pantry-item-input" placeholder="e.g. Olive oil"></div>
-      <button class="btn subtle" id="btn-add-pantry-item" style="width:auto;padding:0.6rem 0.9rem;">Add</button>
     </div>
   </section>
 

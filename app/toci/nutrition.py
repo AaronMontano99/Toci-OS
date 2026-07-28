@@ -183,28 +183,111 @@ def compute_logging_streak(db: Session, user_id: int, today: dt.date) -> int:
     return streak
 
 
-def generate_coaching_messages(totals: dict, goal_kcal: float | None):
+def longest_logging_streak(db: Session, user_id: int, today: dt.date) -> int:
+    logged_dates = sorted(
+        row[0]
+        for row in db.query(models.FoodLogEntry.date)
+        .filter(models.FoodLogEntry.user_id == user_id, models.FoodLogEntry.date <= today)
+        .distinct()
+        .all()
+    )
+    longest = run = 0
+    prev = None
+    for d in logged_dates:
+        run = run + 1 if prev is not None and d == prev + dt.timedelta(days=1) else 1
+        longest = max(longest, run)
+        prev = d
+    return longest
+
+
+def macro_targets(goal_kcal: float | None) -> dict | None:
+    """Grams targets derived from the goal calories via the app's one macro
+    split -- the single source of truth reused everywhere a target is shown."""
+    if not goal_kcal:
+        return None
+    return {
+        "calories": round(goal_kcal),
+        "protein_g": round((goal_kcal * MACRO_SPLIT["protein"]) / PROTEIN_KCAL_PER_G, 1),
+        "carbs_g": round((goal_kcal * MACRO_SPLIT["carbs"]) / CARBS_KCAL_PER_G, 1),
+        "fat_g": round((goal_kcal * MACRO_SPLIT["fat"]) / FAT_KCAL_PER_G, 1),
+    }
+
+
+def generate_coaching_messages(totals: dict, goal_kcal: float | None, is_today: bool = True):
     if not goal_kcal:
         return []
 
     messages = []
     remaining = goal_kcal - totals["calories"]
-    if remaining < -50:
-        messages.append(f"You've exceeded your calorie goal by {abs(round(remaining))} calories today.")
-    elif remaining < 100:
-        messages.append(f"Only {max(0, round(remaining))} calories remaining today — plan your next meal accordingly.")
+    if is_today:
+        if remaining < -50:
+            messages.append(f"You've exceeded your calorie goal by {abs(round(remaining))} calories today.")
+        elif remaining < 100:
+            messages.append(f"Only {max(0, round(remaining))} calories remaining today — plan your next meal accordingly.")
+        else:
+            messages.append(f"{round(remaining)} calories remaining today.")
     else:
-        messages.append(f"{round(remaining)} calories remaining today.")
+        if remaining < -50:
+            messages.append(f"You finished {abs(round(remaining))} kcal over target.")
+        elif remaining > 50:
+            messages.append(f"You finished {round(remaining)} kcal under target.")
+        else:
+            messages.append("You finished right on target.")
 
     protein_target_g = (goal_kcal * MACRO_SPLIT["protein"]) / PROTEIN_KCAL_PER_G
     protein_gap = protein_target_g - totals["protein_g"]
     if protein_gap > 15:
-        messages.append(f"You're {round(protein_gap)}g short on protein — prioritize a lean protein source.")
+        messages.append(
+            f"You're {round(protein_gap)}g short on protein — prioritize a lean protein source."
+            if is_today else
+            f"You finished {round(protein_gap)}g short of your protein target."
+        )
 
     if totals["fiber_g"] < FIBER_TARGET_G * 0.5 and totals["calories"] > 300:
-        messages.append("Fiber is low today — consider fruit or vegetables with your next meal.")
+        messages.append(
+            "Fiber is low today — consider fruit or vegetables with your next meal."
+            if is_today else
+            "Fiber was low that day."
+        )
 
     return messages
+
+
+def recent_logged_meals(db: Session, user_id: int, limit: int = 3):
+    """Recently logged foods for one-tap reuse -- distinct by food item (most
+    recent occurrence wins), most-recently-logged first. Deliberately separate
+    from today_summary's per-date entries: this spans all history so a food
+    eaten a few days ago can still be quickly re-logged."""
+    rows = (
+        db.query(models.FoodLogEntry, models.FoodItem)
+        .join(models.FoodItem, models.FoodLogEntry.food_item_id == models.FoodItem.id)
+        .filter(models.FoodLogEntry.user_id == user_id)
+        .order_by(models.FoodLogEntry.logged_at.desc())
+        .limit(max(50, limit * 10))  # over-fetch before de-duping by food item
+        .all()
+    )
+    seen_food_ids = set()
+    out = []
+    for entry, food in rows:
+        if food.id in seen_food_ids:
+            continue
+        seen_food_ids.add(food.id)
+        scale = entry.servings
+        out.append({
+            "log_entry_id": entry.id,
+            "food_item_id": food.id,
+            "name": food.name,
+            "meal_slot": entry.meal_slot,
+            "servings": entry.servings,
+            "date": entry.date.isoformat(),
+            "calories": round(food.calories * scale, 1),
+            "protein_g": round(food.protein_g * scale, 1),
+            "carbs_g": round(food.carbs_g * scale, 1),
+            "fat_g": round(food.fat_g * scale, 1),
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 def list_saved_meals(db: Session, user_id: int):

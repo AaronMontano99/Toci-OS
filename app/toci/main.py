@@ -74,6 +74,17 @@ def _ensure_recovery_reading(db: Session, date: dt.date) -> models.DailyRecovery
     return row
 
 
+def _parse_date(date_str: str | None) -> dt.date:
+    """Shared date-param parsing for every nutrition endpoint that accepts an
+    optional selected date -- keeps "today" the single default everywhere."""
+    if not date_str:
+        return dt.date.today()
+    try:
+        return dt.date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(400, "date must be an ISO date, e.g. 2026-07-27")
+
+
 def _active_mesocycle(db: Session):
     program = db.query(models.Program).filter_by(user_id=DEMO_USER_ID, status="active").first()
     if not program:
@@ -353,54 +364,147 @@ def _lift_session_duration_min(db: Session, session: "models.WorkoutSession") ->
     return max(15, round((set_count * 2.5) / 5) * 5)  # same rough estimate used elsewhere when no timestamps exist
 
 
-@app.get("/api/log/summary")
-def log_summary(recent_limit: int = 5, db: Session = Depends(get_db)):
+def _lift_session_volume_kg(db: Session, session_id: int) -> tuple[int, float]:
+    sets = db.query(models.WorkoutSet).filter_by(workout_session_id=session_id).all()
+    exercise_count = len({s.exercise_id for s in sets})
+    volume_kg = sum((s.actual_load_kg or 0) * (s.actual_reps or 0) for s in sets)
+    return exercise_count, round(volume_kg, 1)
+
+
+def _run_pace_per_km(session: "models.CardioSession"):
+    if not session.distance_meters or not session.duration_seconds:
+        return None
+    pace_sec = session.duration_seconds / (session.distance_meters / 1000)
+    return f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}"
+
+
+@app.get("/api/log/lift-days")
+def log_lift_days(db: Session = Depends(get_db)):
+    """This week's lift-type Program days, for the Log tab's "Choose Saved Workout"
+    picker -- real workout-template state, not a second program system."""
     today = dt.date.today()
-    week_start = today - dt.timedelta(days=today.weekday())
+    monday = today - dt.timedelta(days=today.weekday())
+    _, meso = _active_mesocycle(db)
+    by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
+    out = []
+    for i in range(7):
+        d = by_weekday.get(i)
+        if d and d.day_type == "lift":
+            out.append({
+                "weekday": i,
+                "date": (monday + dt.timedelta(days=i)).isoformat(),
+                "label": d.label,
+                "exercise_count": len(d.template.get("exercises", [])),
+                "is_today": i == today.weekday(),
+            })
+    return out
+
+
+@app.get("/api/log/lift-days/{weekday}/prescription")
+def log_lift_day_prescription(weekday: int, db: Session = Depends(get_db)):
+    """Builds a live prescription (current progression + readiness applied) for
+    a specific weekday's saved lift day, so starting it from the Log tab behaves
+    the same as starting it on its actual scheduled day."""
+    _, meso = _active_mesocycle(db)
+    day = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id, weekday=weekday).first()
+    if not day or day.day_type != "lift":
+        raise HTTPException(404, "No lift day scheduled for that weekday")
+    _, readiness = _get_or_generate_recommendation(db, dt.date.today())
+    return reco_engine.build_lift_day_prescription(db, DEMO_USER_ID, day, readiness)
+
+
+@app.get("/api/log/summary")
+def log_summary(recent_limit: int = 5, period: str = "this_week", db: Session = Depends(get_db)):
+    today = dt.date.today()
+    this_monday = today - dt.timedelta(days=today.weekday())
+    if period == "last_week":
+        period_start, period_end, period_weeks = this_monday - dt.timedelta(days=7), this_monday - dt.timedelta(days=1), 1
+    elif period == "last_4_weeks":
+        period_start, period_end, period_weeks = today - dt.timedelta(days=27), today, 4
+    else:
+        period, period_start, period_end, period_weeks = "this_week", this_monday, today, 1
 
     lifts = db.query(models.WorkoutSession).filter_by(user_id=DEMO_USER_ID).order_by(models.WorkoutSession.date.desc()).limit(max(10, recent_limit)).all()
     runs = db.query(models.CardioSession).filter_by(user_id=DEMO_USER_ID).order_by(models.CardioSession.date.desc()).limit(max(10, recent_limit)).all()
 
-    recent = (
-        [{"type": "lift", "title": s.label or "Lift Session", "date": s.date.isoformat(), "duration_min": _lift_session_duration_min(db, s), "sort_key": (s.date.isoformat(), s.id)} for s in lifts]
-        + [{"type": "run", "title": "Run", "date": s.date.isoformat(), "duration_min": round(s.duration_seconds / 60), "sort_key": (s.date.isoformat(), s.id)} for s in runs]
-    )
+    recent = []
+    for s in lifts:
+        exercise_count, volume_kg = _lift_session_volume_kg(db, s.id)
+        recent.append({
+            "type": "lift", "title": s.label or "Lift Session", "date": s.date.isoformat(),
+            "duration_min": _lift_session_duration_min(db, s),
+            "exercise_count": exercise_count, "volume_kg": volume_kg,
+            "sort_key": (s.date.isoformat(), s.id),
+        })
+    for s in runs:
+        recent.append({
+            "type": "run", "title": "Run", "date": s.date.isoformat(),
+            "duration_min": round(s.duration_seconds / 60),
+            "distance_km": round((s.distance_meters or 0) / 1000, 2) if s.distance_meters else None,
+            "pace_per_km": _run_pace_per_km(s),
+            "sort_key": (s.date.isoformat(), s.id),
+        })
     recent.sort(key=lambda r: r["sort_key"], reverse=True)
     for r in recent:
         del r["sort_key"]
     recent = recent[:recent_limit]
 
-    week_lifts = [s for s in lifts if s.date >= week_start]
-    week_runs = [s for s in runs if s.date >= week_start]
-    week_lift_min = sum(_lift_session_duration_min(db, s) for s in week_lifts)
-    week_run_min = sum(round(s.duration_seconds / 60) for s in week_runs)
+    # period range is a full week for this_week/last_week and trailing 28 days for
+    # last_4_weeks -- all queried directly by date rather than reusing the `lifts`/
+    # `runs` "most recent N" lists above, since those are capped independent of period.
+    period_lifts = db.query(models.WorkoutSession).filter(
+        models.WorkoutSession.user_id == DEMO_USER_ID,
+        models.WorkoutSession.date >= period_start, models.WorkoutSession.date <= period_end,
+    ).all()
+    period_runs = db.query(models.CardioSession).filter(
+        models.CardioSession.user_id == DEMO_USER_ID,
+        models.CardioSession.date >= period_start, models.CardioSession.date <= period_end,
+    ).all()
+    period_lift_min = sum(_lift_session_duration_min(db, s) for s in period_lifts)
+    period_run_min = sum(round(s.duration_seconds / 60) for s in period_runs)
     # No calorie sensor data exists for lift/cardio sessions -- this is a rough
     # MET-style estimate (same "estimate, not measurement" spirit as the
     # duration fallback above), just enough to give the snapshot a number.
-    est_calories = round(week_lift_min * 6 + week_run_min * 10)
+    est_calories = round(period_lift_min * 6 + period_run_min * 10)
 
-    _, meso = _active_mesocycle(db)
+    program, meso = _active_mesocycle(db)
     by_weekday = {d.weekday: d for d in db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()}
-    lift_goal = sum(1 for d in by_weekday.values() if d.day_type == "lift")
-    run_goal = sum(1 for d in by_weekday.values() if d.day_type == "run")
-    time_goal_min = lift_goal * 45 + run_goal * 30
-    calorie_goal = lift_goal * 6 * 45 + run_goal * 10 * 30
+    lift_goal = sum(1 for d in by_weekday.values() if d.day_type == "lift") * period_weeks
+    run_goal = sum(1 for d in by_weekday.values() if d.day_type == "run") * period_weeks
+    time_goal_min = (lift_goal * 45) + (run_goal * 30)
+    calorie_goal = (lift_goal * 6 * 45) + (run_goal * 10 * 30)
 
     total_planned = lift_goal + run_goal
-    total_done = len(week_lifts) + len(week_runs)
-    if total_planned and total_done >= total_planned:
+    total_done = len(period_lifts) + len(period_runs)
+    lift_remaining = max(0, lift_goal - len(period_lifts))
+    run_remaining = max(0, run_goal - len(period_runs))
+
+    days_elapsed = (today - program.started_at).days
+    current_week = max(1, min(meso.weeks, days_elapsed // 7 + 1))
+    is_deload_week = period == "this_week" and meso.deload_week_index is not None and current_week == meso.deload_week_index
+
+    if is_deload_week:
+        encouragement = "Recovery week in progress — lighter volume is expected."
+    elif not total_planned:
+        encouragement = "No sessions scheduled this period — log anything you complete."
+    elif total_done >= total_planned:
         encouragement = "You're on track! Keep the momentum going."
-    elif total_planned and total_done >= total_planned * 0.5:
-        encouragement = "Good progress this week — a couple more sessions to hit your plan."
+    elif run_goal and run_remaining == 0 and lift_remaining:
+        encouragement = f"Your running goal is complete. {lift_remaining} lift session{'s' if lift_remaining != 1 else ''} left to hit your plan."
+    elif lift_goal and lift_remaining == 0 and run_remaining:
+        encouragement = f"Your lifting goal is complete. {run_remaining} run{'s' if run_remaining != 1 else ''} left to hit your plan."
+    elif total_done >= total_planned * 0.5:
+        encouragement = "Good progress this period — a couple more sessions to hit your plan."
     else:
-        encouragement = "Early in the week — let's get a session in."
+        encouragement = "Early in the period — let's get a session in."
 
     return {
+        "period": period,
         "recent_sessions": recent,
         "week": {
-            "lift_sessions": len(week_lifts), "lift_goal": lift_goal,
-            "runs": len(week_runs), "run_goal": run_goal,
-            "total_time_min": week_lift_min + week_run_min, "time_goal_min": time_goal_min,
+            "lift_sessions": len(period_lifts), "lift_goal": lift_goal,
+            "runs": len(period_runs), "run_goal": run_goal,
+            "total_time_min": period_lift_min + period_run_min, "time_goal_min": time_goal_min,
             "est_calories": est_calories, "calorie_goal": calorie_goal,
         },
         "encouragement": encouragement,
@@ -1074,23 +1178,24 @@ def _hydration_goal_oz(db: Session) -> float:
 
 
 @app.get("/api/hydration/today")
-def get_hydration_today(db: Session = Depends(get_db)):
-    today = dt.date.today()
+def get_hydration_today(date: str | None = None, db: Session = Depends(get_db)):
+    target_date = _parse_date(date)
     total = (
         db.query(func.sum(models.WaterLogEntry.ounces))
-        .filter(models.WaterLogEntry.user_id == DEMO_USER_ID, models.WaterLogEntry.date == today)
+        .filter(models.WaterLogEntry.user_id == DEMO_USER_ID, models.WaterLogEntry.date == target_date)
         .scalar()
         or 0.0
     )
-    return {"ounces": round(total, 1), "goal_oz": _hydration_goal_oz(db)}
+    return {"date": target_date.isoformat(), "ounces": round(total, 1), "goal_oz": _hydration_goal_oz(db)}
 
 
 @app.post("/api/hydration/today")
 def log_hydration(payload: schemas.WaterLogIn, db: Session = Depends(get_db)):
-    row = models.WaterLogEntry(user_id=DEMO_USER_ID, date=dt.date.today(), ounces=payload.ounces)
+    target_date = _parse_date(payload.date)
+    row = models.WaterLogEntry(user_id=DEMO_USER_ID, date=target_date, ounces=payload.ounces)
     db.add(row)
     db.commit()
-    return get_hydration_today(db)
+    return get_hydration_today(target_date.isoformat(), db)
 
 
 @app.post("/api/settings/recalculate-calories")
@@ -1171,12 +1276,17 @@ def remove_injury(injury_id: int, db: Session = Depends(get_db)):
 # See toci/nutrition.py for the Open Food Facts lookup + shaping logic.
 
 @app.get("/api/nutrition/today")
-def nutrition_today(db: Session = Depends(get_db)):
+def nutrition_today(date: str | None = None, db: Session = Depends(get_db)):
     user = db.query(models.User).get(DEMO_USER_ID)
     today = dt.date.today()
-    summary = nutrition_client.today_summary(db, DEMO_USER_ID, today)
-    summary["coaching"] = nutrition_client.generate_coaching_messages(summary["totals"], user.daily_calorie_goal_kcal)
+    target_date = _parse_date(date)
+    summary = nutrition_client.today_summary(db, DEMO_USER_ID, target_date)
+    summary["is_today"] = target_date == today
+    summary["coaching"] = nutrition_client.generate_coaching_messages(summary["totals"], user.daily_calorie_goal_kcal, summary["is_today"])
+    # Streak is a standing habit metric, not scoped to whichever date is being
+    # browsed -- always counts back from the real today regardless of `date`.
     summary["logging_streak"] = nutrition_client.compute_logging_streak(db, DEMO_USER_ID, today)
+    summary["longest_streak"] = nutrition_client.longest_logging_streak(db, DEMO_USER_ID, today)
     return summary
 
 
@@ -1249,7 +1359,7 @@ def nutrition_log_food(payload: schemas.FoodLogIn, db: Session = Depends(get_db)
     row = models.FoodLogEntry(
         user_id=DEMO_USER_ID,
         food_item_id=payload.food_item_id,
-        date=dt.date.today(),
+        date=_parse_date(payload.date),
         servings=payload.servings,
         meal_slot=payload.meal_slot,
     )
@@ -1272,7 +1382,7 @@ def nutrition_quick_add(payload: schemas.QuickAddIn, db: Session = Depends(get_d
     db.add(food)
     db.flush()
     entry = models.FoodLogEntry(
-        user_id=DEMO_USER_ID, food_item_id=food.id, date=dt.date.today(),
+        user_id=DEMO_USER_ID, food_item_id=food.id, date=_parse_date(payload.date),
         servings=1.0, meal_slot=payload.meal_slot,
     )
     db.add(entry)
@@ -1286,6 +1396,7 @@ def nutrition_copy_day(payload: schemas.CopyDayIn, db: Session = Depends(get_db)
         source_date = dt.date.today() - dt.timedelta(days=1)
     else:
         source_date = dt.date.fromisoformat(payload.from_date)
+    target_date = _parse_date(payload.to_date)
 
     query = db.query(models.FoodLogEntry).filter_by(user_id=DEMO_USER_ID, date=source_date)
     if payload.meal_slot:
@@ -1294,14 +1405,24 @@ def nutrition_copy_day(payload: schemas.CopyDayIn, db: Session = Depends(get_db)
     if not source_entries:
         return {"copied": 0}
 
-    today = dt.date.today()
     for entry in source_entries:
         db.add(models.FoodLogEntry(
-            user_id=DEMO_USER_ID, food_item_id=entry.food_item_id, date=today,
+            user_id=DEMO_USER_ID, food_item_id=entry.food_item_id, date=target_date,
             servings=entry.servings, meal_slot=entry.meal_slot,
         ))
     db.commit()
     return {"copied": len(source_entries)}
+
+
+@app.delete("/api/nutrition/log")
+def nutrition_clear_day(date: str, db: Session = Depends(get_db)):
+    """Clears only this date's food log entries -- saved meals, recipes, and
+    targets are untouched. `date` is required so an accidental bare call can't
+    wipe the wrong day."""
+    target_date = _parse_date(date)
+    count = db.query(models.FoodLogEntry).filter_by(user_id=DEMO_USER_ID, date=target_date).delete()
+    db.commit()
+    return {"cleared": count}
 
 
 @app.patch("/api/nutrition/log/{entry_id}")
@@ -1353,8 +1474,72 @@ def nutrition_log_meal(meal_id: int, payload: schemas.LogSavedMealIn, db: Sessio
     meal = db.query(models.SavedMeal).get(meal_id)
     if not meal:
         raise HTTPException(404, "Saved meal not found")
-    created = nutrition_client.log_saved_meal(db, DEMO_USER_ID, meal, payload.multiplier, dt.date.today())
+    created = nutrition_client.log_saved_meal(db, DEMO_USER_ID, meal, payload.multiplier, _parse_date(payload.date))
     return {"created": len(created)}
+
+
+@app.get("/api/nutrition/recent-meals")
+def nutrition_recent_meals(limit: int = 3, db: Session = Depends(get_db)):
+    return {"meals": nutrition_client.recent_logged_meals(db, DEMO_USER_ID, limit)}
+
+
+def _smart_nutrition_plan(db: Session, user: "models.User", target_date: dt.date, is_forward_looking: bool) -> dict:
+    """Composes nutrition.py's daily totals/targets with recipes.py's existing
+    restriction-aware recommendation ranking -- one coherent pick, not a second
+    conflicting engine. Past dates get a retrospective read only: recommending
+    what to eat next doesn't make sense for a day that's already over."""
+    summary = nutrition_client.today_summary(db, DEMO_USER_ID, target_date)
+    targets = nutrition_client.macro_targets(user.daily_calorie_goal_kcal)
+    if not targets:
+        return {"configured": False, "headline": "Set up a calorie goal to unlock personalized recommendations.", "detail": None, "recommendation": None}
+
+    totals = summary["totals"]
+    remaining_kcal = targets["calories"] - totals["calories"]
+    remaining_protein = targets["protein_g"] - totals["protein_g"]
+
+    if not is_forward_looking:
+        if remaining_kcal < -50:
+            headline = f"You finished {abs(round(remaining_kcal))} kcal over target."
+        elif remaining_kcal > 50:
+            headline = f"You finished {round(remaining_kcal)} kcal under target."
+        else:
+            headline = "You finished right on target."
+        return {"configured": True, "headline": headline, "detail": None, "recommendation": None}
+
+    if remaining_kcal <= 100:
+        headline = (
+            f"You've gone {abs(round(remaining_kcal))} kcal over today's target."
+            if remaining_kcal < -50 else "No additional food needed to hit today's target."
+        )
+        return {"configured": True, "headline": headline, "detail": None, "recommendation": None}
+
+    if remaining_protein > 15:
+        headline = f"You're {round(remaining_protein)}g short on protein today."
+        detail = "Add a protein-rich option to stay on track."
+    else:
+        headline = f"{round(remaining_kcal)} kcal remaining today."
+        detail = "Here's one option that fits your remaining macros."
+
+    candidates = recipes_client.get_recommended(db, DEMO_USER_ID)
+    fitting = [r for r in candidates if r["calories"] <= remaining_kcal * 1.25]
+    pick = (fitting or candidates or [None])[0]
+    recommendation = None
+    if pick:
+        recommendation = {
+            "type": "recipe", "id": pick["id"], "name": pick["name"],
+            "calories": pick["calories"], "protein_g": pick["protein_g"],
+            "carbs_g": pick["carbs_g"], "fat_g": pick["fat_g"],
+            "icon_emoji": pick["icon_emoji"], "gradient_key": pick["gradient_key"],
+        }
+    return {"configured": True, "headline": headline, "detail": detail, "recommendation": recommendation}
+
+
+@app.get("/api/nutrition/recommendation")
+def nutrition_recommendation(date: str | None = None, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    target_date = _parse_date(date)
+    is_forward_looking = target_date >= dt.date.today()  # "what to eat next" only makes sense for today/future
+    return _smart_nutrition_plan(db, user, target_date, is_forward_looking)
 
 
 # ----------------------------------------------------------------- recipes ----
@@ -1413,7 +1598,7 @@ def recipe_log(recipe_id: int, payload: schemas.RecipeLogIn, db: Session = Depen
     db.add(food)
     db.flush()
     entry = models.FoodLogEntry(
-        user_id=DEMO_USER_ID, food_item_id=food.id, date=dt.date.today(),
+        user_id=DEMO_USER_ID, food_item_id=food.id, date=_parse_date(payload.date),
         servings=payload.servings, meal_slot=payload.meal_slot,
     )
     db.add(entry)

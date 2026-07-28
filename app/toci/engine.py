@@ -188,6 +188,41 @@ def _active_injury_regions(db: Session, user_id: int):
     return {r.body_region for r in rows}
 
 
+def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDay, readiness: models.ReadinessScore) -> dict:
+    """Build a {label, exercises} lift prescription for an arbitrary ProgramDay,
+    honoring today's readiness and injuries the same way generate_recommendation's
+    lift branch does. Powers the Log tab's "Choose Saved Workout" flow so it reuses
+    the same progression engine instead of replaying a stale, unadjusted template."""
+    injury_regions = _active_injury_regions(db, user_id)
+    set_multiplier = 0.8 if readiness.band == "amber" else 1.0
+
+    exercises_out = []
+    for item in day.template.get("exercises", []):
+        ex = db.query(models.Exercise).get(item["exercise_id"])
+        name = ex.name
+        for region in injury_regions:
+            sub = SUBSTITUTIONS.get(ex.name, {}).get(region)
+            if sub:
+                name = sub
+                break
+
+        progression = progression_options(
+            db, user_id, item["exercise_id"], item["target_rir"], item["reps"], item["starting_load_kg"]
+        )
+        recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
+        sets = max(1, round(item["sets"] * set_multiplier))
+        exercises_out.append({
+            "exercise_id": item["exercise_id"],
+            "name": name,
+            "sets": sets,
+            "reps": item["reps"],
+            "load_kg": recommended["load_kg"],
+            "target_rir": item["target_rir"],
+        })
+
+    return {"label": day.label, "exercises": exercises_out}
+
+
 def _save_recommendation(db, user_id, date, session_type, prescription, reasoning, readiness):
     row = db.query(models.Recommendation).filter_by(user_id=user_id, date=date).first()
     if row is None:

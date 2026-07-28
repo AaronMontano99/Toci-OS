@@ -34,6 +34,7 @@
   --success: #8DAA91; --success-bg: rgba(141,170,145,0.16); --success-text: #3F5C43;
   --warn: #DDB36C; --warn-bg: rgba(221,179,108,0.18); --warn-text: #8A6423;
   --critical: #C97B63; --critical-bg: rgba(201,123,99,0.15); --critical-text: #8A4433;
+  --recovery: #A9C5D8; --recovery-bg: rgba(169,197,216,0.20); --recovery-text: #3E6E8A;
   --neutral-badge-bg: rgba(32,33,36,0.08); --neutral-badge-text: #5F6268;
 
   --shadow-subtle: 0 8px 24px rgba(82,59,37,0.06);
@@ -52,6 +53,7 @@
     --success: #8DAA91; --success-bg: rgba(141,170,145,0.20); --success-text: #A3C2A7;
     --warn: #DDB36C; --warn-bg: rgba(221,179,108,0.22); --warn-text: #E8C48A;
     --critical: #C97B63; --critical-bg: rgba(201,123,99,0.22); --critical-text: #E0A794;
+    --recovery: #A9C5D8; --recovery-bg: rgba(169,197,216,0.24); --recovery-text: #BFDCF0;
     --neutral-badge-bg: rgba(184,181,176,0.14); --neutral-badge-text: #C9C6C1;
     --shadow-subtle: 0 8px 24px rgba(0,0,0,0.35); --shadow-micro: 0 4px 12px rgba(0,0,0,0.25);
   }
@@ -64,6 +66,7 @@
   --success: #8DAA91; --success-bg: rgba(141,170,145,0.20); --success-text: #A3C2A7;
   --warn: #DDB36C; --warn-bg: rgba(221,179,108,0.22); --warn-text: #E8C48A;
   --critical: #C97B63; --critical-bg: rgba(201,123,99,0.22); --critical-text: #E0A794;
+  --recovery: #A9C5D8; --recovery-bg: rgba(169,197,216,0.24); --recovery-text: #BFDCF0;
   --neutral-badge-bg: rgba(184,181,176,0.14); --neutral-badge-text: #C9C6C1;
   --shadow-subtle: 0 8px 24px rgba(0,0,0,0.35); --shadow-micro: 0 4px 12px rgba(0,0,0,0.25);
 }
@@ -75,6 +78,7 @@
   --success: #8DAA91; --success-bg: rgba(141,170,145,0.16); --success-text: #3F5C43;
   --warn: #DDB36C; --warn-bg: rgba(221,179,108,0.18); --warn-text: #8A6423;
   --critical: #C97B63; --critical-bg: rgba(201,123,99,0.15); --critical-text: #8A4433;
+  --recovery: #A9C5D8; --recovery-bg: rgba(169,197,216,0.20); --recovery-text: #3E6E8A;
   --neutral-badge-bg: rgba(32,33,36,0.08); --neutral-badge-text: #5F6268;
   --shadow-subtle: 0 8px 24px rgba(82,59,37,0.06); --shadow-micro: 0 4px 12px rgba(82,59,37,0.05);
 }
@@ -303,13 +307,15 @@ hr.hair { border: none; border-top: 1px solid var(--border); margin: 0.6rem 0; }
 .pr-row .date { font-size: 0.72rem; color: var(--neutral-2); }
 .pr-row .val { font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; color: var(--success-text); }
 
+/* Always shown in the critical wash, not just on :hover -- :hover never fires
+   on a touchscreen tap, so a plain muted-gray glyph read as non-interactive. */
 .set-delete-btn {
-  width: 22px; height: 22px; flex: none; border-radius: 50%;
+  width: 34px; height: 34px; flex: none; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: var(--neutral-2); font-size: 1.05rem; line-height: 1;
-  transition: background .1s, color .1s;
+  color: var(--critical-text); background: var(--critical-bg); font-size: 1.2rem; font-weight: 700; line-height: 1;
+  transition: opacity .1s, transform .1s;
 }
-.set-delete-btn:hover, .set-delete-btn:focus-visible { background: var(--critical-bg); color: var(--critical-text); }
+.set-delete-btn:active { opacity: 0.7; transform: scale(0.94); }
 
 .empty-note { font-size: 0.85rem; color: var(--neutral-2); padding: 0.5rem 0.1rem; }
 .back-btn { font-size: 0.85rem; font-weight: 600; color: var(--neutral); margin-bottom: 0.7rem; display: inline-flex; align-items: center; gap: 0.3rem; }
@@ -589,14 +595,97 @@ select.chip-select { padding: 0.5rem 0.7rem; border-radius: 10px; border: 1px so
 .mini-day-strip .mds-item.today.done .mds-dot svg { color: var(--on-accent); }
 
 /* ------------------------------------------------------ Log tab --- */
+.log-primary-row { display: flex; gap: 0.7rem; align-items: stretch; margin-bottom: 0.7rem; }
+.log-primary-card {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  padding: 1.1rem 1rem 1rem; box-shadow: var(--shadow-subtle);
+}
+.log-primary-card .icon-circle { margin-bottom: 0.8rem; }
+.log-primary-title { font-weight: 700; font-size: 1rem; line-height: 1.25; }
+.log-primary-sub { font-size: 0.78rem; color: var(--neutral-2); line-height: 1.4; margin-top: 0.3rem; flex: 1; }
+.log-primary-cta {
+  margin-top: 0.9rem; height: 46px; border-radius: 14px; background: var(--brand); color: var(--on-accent);
+  display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-micro);
+}
+@media (max-width: 374px) {
+  .log-primary-row { flex-direction: column; }
+}
+
+/* Resume Session: compact accent-wash card, takes priority over the primary Lift/Run
+   cards below it without competing for the "one hero card per screen" treatment. */
+.resume-session-card { background: var(--brand-subtle-bg); border: 1.5px solid var(--brand); }
+.resume-session-card .kicker { margin-bottom: 0.2rem; }
+.resume-session-card .rs-title { font-weight: 700; font-size: 1.02rem; font-family: var(--font-display); }
+.resume-session-card .rs-meta { font-size: 0.78rem; color: var(--neutral); margin-top: 0.25rem; }
+.resume-session-card .rs-actions { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.9rem; }
+.resume-session-card .rs-actions .btn.primary { flex: 1; }
+.resume-session-card .rs-end-btn {
+  flex: none; font-weight: 700; font-size: 0.85rem; color: var(--neutral);
+  padding: 0.6rem 0.2rem; min-height: 44px; display: flex; align-items: center;
+}
+
+/* Saved-workout picker rows (Start Lift Session > Choose Saved Workout) */
+.saved-workout-row {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left;
+  padding: 0.65rem 0.1rem; border-bottom: 1px solid var(--border);
+}
+.saved-workout-row:last-child { border-bottom: none; }
+.saved-workout-row .icon-circle { flex: none; }
+.saved-workout-row .name { font-size: 0.88rem; font-weight: 700; }
+.saved-workout-row .meta { font-size: 0.74rem; color: var(--neutral-2); margin-top: 0.1rem; }
+.saved-workout-row .arrow { flex: none; color: var(--neutral-2); }
+
+/* Weekly Snapshot period selector */
+.period-select-btn {
+  display: flex; align-items: center; gap: 0.25rem; font-size: 0.76rem; font-weight: 700;
+  color: var(--brand-dark); background: var(--brand-subtle-bg); border-radius: 9999px; padding: 0.35rem 0.7rem;
+}
+.period-select-btn svg { width: 12px; height: 12px; }
+.period-menu {
+  position: absolute; z-index: 20; right: 1.1rem; margin-top: 0.3rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-subtle); overflow: hidden; min-width: 150px;
+}
+.period-menu button {
+  display: block; width: 100%; text-align: left; padding: 0.6rem 0.85rem; font-size: 0.82rem; font-weight: 600;
+}
+.period-menu button.active { color: var(--brand-dark); background: var(--brand-subtle-bg); }
+.period-menu button:active { opacity: 0.85; }
+
+/* Coach message row inside Weekly Snapshot -- tappable only when it links out */
+.snapshot-coach-row {
+  display: flex; align-items: center; gap: 0.7rem; background: var(--brand-subtle-bg);
+  border-radius: 14px; padding: 0.7rem 0.85rem; margin-top: 0.9rem; text-align: left; width: 100%;
+}
+.snapshot-coach-row .icon-circle { flex: none; }
+.snapshot-coach-row span.msg { font-size: 0.82rem; font-weight: 600; color: var(--brand-subtle-text); line-height: 1.35; }
+
 .log-session-card {
   flex: none; width: 150px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; padding: 0.8rem 0.85rem; box-shadow: var(--shadow-micro);
+  border-radius: 16px; padding: 0.8rem 0.85rem; box-shadow: var(--shadow-micro); text-align: left;
 }
 .log-session-card .icon-circle { margin-bottom: 0.55rem; }
 .log-session-card .name { font-weight: 700; font-size: 0.84rem; line-height: 1.25; }
 .log-session-card .date { font-size: 0.7rem; color: var(--neutral-2); margin-top: 0.3rem; display: block; }
-.log-session-card .chip { margin-top: 0.5rem; padding: 0.2rem 0.55rem; font-size: 0.65rem; }
+.log-session-card .metric { font-size: 0.7rem; color: var(--neutral-2); margin-top: 0.15rem; display: block; }
+.activity-badge {
+  display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 6px; margin-top: 0.5rem;
+}
+.activity-badge.lift { background: var(--brand-subtle-bg); color: var(--brand-subtle-text); }
+.activity-badge.run { background: var(--success-bg); color: var(--success-text); }
+
+.session-skeleton {
+  flex: none; width: 150px; height: 122px; border-radius: 16px; background: var(--surface);
+  border: 1px solid var(--border); position: relative; overflow: hidden;
+}
+.session-skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  animation: skeleton-sweep 1.3s ease-in-out infinite;
+}
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
 .snapshot-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.9rem; }
 .snapshot-row { display: flex; gap: 0.4rem; }
@@ -613,3 +702,47 @@ select.chip-select { padding: 0.5rem 0.7rem; border-radius: 10px; border: 1px so
 .macro-ring-item .pct { font-size: 0.68rem; font-weight: 700; margin-top: 0.2rem; }
 button.icon-circle { cursor: pointer; }
 button.card { cursor: pointer; font-family: inherit; }
+
+/* Nutrition header: calendar icon / centered date+title / overflow icon */
+.nutrition-topbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.9rem; }
+.nutrition-topbar-title { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.nutrition-topbar-title .h1 { text-align: center; }
+.nutrition-date-label {
+  display: flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: var(--neutral-2);
+  padding: 0.3rem 0.5rem; margin: -0.3rem 0 0;
+}
+.nutrition-date-label svg { flex: none; }
+
+/* Overflow menu reuses .notif-panel's card/shadow/border -- just its own item list */
+.overflow-menu-item {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; text-align: left;
+  padding: 0.65rem 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--ink); border-radius: 10px;
+}
+.overflow-menu-item:active { background: var(--bg); }
+.overflow-menu-item.destructive { color: var(--critical-text); }
+.overflow-menu-divider { border-top: 1px solid var(--border); margin: 0.3rem 0; }
+
+/* Smart Nutrition Plan */
+.smart-plan-head { display: flex; align-items: flex-start; gap: 0.8rem; }
+.smart-plan-head .icon-circle { flex: none; }
+.smart-plan-title-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex: 1; min-width: 0; }
+.smart-plan-title-row .title { font-weight: 700; font-size: 0.92rem; }
+.smart-plan-badge {
+  flex: none; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--neutral-2); background: var(--neutral-badge-bg); padding: 0.2rem 0.5rem; border-radius: 6px;
+}
+.smart-plan-headline { font-size: 0.85rem; font-weight: 600; margin-top: 0.5rem; }
+.smart-plan-detail { font-size: 0.8rem; color: var(--neutral-2); margin-top: 0.2rem; line-height: 1.4; }
+.smart-plan-rec {
+  display: flex; align-items: center; gap: 0.7rem; margin-top: 0.9rem; padding: 0.7rem 0.75rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 14px; cursor: pointer;
+}
+.smart-plan-rec .rec-icon {
+  flex: none; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center;
+  justify-content: center; font-size: 1.3rem;
+}
+.smart-plan-rec .rec-body { flex: 1; min-width: 0; }
+.smart-plan-rec .rec-label { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--brand); }
+.smart-plan-rec .rec-name { font-weight: 700; font-size: 0.85rem; margin-top: 0.1rem; }
+.smart-plan-rec .rec-macros { font-size: 0.72rem; color: var(--neutral-2); margin-top: 0.1rem; }
+.smart-plan-rec .btn { flex: none; width: auto; padding: 0.5rem 0.8rem; font-size: 0.8rem; }

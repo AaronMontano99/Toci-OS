@@ -13,6 +13,9 @@ const state = {
   onboardingPace: "lose_1",
   onboardingActivity: "active",
   programWeek: [],
+  logPeriod: "this_week",
+  nutritionDate: null, // set on boot to today's local date; see localDateStr()
+  nutritionSegment: "food",
 };
 
 const KG_PER_LB = 0.45359237;
@@ -149,7 +152,7 @@ document.querySelectorAll(".tab-bar .tab").forEach((t) => {
     const id = t.dataset.tab;
     showView(id);
     if (id === "view-today") { loadTodayMacroStats(); loadWeightProgressCard(); loadWearableCard(); }
-    if (id === "view-food") loadFoodToday();
+    if (id === "view-food") { switchNutritionSegment("food"); loadFoodToday(); }
     if (id === "view-progress") loadProgress();
     if (id === "view-program") loadProgram();
     if (id === "view-settings") { loadSettings().then(() => { loadProfileOverview(); loadProfileGoals(); }); }
@@ -616,60 +619,272 @@ document.getElementById("btn-submit-checkin").addEventListener("click", async ()
 
 // -------------------------------------------------------------- log chooser ----
 
+const SPARKLE_SVG = '<svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M10 3l1.2 3.8L15 8l-3.8 1.2L10 13l-1.2-3.8L5 8l3.8-1.2z"/></svg>';
+const PERIOD_LABELS = { this_week: "This Week", last_week: "Last Week", last_4_weeks: "Last 4 Weeks" };
+
 function loadLogChooser() {
   if (!state.today) return;
+  renderResumeSessionCard();
+  loadLogSummary(3);
+}
+
+function renderResumeSessionCard() {
+  const card = document.getElementById("log-resume-session-card");
+  const status = state.today.workout_status;
   const reco = state.today.recommendation;
-  const liftTitle = document.getElementById("log-lift-title");
-  const runTitle = document.getElementById("log-run-title");
-  liftTitle.textContent = reco.session_type === "lift" ? reco.prescription.label + " — recommended today" : "Log any exercise freely";
-  runTitle.textContent = reco.session_type === "run" ? labelForRunType(reco.prescription.run_type) + " — recommended today" : "Log a run freely";
-  loadLogSummary(5);
+  if (!status || status.state !== "active") {
+    card.classList.add("hidden");
+    card.innerHTML = "";
+    return;
+  }
+  const title = (reco.session_type === "lift" && reco.prescription.label) || "Workout";
+  const progress = status.total_exercise_count
+    ? status.completed_exercise_count + " of " + status.total_exercise_count + " exercises completed"
+    : "In progress";
+  const elapsed = status.elapsed_min != null ? status.elapsed_min + " min elapsed" : null;
+  card.innerHTML =
+    '<span class="kicker">Workout in Progress</span>' +
+    '<div class="rs-title">' + escapeHtml(title) + "</div>" +
+    '<div class="rs-meta tnum">' + progress + (elapsed ? " · " + elapsed : "") + "</div>" +
+    '<div class="rs-actions">' +
+    '<button type="button" class="btn primary" id="btn-resume-session">' + PLAY_TRIANGLE_SVG + "Resume Workout</button>" +
+    '<button type="button" class="rs-end-btn" id="btn-end-session">End Session</button>' +
+    "</div>";
+  card.classList.remove("hidden");
+  document.getElementById("btn-resume-session").addEventListener("click", () => openLiftSession(status.session_id));
+  document.getElementById("btn-end-session").addEventListener("click", async () => {
+    await api("/workouts/" + status.session_id + "/complete", { method: "POST" });
+    toast("Workout ended");
+    await loadToday();
+    loadLogChooser();
+  });
+}
+
+function sessionSkeletons(count) {
+  return Array.from({ length: count }, () => '<div class="session-skeleton"></div>').join("");
 }
 
 async function loadLogSummary(recentLimit) {
-  const data = await api("/log/summary?recent_limit=" + recentLimit);
   const row = document.getElementById("log-recent-sessions-row");
+  row.innerHTML = sessionSkeletons(3);
+
+  let data;
+  try {
+    data = await api("/log/summary?recent_limit=" + recentLimit + "&period=" + state.logPeriod);
+  } catch (e) {
+    row.innerHTML =
+      '<div class="empty-note">Couldn\'t load your recent sessions. ' +
+      '<button type="button" class="btn subtle small" id="btn-retry-recent-sessions" style="width:auto;margin-top:0.4rem;">Retry</button></div>';
+    document.getElementById("btn-retry-recent-sessions").addEventListener("click", () => loadLogSummary(recentLimit));
+    return;
+  }
+
   if (!data.recent_sessions.length) {
-    row.innerHTML = '<div class="empty-note">Nothing logged yet — start a session above.</div>';
+    row.innerHTML =
+      '<div class="empty-note" style="max-width:260px;">No sessions yet. Your completed workouts and runs will appear here.<br>' +
+      '<button type="button" class="btn subtle small" id="btn-log-first-session" style="width:auto;margin-top:0.5rem;">Log Your First Session</button></div>';
+    document.getElementById("btn-log-first-session").addEventListener("click", () => { document.getElementById("btn-open-lift").click(); });
   } else {
     row.innerHTML = data.recent_sessions
       .map((s) => {
         const icon = s.type === "lift" ? PROGRAM_TODAY_ICONS.lift : PROGRAM_TODAY_ICONS.run;
         const dateLabel = new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+        let metric = "";
+        if (s.type === "lift") {
+          metric = s.exercise_count + " exercise" + (s.exercise_count === 1 ? "" : "s") + (s.volume_kg ? " · " + fmtWeight(s.volume_kg) + " vol" : "");
+        } else if (s.distance_km) {
+          metric = s.distance_km + " km" + (s.pace_per_km ? " · " + s.pace_per_km + "/km" : "");
+        } else {
+          metric = s.duration_min + " min";
+        }
         return (
-          '<div class="log-session-card">' +
+          '<button type="button" class="log-session-card" data-type="' + s.type + '">' +
           '<div class="icon-circle md">' + icon + "</div>" +
           '<div class="name">' + escapeHtml(s.title) + "</div>" +
-          '<span class="date">' + dateLabel + "</span>" +
-          '<span class="chip">' + s.type.toUpperCase() + "</span>" +
-          "</div>"
+          '<span class="date tnum">' + dateLabel + "</span>" +
+          '<span class="metric tnum">' + metric + "</span>" +
+          '<span class="activity-badge ' + s.type + '">' + s.type.toUpperCase() + "</span>" +
+          "</button>"
         );
       })
       .join("");
+    row.querySelectorAll(".log-session-card").forEach((el) => {
+      el.addEventListener("click", () => { document.querySelector('.tab-bar [data-tab="view-progress"]').click(); });
+    });
   }
 
+  renderWeeklySnapshot(data);
+}
+
+function renderWeeklySnapshot(data) {
   const w = data.week;
   const snapshotStat = (icon, num, lbl, goal) =>
     '<div class="snapshot-stat"><div class="icon-circle sm">' + icon + '</div><div class="num tnum">' + num + '</div>' +
-    '<div class="lbl">' + lbl + '</div><div class="goal tnum">Goal ' + goal + "</div></div>";
+    '<div class="lbl">' + lbl + '</div><div class="goal tnum">' + goal + "</div></div>";
+  const goalOrContext = (value, goal, unit) => (goal ? "Goal " + (unit ? unit(goal) : goal) : "No target set");
+
   document.getElementById("log-weekly-snapshot-card").innerHTML =
-    '<div class="snapshot-head"><span style="font-weight:700;font-size:0.95rem;">This Week</span></div>' +
+    '<div class="snapshot-head" style="position:relative;">' +
+    '<span style="font-weight:700;font-size:0.95rem;">Weekly Snapshot</span>' +
+    '<button type="button" class="period-select-btn" id="btn-period-select">' + escapeHtml(PERIOD_LABELS[data.period]) +
+    '<svg viewBox="0 0 20 20" fill="none"><path d="M5.5 8L10 12.5L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+    '<div class="period-menu hidden" id="period-menu">' +
+    Object.keys(PERIOD_LABELS).map((k) => '<button type="button" class="' + (k === data.period ? "active" : "") + '" data-period="' + k + '">' + PERIOD_LABELS[k] + "</button>").join("") +
+    "</div></div>" +
     '<div class="snapshot-row">' +
-    snapshotStat(PROGRAM_TODAY_ICONS.lift, w.lift_sessions, "Lift Sessions", w.lift_goal) +
-    snapshotStat(PROGRAM_TODAY_ICONS.run, w.runs, "Runs", w.run_goal) +
-    snapshotStat(META_CLOCK_SVG.replace('width="12" height="12"', 'width="16" height="16" style=""'), fmtHours(w.total_time_min), "Total Time", fmtHours(w.time_goal_min)) +
-    snapshotStat(GOAL_KIND_ICONS.consistency, w.est_calories.toLocaleString(), "Est. Calories", w.calorie_goal.toLocaleString()) +
+    snapshotStat(PROGRAM_TODAY_ICONS.lift, w.lift_sessions, "Lift Sessions", goalOrContext(w.lift_sessions, w.lift_goal)) +
+    snapshotStat(PROGRAM_TODAY_ICONS.run, w.runs, "Runs", goalOrContext(w.runs, w.run_goal)) +
+    snapshotStat(META_CLOCK_SVG.replace('width="12" height="12"', 'width="16" height="16" style=""'), fmtHours(w.total_time_min), "Total Time", goalOrContext(w.total_time_min, w.time_goal_min, fmtHours)) +
+    snapshotStat(GOAL_KIND_ICONS.consistency, w.est_calories.toLocaleString(), "Est. Calories", goalOrContext(w.est_calories, w.calorie_goal, (n) => n.toLocaleString())) +
     "</div>" +
-    '<div class="streak-banner" style="margin-top:0.9rem;margin-bottom:0;"><span class="icon-circle sm">' + GOAL_KIND_ICONS.consistency + '</span><span class="streak-sub" style="color:var(--brand-subtle-text);font-weight:600;">' + escapeHtml(data.encouragement) + "</span></div>";
+    '<button type="button" class="snapshot-coach-row" id="btn-snapshot-coach">' +
+    '<span class="icon-circle sm">' + SPARKLE_SVG + "</span>" +
+    '<span class="msg">' + escapeHtml(data.encouragement) + "</span>" +
+    "</button>";
+
+  const menuBtn = document.getElementById("btn-period-select");
+  const menu = document.getElementById("period-menu");
+  menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); });
+  menu.querySelectorAll("button").forEach((b) => {
+    b.addEventListener("click", () => {
+      menu.classList.add("hidden");
+      if (b.dataset.period === state.logPeriod) return;
+      state.logPeriod = b.dataset.period;
+      loadLogSummary(3);
+    });
+  });
+  document.getElementById("btn-snapshot-coach").addEventListener("click", () => { document.querySelector('.tab-bar [data-tab="view-program"]').click(); });
+}
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("period-menu");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && e.target.id !== "btn-period-select") menu.classList.add("hidden");
+});
+
+async function loadLogHistory() {
+  const list = document.getElementById("log-history-list");
+  list.innerHTML = Array.from({ length: 4 }, () => '<div class="session-skeleton" style="width:100%;height:60px;margin-bottom:0.65rem;"></div>').join("");
+  let data;
+  try {
+    data = await api("/log/summary?recent_limit=500&period=" + state.logPeriod);
+  } catch (e) {
+    list.innerHTML = '<div class="empty-note">Couldn\'t load your history. <button type="button" class="btn subtle small" id="btn-retry-history" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-history").addEventListener("click", loadLogHistory);
+    return;
+  }
+  if (!data.recent_sessions.length) {
+    list.innerHTML = '<div class="empty-note">No sessions yet. Your completed workouts and runs will appear here.</div>';
+    return;
+  }
+  list.innerHTML = data.recent_sessions
+    .map((s) => {
+      const icon = s.type === "lift" ? PROGRAM_TODAY_ICONS.lift : PROGRAM_TODAY_ICONS.run;
+      const dateLabel = new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      const metric = s.type === "lift"
+        ? s.exercise_count + " exercises" + (s.volume_kg ? " · " + fmtWeight(s.volume_kg) + " vol" : "")
+        : (s.distance_km ? s.distance_km + " km · " : "") + s.duration_min + " min";
+      return (
+        '<div class="session-row">' +
+        '<div class="icon-circle md">' + icon + "</div>" +
+        '<div style="flex:1;min-width:0;"><div class="name">' + escapeHtml(s.title) + "</div>" +
+        '<div class="meta tnum">' + dateLabel + " · " + metric + "</div></div>" +
+        '<span class="activity-badge ' + s.type + '">' + s.type.toUpperCase() + "</span>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
-document.getElementById("btn-log-view-all").addEventListener("click", () => loadLogSummary(20));
+document.getElementById("btn-log-view-all").addEventListener("click", () => { showView("view-log-history"); loadLogHistory(); });
+document.getElementById("btn-log-history").addEventListener("click", () => { showView("view-log-history"); loadLogHistory(); });
 
-document.getElementById("btn-open-lift").addEventListener("click", () => { openLiftSession(); });
+document.getElementById("btn-open-lift").addEventListener("click", () => {
+  const status = state.today.workout_status;
+  if (status && status.state === "active") { openLiftSession(status.session_id); return; }
+  showView("view-lift-start");
+  loadLiftStartOptions();
+});
 document.getElementById("btn-open-run").addEventListener("click", () => {
+  const status = state.today && state.today.workout_status;
+  if (status && status.state === "active") {
+    if (!confirm("You have a lift workout in progress. Starting a run leaves it active in the background — you can resume it anytime from the Log tab. Continue?")) return;
+  }
+  openRunEntry();
+});
+
+function openRunEntry() {
   const reco = state.today && state.today.recommendation;
-  document.getElementById("run-kicker").textContent = reco && reco.session_type === "run" ? labelForRunType(reco.prescription.run_type) : "Freeform run";
+  const kicker = document.getElementById("run-kicker");
+  if (reco && reco.session_type === "run") {
+    kicker.textContent = "Recommended Today · " + labelForRunType(reco.prescription.run_type) + " · " + reco.prescription.duration_min + " min";
+  } else {
+    kicker.textContent = "Freeform run";
+  }
   showView("view-run");
+}
+
+// --------------------------------------------------------- start lift session ----
+
+async function loadLiftStartOptions() {
+  const reco = state.today.recommendation;
+  const status = state.today.workout_status;
+  const recCard = document.getElementById("lift-start-recommended-card");
+
+  if (reco.session_type === "lift" && status.state === "none") {
+    const p = reco.prescription;
+    recCard.innerHTML =
+      '<span class="kicker">Recommended Today</span>' +
+      '<div style="font-weight:700;font-size:1rem;font-family:var(--font-display);">' + escapeHtml(p.label || "Lift session") + "</div>" +
+      '<div class="tnum" style="font-size:0.78rem;color:var(--neutral-2);margin-top:0.2rem;">' + p.exercises.length + " exercises</div>" +
+      '<button type="button" class="btn primary" id="btn-start-planned-lift" style="margin-top:0.8rem;">Start Planned Workout</button>';
+    recCard.classList.remove("hidden");
+    document.getElementById("btn-start-planned-lift").addEventListener("click", () => openLiftSession());
+  } else {
+    recCard.classList.add("hidden");
+    recCard.innerHTML = "";
+  }
+
+  const list = document.getElementById("lift-start-saved-list");
+  list.innerHTML = '<div class="empty-note">Loading…</div>';
+  try {
+    const days = await api("/log/lift-days");
+    const otherDays = days.filter((d) => !(reco.session_type === "lift" && d.is_today));
+    if (!otherDays.length) {
+      list.innerHTML = '<div class="empty-note">No other lift days scheduled this week.</div>';
+      return;
+    }
+    const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    list.innerHTML = otherDays
+      .map(
+        (d) =>
+          '<button type="button" class="saved-workout-row" data-weekday="' + d.weekday + '">' +
+          '<div class="icon-circle sm">' + PROGRAM_TODAY_ICONS.lift + "</div>" +
+          '<div style="flex:1;min-width:0;"><div class="name">' + escapeHtml(d.label) + "</div>" +
+          '<div class="meta">' + WEEKDAY_NAMES[d.weekday] + " · " + d.exercise_count + " exercises</div></div>" +
+          '<div class="arrow"><svg viewBox="0 0 20 20" width="16" height="16" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
+          "</button>"
+      )
+      .join("");
+    list.querySelectorAll(".saved-workout-row").forEach((rowEl) => {
+      rowEl.addEventListener("click", async () => {
+        rowEl.style.opacity = "0.6";
+        try {
+          const prescription = await api("/log/lift-days/" + rowEl.dataset.weekday + "/prescription");
+          await openLiftSession(undefined, prescription);
+        } catch (e) {
+          toast("Couldn't load that workout — try again");
+          rowEl.style.opacity = "1";
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML =
+      '<div class="empty-note">Couldn\'t load saved workouts. <button type="button" class="btn subtle small" id="btn-retry-saved-workouts" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-saved-workouts").addEventListener("click", loadLiftStartOptions);
+  }
+}
+
+document.getElementById("btn-lift-start-empty").addEventListener("click", () => {
+  openLiftSession(undefined, { label: "Freeform", exercises: [] });
 });
 
 // ------------------------------------------------------------ log a lift ----
@@ -679,10 +894,11 @@ async function ensureExercisesLoaded() {
   return state.exercises;
 }
 
-async function openLiftSession(resumeSessionId) {
+async function openLiftSession(resumeSessionId, customPrescription) {
   const reco = state.today.recommendation;
-  const exercises = reco.session_type === "lift" ? reco.prescription.exercises : [];
-  if (!exercises.length && !resumeSessionId) toast("No lift prescribed today — add exercises below to log freely");
+  const prescription = customPrescription || (reco.session_type === "lift" ? reco.prescription : { label: "Freeform", exercises: [] });
+  const exercises = prescription.exercises || [];
+  if (!exercises.length && !resumeSessionId) toast("No exercises prescribed — add exercises below to log freely");
 
   const baseExercises = exercises.map((e) => Object.assign({}, e, { loggedSets: [] }));
   let sessionId;
@@ -704,7 +920,7 @@ async function openLiftSession(resumeSessionId) {
       }
     });
   } else {
-    const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: reco.prescription.label || "Freeform" }) });
+    const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: prescription.label || "Freeform" }) });
     sessionId = session.id;
   }
 
@@ -712,7 +928,7 @@ async function openLiftSession(resumeSessionId) {
   state.activeWorkoutExercises = baseExercises;
 
   document.getElementById("lift-session-kicker").textContent = state.activeWorkoutExercises.length ? "In progress" : "Freeform";
-  document.getElementById("lift-session-title").textContent = reco.prescription.label || "Workout";
+  document.getElementById("lift-session-title").textContent = prescription.label || "Workout";
 
   await ensureExercisesLoaded();
   populateAddExerciseSelect();
@@ -1038,32 +1254,59 @@ const MEAL_SLOT_ICONS = {
   snack: MEAL_SLOT_MOON_ICON,
 };
 
+// ---------------------------------------------------------- nutrition date ----
+
+function localDateStr(d) {
+  d = d || new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function nutritionDateLabel(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  if (dateStr === localDateStr()) return "Today, " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (dateStr === localDateStr(new Date(Date.now() - 86400000))) return "Yesterday, " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+}
+
+// Every nutrition fetch below is tagged with the sequence number active when it
+// started. If a newer load (a fast double-tap, a date change while a fetch is
+// still in flight, etc.) starts before this one's response lands, its result is
+// discarded instead of overwriting the DOM with stale data out of order --
+// that's what previously let macro totals and the "Logged Today" list disagree.
+let nutritionLoadSeq = 0;
+
 async function loadFoodToday() {
-  const data = await api("/nutrition/today");
-  const d = new Date(data.date + "T00:00:00");
-  document.getElementById("food-date").textContent = d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  if (!state.nutritionDate) state.nutritionDate = localDateStr();
+  document.getElementById("nutrition-date-input").value = state.nutritionDate;
+  document.getElementById("nutrition-date-text").textContent = nutritionDateLabel(state.nutritionDate);
+  const seq = ++nutritionLoadSeq;
+  await Promise.all([loadNutritionMacros(seq), loadRecentMeals(seq), loadSmartNutritionPlan(seq), loadNutritionHydrationCard(seq)]);
+}
+
+async function loadNutritionMacros(seq) {
+  seq = seq || ++nutritionLoadSeq;
+  const data = await api("/nutrition/today?date=" + state.nutritionDate);
+  if (seq !== nutritionLoadSeq) return;
+  state.nutritionDayCache = data;
 
   const totals = data.totals;
   document.getElementById("food-total-calories").textContent = Math.round(totals.calories);
   document.getElementById("food-total-protein").textContent = Math.round(totals.protein_g) + "g";
   document.getElementById("food-total-carbs").textContent = Math.round(totals.carbs_g) + "g";
   document.getElementById("food-total-fat").textContent = Math.round(totals.fat_g) + "g";
-  document.getElementById("food-micro-line").textContent =
-    "Fiber " + Math.round(totals.fiber_g) + "g · Sugar " + Math.round(totals.sugar_g) +
-    "g · Sodium " + Math.round(totals.sodium_mg) + "mg";
 
   const goal = state.settings && state.settings.daily_calorie_goal_kcal;
   const proteinTarget = goal ? (goal * MACRO_SPLIT.protein) / MACRO_KCAL_PER_G.protein : null;
   const carbsTarget = goal ? (goal * MACRO_SPLIT.carbs) / MACRO_KCAL_PER_G.carbs : null;
   const fatTarget = goal ? (goal * MACRO_SPLIT.fat) / MACRO_KCAL_PER_G.fat : null;
-  const setSub = (key, target, unit) => {
+  const setSub = (key, target, unit, value) => {
     document.getElementById("food-" + key + "-sub").textContent = target ? "/ " + Math.round(target).toLocaleString() + (unit || "") : "/ —";
-    document.getElementById("food-" + key + "-bar").style.width = (target ? Math.min(100, Math.round(100 * (key === "calories" ? totals.calories : totals[key + "_g"]) / target)) : 0) + "%";
+    document.getElementById("food-" + key + "-bar").style.width = (target ? Math.min(100, Math.round((100 * value) / target)) : 0) + "%";
   };
-  setSub("calories", goal, "");
-  setSub("protein", proteinTarget, "g");
-  setSub("carbs", carbsTarget, "g");
-  setSub("fat", fatTarget, "g");
+  setSub("calories", goal, "", totals.calories);
+  setSub("protein", proteinTarget, "g", totals.protein_g);
+  setSub("carbs", carbsTarget, "g", totals.carbs_g);
+  setSub("fat", fatTarget, "g", totals.fat_g);
 
   const proteinKcal = totals.protein_g * MACRO_KCAL_PER_G.protein;
   const carbsKcal = totals.carbs_g * MACRO_KCAL_PER_G.carbs;
@@ -1072,55 +1315,27 @@ async function loadFoodToday() {
   document.getElementById("log-food-rings").innerHTML =
     macroRingItem("C", (100 * carbsKcal) / kcalSum) + macroRingItem("P", (100 * proteinKcal) / kcalSum) + macroRingItem("F", (100 * fatKcal) / kcalSum);
 
-  const recentMealsRow = document.getElementById("recent-meals-row");
-  const mealGroups = {};
-  data.entries.forEach((e) => {
-    const slot = MEAL_SLOTS.includes(e.meal_slot) ? e.meal_slot : "snack";
-    (mealGroups[slot] = mealGroups[slot] || []).push(e);
-  });
-  const activeSlots = MEAL_SLOTS.filter((slot) => mealGroups[slot] && mealGroups[slot].length);
-  if (!activeSlots.length) {
-    recentMealsRow.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
-  } else {
-    recentMealsRow.innerHTML = activeSlots
-      .map((slot) => {
-        const items = mealGroups[slot];
-        const kcal = Math.round(items.reduce((s, e) => s + e.calories, 0));
-        const p = Math.round(items.reduce((s, e) => s + e.protein_g, 0));
-        const c = Math.round(items.reduce((s, e) => s + e.carbs_g, 0));
-        const f = Math.round(items.reduce((s, e) => s + e.fat_g, 0));
-        const title = items.length === 1 ? items[0].name : items[0].name + " + " + (items.length - 1) + " more";
-        return (
-          '<div class="log-session-card" style="width:170px;">' +
-          '<div style="display:flex;align-items:center;gap:0.35rem;color:var(--brand);font-size:0.7rem;font-weight:700;text-transform:uppercase;">' + MEAL_SLOT_ICONS[slot] + MEAL_SLOT_LABELS[slot] + "</div>" +
-          '<div class="name" style="margin-top:0.4rem;">' + escapeHtml(title) + "</div>" +
-          '<div class="date tnum">' + kcal + " kcal · " + p + "P " + c + "C " + f + "F</div>" +
-          "</div>"
-        );
-      })
-      .join("");
-  }
-
-  const tipsBody = document.getElementById("nutrition-tips-body");
-  tipsBody.innerHTML = data.coaching && data.coaching.length
-    ? data.coaching.map((msg) => "<div style='margin-top:0.3rem;'>" + escapeHtml(msg) + "</div>").join("")
-    : "Log a meal to see personalized tips here.";
-
-  const dailyPct = goal ? Math.min(100, Math.round((100 * totals.calories) / goal)) : 0;
-  document.getElementById("daily-progress-ring").innerHTML = ringSvg(dailyPct, "var(--brand)", 56, 6);
+  // Ring fill never exceeds 100%, but the label always shows the real percentage --
+  // going over target isn't visually broken or treated as a failure state.
+  const dailyPct = goal ? Math.round((100 * totals.calories) / goal) : 0;
+  document.getElementById("daily-progress-ring").innerHTML = ringSvg(Math.max(0, Math.min(100, dailyPct)), "var(--brand)", 56, 6);
   document.getElementById("daily-progress-pct").textContent = goal ? dailyPct + "%" : "—";
 
   const streak = data.logging_streak || 0;
   document.getElementById("food-streak-title").textContent = streak + " Day Streak";
-  document.getElementById("food-streak-banner").querySelector(".streak-sub").textContent =
+  document.getElementById("food-streak-sub").textContent =
     streak > 0 ? "Keep it going! You're building great habits." : "Log a meal today to start building a streak.";
 
+  document.getElementById("logged-today-label").textContent = data.is_today ? "Logged Today" : "Logged on " + nutritionDateLabel(state.nutritionDate);
+  renderDailyLogList(data);
+}
+
+function renderDailyLogList(data) {
   const list = document.getElementById("food-log-list");
   if (!data.entries.length) {
-    list.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
+    list.innerHTML = '<div class="empty-note">Nothing logged ' + (data.is_today ? "yet today" : "that day") + ".</div>";
     return;
   }
-
   const groups = {};
   data.entries.forEach((e) => {
     const slot = MEAL_SLOTS.includes(e.meal_slot) ? e.meal_slot : "snack";
@@ -1133,6 +1348,8 @@ async function loadFoodToday() {
     ))
     .join("");
 
+  // loadNutritionMacros() re-fetches the day and calls renderDailyLogList() itself,
+  // so a single call after each edit keeps macro cards, rings, and this list in sync.
   list.querySelectorAll(".food-servings-input").forEach((input) => {
     input.addEventListener("focus", () => input.select());
     input.addEventListener("change", async () => {
@@ -1143,17 +1360,421 @@ async function loadFoodToday() {
       }
       await api("/nutrition/log/" + input.dataset.entry, { method: "PATCH", body: JSON.stringify({ servings: val }) });
       toast("Updated");
-      loadFoodToday();
+      loadNutritionMacros();
     });
   });
   list.querySelectorAll(".set-delete-btn[data-entry]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       await api("/nutrition/log/" + btn.dataset.entry, { method: "DELETE" });
       toast("Removed");
-      loadFoodToday();
+      loadNutritionMacros();
     });
   });
 }
+
+// Macro cards and Daily Progress jump straight to the always-visible, always-
+// editable "Logged Today" list right below the hero card -- deleting a food
+// should take exactly as few taps as adding one did, not a separate drill-down.
+function scrollToLoggedToday() {
+  document.getElementById("logged-today-label").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+["calories", "protein", "carbs", "fat"].forEach((key) => {
+  document.getElementById("macro-card-" + key).addEventListener("click", scrollToLoggedToday);
+});
+document.getElementById("daily-progress-card").addEventListener("click", scrollToLoggedToday);
+
+// -------------------------------------------------------------- recent meals ----
+
+async function loadRecentMeals(seq) {
+  seq = seq || ++nutritionLoadSeq;
+  const row = document.getElementById("recent-meals-row");
+  row.innerHTML = sessionSkeletons(3);
+  let data;
+  try {
+    data = await api("/nutrition/recent-meals?limit=3");
+  } catch (e) {
+    if (seq !== nutritionLoadSeq) return;
+    row.innerHTML =
+      '<div class="empty-note">Couldn\'t load recent meals. <button type="button" class="btn subtle small" id="btn-retry-recent-meals" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-recent-meals").addEventListener("click", () => loadRecentMeals());
+    return;
+  }
+  if (seq !== nutritionLoadSeq) return;
+  state.recentMealsCache = data.meals;
+  if (!data.meals.length) {
+    row.innerHTML =
+      '<div class="empty-note" style="max-width:240px;">No recent meals yet. Meals you log will appear here for faster reuse.<br>' +
+      '<button type="button" class="btn subtle small" id="btn-browse-foods" style="width:auto;margin-top:0.5rem;">Browse Foods</button></div>';
+    document.getElementById("btn-browse-foods").addEventListener("click", () => { resetFoodAddView(); showView("view-food-add"); });
+    return;
+  }
+  row.innerHTML = data.meals
+    .map((m, i) => (
+      '<button type="button" class="log-session-card" style="width:170px;" data-meal-idx="' + i + '">' +
+      '<div style="display:flex;align-items:center;gap:0.35rem;color:var(--brand);font-size:0.7rem;font-weight:700;text-transform:uppercase;">' + MEAL_SLOT_ICONS[m.meal_slot] + MEAL_SLOT_LABELS[m.meal_slot] + "</div>" +
+      '<div class="name" style="margin-top:0.4rem;">' + escapeHtml(m.name) + "</div>" +
+      '<div class="date tnum">' + Math.round(m.calories) + " kcal · " + Math.round(m.protein_g) + "P " + Math.round(m.carbs_g) + "C " + Math.round(m.fat_g) + "F</div>" +
+      "</button>"
+    ))
+    .join("");
+  row.querySelectorAll("[data-meal-idx]").forEach((card) => {
+    card.addEventListener("click", () => showRecentMealConfirm(state.recentMealsCache[parseInt(card.dataset.mealIdx, 10)]));
+  });
+}
+
+function showRecentMealConfirm(meal) {
+  const panel = document.getElementById("recent-meal-confirm-panel");
+  panel.innerHTML =
+    '<div style="font-weight:700;font-size:0.9rem;">' + escapeHtml(meal.name) + "</div>" +
+    '<div class="tnum" style="font-size:0.8rem;color:var(--neutral-2);margin-top:0.2rem;">' + Math.round(meal.calories) + " kcal · P" + Math.round(meal.protein_g) + "g C" + Math.round(meal.carbs_g) + "g F" + Math.round(meal.fat_g) + "g</div>" +
+    '<button type="button" class="btn primary small" id="btn-recent-meal-add" style="width:auto;margin-top:0.7rem;">Add to Selected Date</button>';
+  panel.classList.remove("hidden");
+  document.getElementById("btn-recent-meal-add").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api("/nutrition/log", {
+        method: "POST",
+        body: JSON.stringify({ food_item_id: meal.food_item_id, servings: meal.servings, meal_slot: meal.meal_slot, date: state.nutritionDate }),
+      });
+      toast(meal.name + " added");
+      panel.classList.add("hidden");
+      loadFoodToday();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+document.getElementById("btn-food-see-all").addEventListener("click", async () => {
+  showView("view-nutrition-recent-meals");
+  const list = document.getElementById("recent-meals-full-list");
+  list.innerHTML = '<div class="empty-note">Loading…</div>';
+  const data = await api("/nutrition/recent-meals?limit=30");
+  if (!data.meals.length) {
+    list.innerHTML = '<div class="empty-note">No recent meals yet.</div>';
+    return;
+  }
+  list.innerHTML = data.meals
+    .map((m, i) => {
+      const dateLabel = new Date(m.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      return (
+        '<div class="session-row">' +
+        '<div class="icon-circle md">' + MEAL_SLOT_ICONS[m.meal_slot] + "</div>" +
+        '<div style="flex:1;min-width:0;"><div class="name">' + escapeHtml(m.name) + "</div>" +
+        '<div class="meta tnum">' + dateLabel + " · " + Math.round(m.calories) + " kcal · P" + Math.round(m.protein_g) + " C" + Math.round(m.carbs_g) + " F" + Math.round(m.fat_g) + "</div></div>" +
+        '<button type="button" class="btn subtle small" data-fullmeal-idx="' + i + '" style="width:auto;">Add</button>' +
+        "</div>"
+      );
+    })
+    .join("");
+  list.querySelectorAll("[data-fullmeal-idx]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const meal = data.meals[parseInt(btn.dataset.fullmealIdx, 10)];
+      btn.disabled = true;
+      try {
+        await api("/nutrition/log", {
+          method: "POST",
+          body: JSON.stringify({ food_item_id: meal.food_item_id, servings: meal.servings, meal_slot: meal.meal_slot, date: state.nutritionDate }),
+        });
+        toast(meal.name + " added to " + nutritionDateLabel(state.nutritionDate));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+});
+
+// --------------------------------------------------------- smart nutrition plan ----
+
+async function loadSmartNutritionPlan(seq) {
+  seq = seq || ++nutritionLoadSeq;
+  const card = document.getElementById("smart-nutrition-plan-card");
+  card.innerHTML = '<div class="empty-note">Loading…</div>';
+  let data;
+  try {
+    data = await api("/nutrition/recommendation?date=" + state.nutritionDate);
+  } catch (e) {
+    if (seq !== nutritionLoadSeq) return;
+    card.innerHTML = '<div class="empty-note">Couldn\'t load your Smart Nutrition Plan.</div>';
+    return;
+  }
+  if (seq !== nutritionLoadSeq) return;
+  let html =
+    '<div class="smart-plan-head"><div class="icon-circle md">' + SPARKLE_SVG.replace('width="16" height="16"', 'width="18" height="18"') + "</div>" +
+    '<div class="smart-plan-title-row"><span class="title">Smart Nutrition Plan</span><span class="smart-plan-badge">AI Coach</span></div></div>' +
+    '<div class="smart-plan-headline">' + escapeHtml(data.headline) + "</div>" +
+    (data.detail ? '<div class="smart-plan-detail">' + escapeHtml(data.detail) + "</div>" : "");
+  if (!data.configured) {
+    html += '<button type="button" class="btn subtle small" id="btn-smart-plan-set-goal" style="width:auto;margin-top:0.7rem;">Set Calorie Goal</button>';
+  }
+  if (data.recommendation) {
+    const r = data.recommendation;
+    html +=
+      '<div class="smart-plan-rec" id="smart-plan-rec-card">' +
+      '<div class="rec-icon recipe-gradient-' + r.gradient_key + '">' + r.icon_emoji + "</div>" +
+      '<div class="rec-body"><div class="rec-label">Recommended</div>' +
+      '<div class="rec-name">' + escapeHtml(r.name) + "</div>" +
+      '<div class="rec-macros tnum">' + Math.round(r.calories) + " kcal · " + Math.round(r.protein_g) + "P " + Math.round(r.carbs_g) + "C " + Math.round(r.fat_g) + "F</div></div>" +
+      '<button type="button" class="btn primary small" id="btn-smart-plan-add" style="width:auto;">Add to Log</button>' +
+      "</div>";
+  }
+  card.innerHTML = html;
+
+  if (!data.configured) {
+    document.getElementById("btn-smart-plan-set-goal").addEventListener("click", () => {
+      document.getElementById("edit-targets-calorie-input").value = "";
+      const panel = document.getElementById("nutrition-edit-targets-panel");
+      panel.classList.remove("hidden");
+      panel.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+  if (data.recommendation) {
+    document.getElementById("smart-plan-rec-card").addEventListener("click", (e) => {
+      if (e.target.closest("#btn-smart-plan-add")) return;
+      openRecipeDetail(data.recommendation.id);
+    });
+    document.getElementById("btn-smart-plan-add").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        await api("/recipes/" + data.recommendation.id + "/log", {
+          method: "POST",
+          body: JSON.stringify({ servings: 1, meal_slot: defaultMealSlot(), date: state.nutritionDate }),
+        });
+        toast(data.recommendation.name + " added");
+        loadFoodToday();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+}
+
+// -------------------------------------------------------------------- hydration ----
+
+async function loadNutritionHydrationCard(seq) {
+  seq = seq || ++nutritionLoadSeq;
+  const data = await api("/hydration/today?date=" + state.nutritionDate);
+  if (seq !== nutritionLoadSeq) return;
+  const pct = data.goal_oz ? Math.round((100 * data.ounces) / data.goal_oz) : 0;
+  document.getElementById("hydration-ring").innerHTML = ringSvg(Math.max(0, Math.min(100, pct)), "var(--recovery)", 56, 6);
+  document.getElementById("hydration-pct").textContent = ozToDisplay(data.ounces) + hydrationUnit();
+  document.getElementById("hydration-sub").textContent = "of " + ozToDisplay(data.goal_oz) + " " + hydrationUnit() + " goal";
+}
+
+document.getElementById("hydration-card").addEventListener("click", () => {
+  const panel = document.getElementById("nutrition-hydration-quickadd-panel");
+  if (!panel.classList.contains("hidden")) {
+    panel.classList.add("hidden");
+    return;
+  }
+  const isMetric = state.units !== "imperial";
+  const options = isMetric ? [250, 500, 750] : [8, 16, 24];
+  panel.innerHTML =
+    '<div style="font-size:0.78rem;color:var(--neutral-2);margin-bottom:0.5rem;">Add water (' + hydrationUnit() + ")</div>" +
+    '<div class="qty-row">' + options.map((v) => '<button type="button" class="btn subtle small" data-oz="' + v + '">+' + v + "</button>").join("") + "</div>";
+  panel.classList.remove("hidden");
+  panel.querySelectorAll("[data-oz]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const displayVal = parseFloat(btn.dataset.oz);
+      const ounces = isMetric ? displayVal / 29.5735 : displayVal;
+      await api("/hydration/today", { method: "POST", body: JSON.stringify({ ounces: ounces, date: state.nutritionDate }) });
+      panel.classList.add("hidden");
+      loadNutritionHydrationCard();
+      toast("Logged " + displayVal + " " + hydrationUnit());
+    });
+  });
+});
+
+// ------------------------------------------------------------------- streak ----
+
+document.getElementById("nutrition-streak-card").addEventListener("click", () => {
+  const panel = document.getElementById("nutrition-streak-detail-panel");
+  if (!panel.classList.contains("hidden")) {
+    panel.classList.add("hidden");
+    return;
+  }
+  const data = state.nutritionDayCache || {};
+  const current = data.logging_streak || 0;
+  const longest = data.longest_streak || 0;
+  panel.innerHTML =
+    '<div class="stat-row" style="margin-bottom:0.6rem;">' +
+    '<div class="stat-tile"><div class="label">Current</div><div class="value tnum">' + current + '</div></div>' +
+    '<div class="stat-tile"><div class="label">Longest</div><div class="value tnum">' + longest + "</div></div></div>" +
+    '<div style="font-size:0.78rem;color:var(--neutral-2);line-height:1.4;">A day counts toward your streak when at least one food entry is logged on it. Missing a day resets the current streak — your longest streak is always kept.</div>';
+  panel.classList.remove("hidden");
+});
+
+// -------------------------------------------------------------- date + overflow ----
+
+function openNutritionDatePicker() {
+  const input = document.getElementById("nutrition-date-input");
+  input.value = state.nutritionDate;
+  if (input.showPicker) {
+    try {
+      input.showPicker();
+      return;
+    } catch (e) {
+      // fall through to the plain click below on browsers that reject showPicker()
+    }
+  }
+  input.click();
+}
+document.getElementById("btn-nutrition-date").addEventListener("click", openNutritionDatePicker);
+document.getElementById("nutrition-date-label").addEventListener("click", openNutritionDatePicker);
+document.getElementById("nutrition-date-input").addEventListener("change", (e) => {
+  if (!e.target.value) return;
+  state.nutritionDate = e.target.value;
+  loadFoodToday();
+});
+
+function exportDailySummary(data) {
+  const lines = ["Toci Nutrition Summary — " + nutritionDateLabel(state.nutritionDate), ""];
+  const t = data.totals;
+  lines.push("Calories: " + Math.round(t.calories) + " kcal");
+  lines.push("Protein: " + Math.round(t.protein_g) + " g");
+  lines.push("Carbs: " + Math.round(t.carbs_g) + " g");
+  lines.push("Fat: " + Math.round(t.fat_g) + " g");
+  lines.push("Fiber: " + Math.round(t.fiber_g) + " g · Sugar: " + Math.round(t.sugar_g) + " g · Sodium: " + Math.round(t.sodium_mg) + " mg");
+  lines.push("");
+  if (data.entries.length) {
+    lines.push("Logged items:");
+    data.entries.forEach((e) => {
+      lines.push("- " + e.name + " (" + MEAL_SLOT_LABELS[e.meal_slot] + "): " + Math.round(e.calories) + " kcal, P" + Math.round(e.protein_g) + " C" + Math.round(e.carbs_g) + " F" + Math.round(e.fat_g));
+    });
+  } else {
+    lines.push("Nothing logged this day.");
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "toci-nutrition-" + state.nutritionDate + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("Summary exported");
+}
+
+document.getElementById("btn-nutrition-overflow").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById("nutrition-overflow-menu");
+  const isHidden = menu.classList.contains("hidden");
+  document.getElementById("nutrition-edit-targets-panel").classList.add("hidden");
+  document.getElementById("nutrition-copy-day-panel").classList.add("hidden");
+  if (!isHidden) {
+    menu.classList.add("hidden");
+    return;
+  }
+  menu.innerHTML =
+    '<button type="button" class="overflow-menu-item" id="ov-edit-targets">Edit Daily Targets</button>' +
+    '<button type="button" class="overflow-menu-item" id="ov-copy-day">Copy Meals From Another Day</button>' +
+    '<button type="button" class="overflow-menu-item" id="ov-nutrition-settings">Nutrition Settings</button>' +
+    '<button type="button" class="overflow-menu-item" id="ov-export-summary">Export Daily Summary</button>' +
+    '<div class="overflow-menu-divider"></div>' +
+    '<button type="button" class="overflow-menu-item destructive" id="ov-clear-day">Clear Day\'s Log</button>';
+  menu.classList.remove("hidden");
+
+  document.getElementById("ov-edit-targets").addEventListener("click", () => {
+    menu.classList.add("hidden");
+    document.getElementById("edit-targets-calorie-input").value = (state.settings && state.settings.daily_calorie_goal_kcal) || "";
+    const panel = document.getElementById("nutrition-edit-targets-panel");
+    panel.classList.remove("hidden");
+    panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  document.getElementById("ov-copy-day").addEventListener("click", () => {
+    menu.classList.add("hidden");
+    document.getElementById("copy-day-from-input").value = localDateStr(new Date(Date.now() - 86400000));
+    setActiveChip(document.getElementById("copy-day-meal-chips"), "");
+    const panel = document.getElementById("nutrition-copy-day-panel");
+    panel.classList.remove("hidden");
+    panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  document.getElementById("ov-nutrition-settings").addEventListener("click", () => {
+    menu.classList.add("hidden");
+    document.querySelector('.tab-bar [data-tab="view-settings"]').click();
+    switchProfileSegment("preferences");
+  });
+  document.getElementById("ov-export-summary").addEventListener("click", async () => {
+    menu.classList.add("hidden");
+    const data = state.nutritionDayCache && state.nutritionDayCache.date === state.nutritionDate
+      ? state.nutritionDayCache
+      : await api("/nutrition/today?date=" + state.nutritionDate);
+    exportDailySummary(data);
+  });
+  document.getElementById("ov-clear-day").addEventListener("click", async () => {
+    menu.classList.add("hidden");
+    if (!confirm("Clear all food logged on " + nutritionDateLabel(state.nutritionDate) + "? Saved meals, recipes, and targets are not affected. This can't be undone.")) return;
+    await api("/nutrition/log?date=" + state.nutritionDate, { method: "DELETE" });
+    toast("Day's log cleared");
+    loadFoodToday();
+  });
+});
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("nutrition-overflow-menu");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && e.target.id !== "btn-nutrition-overflow") {
+    menu.classList.add("hidden");
+  }
+});
+
+document.getElementById("btn-save-targets").addEventListener("click", async () => {
+  const val = parseFloat(document.getElementById("edit-targets-calorie-input").value);
+  if (Number.isNaN(val) || val <= 0) {
+    toast("Enter a valid calorie target");
+    return;
+  }
+  await api("/settings", { method: "PATCH", body: JSON.stringify({ daily_calorie_goal_kcal: val }) });
+  state.settings.daily_calorie_goal_kcal = val;
+  document.getElementById("nutrition-edit-targets-panel").classList.add("hidden");
+  toast("Daily target updated");
+  loadFoodToday();
+});
+
+document.getElementById("copy-day-meal-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  setActiveChip(document.getElementById("copy-day-meal-chips"), chip.dataset.val);
+});
+document.getElementById("btn-do-copy-day").addEventListener("click", async () => {
+  const fromDate = document.getElementById("copy-day-from-input").value;
+  if (!fromDate) {
+    toast("Choose a date to copy from");
+    return;
+  }
+  const mealChip = document.querySelector("#copy-day-meal-chips .chip.active");
+  const result = await api("/nutrition/copy", {
+    method: "POST",
+    body: JSON.stringify({ from_date: fromDate, meal_slot: mealChip && mealChip.dataset.val ? mealChip.dataset.val : null, to_date: state.nutritionDate }),
+  });
+  if (!result.copied) {
+    toast("Nothing logged on that day to copy");
+    return;
+  }
+  toast("Copied " + result.copied + " item" + (result.copied === 1 ? "" : "s"));
+  document.getElementById("nutrition-copy-day-panel").classList.add("hidden");
+  loadFoodToday();
+});
+
+// ---------------------------------------------------------------- segments ----
+
+function switchNutritionSegment(segment) {
+  state.nutritionSegment = segment;
+  document.querySelectorAll("#food-segmented-tabs .seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.nutritionSeg === segment));
+  document.querySelectorAll(".nutrition-segment").forEach((el) => el.classList.toggle("hidden", el.dataset.nutritionSeg !== segment));
+  if (segment === "savedMeals") {
+    document.getElementById("new-meal-builder").classList.add("hidden");
+    loadSavedMeals();
+  }
+  if (segment === "recipes") loadRecipeHub();
+  if (segment === "smartCart") loadShoppingCart();
+}
+document.getElementById("food-segmented-tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg-btn");
+  if (btn) switchNutritionSegment(btn.dataset.nutritionSeg);
+});
 
 document.getElementById("btn-open-add-food").addEventListener("click", () => {
   resetFoodAddView();
@@ -1163,24 +1784,11 @@ document.getElementById("btn-open-add-food-icon").addEventListener("click", () =
   resetFoodAddView();
   showView("view-food-add");
 });
-document.getElementById("btn-food-see-all").addEventListener("click", () => {
-  document.getElementById("food-log-list").scrollIntoView({ behavior: "smooth", block: "start" });
-});
 document.getElementById("btn-fab-add-food").addEventListener("click", () => {
   resetFoodAddView();
   showView("view-food-add");
 });
 document.querySelector("#view-food-add [data-back]").addEventListener("click", () => stopBarcodeScan());
-
-document.getElementById("btn-copy-yesterday").addEventListener("click", async () => {
-  const result = await api("/nutrition/copy", { method: "POST", body: JSON.stringify({ from_date: "yesterday" }) });
-  if (!result.copied) {
-    toast("Nothing logged yesterday to copy");
-    return;
-  }
-  toast("Copied " + result.copied + " item" + (result.copied === 1 ? "" : "s") + " from yesterday");
-  loadFoodToday();
-});
 
 function setActiveChip(container, val) {
   container.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.val === val));
@@ -1239,27 +1847,36 @@ document.getElementById("quickadd-meal-chips").addEventListener("click", (e) => 
   setActiveChip(document.getElementById("quickadd-meal-chips"), chip.dataset.val);
 });
 
-document.getElementById("btn-quick-add").addEventListener("click", async () => {
+document.getElementById("btn-quick-add").addEventListener("click", async (e) => {
   const calories = parseFloat(document.getElementById("quickadd-calories").value);
   if (Number.isNaN(calories)) {
     toast("Enter calories first");
     return;
   }
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
   const mealChip = document.querySelector("#quickadd-meal-chips .chip.active");
-  await api("/nutrition/quick-add", {
-    method: "POST",
-    body: JSON.stringify({
-      label: document.getElementById("quickadd-label").value.trim() || "Quick Add",
-      calories: calories,
-      protein_g: parseFloat(document.getElementById("quickadd-protein").value) || 0,
-      carbs_g: parseFloat(document.getElementById("quickadd-carbs").value) || 0,
-      fat_g: parseFloat(document.getElementById("quickadd-fat").value) || 0,
-      meal_slot: mealChip ? mealChip.dataset.val : "snack",
-    }),
-  });
-  toast("Added");
-  showView("view-food");
-  loadFoodToday();
+  try {
+    await api("/nutrition/quick-add", {
+      method: "POST",
+      body: JSON.stringify({
+        label: document.getElementById("quickadd-label").value.trim() || "Quick Add",
+        calories: calories,
+        protein_g: parseFloat(document.getElementById("quickadd-protein").value) || 0,
+        carbs_g: parseFloat(document.getElementById("quickadd-carbs").value) || 0,
+        fat_g: parseFloat(document.getElementById("quickadd-fat").value) || 0,
+        meal_slot: mealChip ? mealChip.dataset.val : "snack",
+        date: state.nutritionDate,
+      }),
+    });
+    toast("Added — delete it anytime from Logged Today");
+    switchNutritionSegment("food");
+    showView("view-food");
+    loadFoodToday();
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // -- restaurants --
@@ -1427,19 +2044,28 @@ document.getElementById("food-selected-meal-chips").addEventListener("click", (e
   setActiveChip(document.getElementById("food-selected-meal-chips"), state.selectedMealSlot);
 });
 
-document.getElementById("btn-add-to-today").addEventListener("click", async () => {
+document.getElementById("btn-add-to-today").addEventListener("click", async (e) => {
   if (!state.selectedFood) return;
-  await api("/nutrition/log", {
-    method: "POST",
-    body: JSON.stringify({
-      food_item_id: state.selectedFood.id,
-      servings: state.selectedServings,
-      meal_slot: state.selectedMealSlot || "snack",
-    }),
-  });
-  toast(state.selectedFood.name + " added");
-  showView("view-food");
-  loadFoodToday();
+  const btn = e.currentTarget;
+  if (btn.disabled) return; // guards against a double-tap firing this twice before the first request lands
+  btn.disabled = true;
+  try {
+    await api("/nutrition/log", {
+      method: "POST",
+      body: JSON.stringify({
+        food_item_id: state.selectedFood.id,
+        servings: state.selectedServings,
+        meal_slot: state.selectedMealSlot || "snack",
+        date: state.nutritionDate,
+      }),
+    });
+    toast(state.selectedFood.name + " added — delete it anytime from Logged Today");
+    switchNutritionSegment("food");
+    showView("view-food");
+    loadFoodToday();
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // -- barcode scanning: native BarcodeDetector API (Chrome/Edge/Android) over
@@ -1520,12 +2146,6 @@ document.getElementById("btn-lookup-manual-barcode").addEventListener("click", (
 
 // -- saved meals --
 
-document.getElementById("btn-open-saved-meals").addEventListener("click", () => {
-  document.getElementById("new-meal-builder").classList.add("hidden");
-  showView("view-food-meals");
-  loadSavedMeals();
-});
-
 async function loadSavedMeals() {
   const data = await api("/nutrition/meals");
   const list = document.getElementById("saved-meals-list");
@@ -1550,9 +2170,10 @@ async function loadSavedMeals() {
       const mealId = btn.dataset.logMeal;
       const multInput = list.querySelector('.meal-multiplier-input[data-meal="' + mealId + '"]');
       const mult = parseFloat(multInput.value) || 1;
-      await api("/nutrition/meals/" + mealId + "/log", { method: "POST", body: JSON.stringify({ multiplier: mult }) });
-      toast("Meal logged");
-      loadFoodToday();
+      await api("/nutrition/meals/" + mealId + "/log", { method: "POST", body: JSON.stringify({ multiplier: mult, date: state.nutritionDate }) });
+      toast("Meal logged to " + nutritionDateLabel(state.nutritionDate));
+      loadNutritionMacros();
+      loadRecentMeals();
     });
   });
   list.querySelectorAll("[data-del-meal]").forEach((btn) => {
@@ -1664,11 +2285,6 @@ document.getElementById("btn-save-new-meal").addEventListener("click", async () 
 });
 
 // -- recipe hub --
-
-document.getElementById("btn-open-recipes").addEventListener("click", () => {
-  showView("view-food-recipes");
-  loadRecipeHub();
-});
 
 function recipeCardHtml(r, showWhy) {
   return (
@@ -1855,9 +2471,11 @@ document.getElementById("btn-log-recipe").addEventListener("click", async () => 
       servings: state.recipeLogServings,
       meal_slot: state.recipeLogMealSlot || "snack",
       overrides: overrides,
+      date: state.nutritionDate,
     }),
   });
   toast(state.selectedRecipe.name + " added");
+  switchNutritionSegment("food");
   showView("view-food");
   loadFoodToday();
 });
@@ -1871,11 +2489,6 @@ document.getElementById("btn-add-recipe-to-cart").addEventListener("click", asyn
 });
 
 // -- smart cart --
-
-document.getElementById("btn-open-shopping-cart").addEventListener("click", () => {
-  showView("view-shopping-cart");
-  loadShoppingCart();
-});
 
 const CART_CATEGORY_ORDER = ["protein", "produce", "fruit", "carbs", "fats", "dairy", "frozen", "snacks", "drinks", "pantry"];
 const CART_CATEGORY_LABELS = {

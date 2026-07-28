@@ -125,6 +125,7 @@ class FoodLogIn(BaseModel):
     food_item_id: int
     servings: float = 1.0
     meal_slot: str = "snack"
+    date: Optional[str] = None  # ISO date "YYYY-MM-DD" -- defaults to today when omitted
 
 
 class FoodLogUpdateIn(BaseModel):
@@ -140,11 +141,13 @@ class QuickAddIn(BaseModel):
     carbs_g: float = 0.0
     fat_g: float = 0.0
     meal_slot: str = "snack"
+    date: Optional[str] = None
 
 
 class CopyDayIn(BaseModel):
     from_date: str  # "yesterday" or an ISO date "YYYY-MM-DD"
     meal_slot: Optional[str] = None  # copy only this meal slot, or the whole day if omitted
+    to_date: Optional[str] = None  # ISO date "YYYY-MM-DD" -- defaults to today when omitted
 
 
 class SavedMealItemIn(BaseModel):
@@ -159,6 +162,7 @@ class SavedMealIn(BaseModel):
 
 class LogSavedMealIn(BaseModel):
     multiplier: float = 1.0
+    date: Optional[str] = None
 
 
 class WhoopCredentialsIn(BaseModel):
@@ -186,6 +190,7 @@ class BodyFatIn(BaseModel):
 
 class WaterLogIn(BaseModel):
     ounces: float
+    date: Optional[str] = None
 
 
 class RecipeFitMacrosIn(BaseModel):
@@ -202,6 +207,7 @@ class RecipeLogIn(BaseModel):
     servings: float = 1.0
     meal_slot: str = "dinner"
     overrides: List[RecipeIngredientOverrideIn] = []
+    date: Optional[str] = None
 
 
 class ShoppingItemIn(BaseModel):
