@@ -335,6 +335,21 @@ def log_set(session_id: int, payload: schemas.SetIn, db: Session = Depends(get_d
     return {"id": row.id}
 
 
+@app.patch("/api/sets/{set_id}")
+def update_set(set_id: int, payload: schemas.SetUpdateIn, db: Session = Depends(get_db)):
+    """Fix a mis-logged set (typo'd weight, wrong reps, forgot to note how it
+    felt) after the fact -- without this, the only recourse was delete and
+    re-log, losing the set's position/timing."""
+    row = db.query(models.WorkoutSet).get(set_id)
+    if not row:
+        raise HTTPException(404, "Set not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id}
+
+
 @app.delete("/api/sets/{set_id}")
 def delete_set(set_id: int, db: Session = Depends(get_db)):
     row = db.query(models.WorkoutSet).get(set_id)
@@ -656,7 +671,7 @@ def body_weight_history(days: int = 30, db: Session = Depends(get_db)):
         .order_by(models.BodyMetric.date)
         .all()
     )
-    return {"points": [{"date": r.date.isoformat(), "weight_kg": r.weight_kg} for r in rows if r.weight_kg is not None]}
+    return {"points": [{"id": r.id, "date": r.date.isoformat(), "weight_kg": r.weight_kg} for r in rows if r.weight_kg is not None]}
 
 
 @app.get("/api/progress/weekly-summary")
@@ -1065,6 +1080,27 @@ def get_program(db: Session = Depends(get_db)):
     }
 
 
+@app.post("/api/program/schedule/swap")
+def swap_schedule_days(payload: schemas.ScheduleSwapIn, db: Session = Depends(get_db)):
+    """Move a workout to a different day of the week by swapping what's
+    programmed on two weekdays -- the lighter-weight alternative to full
+    drag-and-drop reordering. This changes the standing weekly template
+    (like every other program edit), not just the current week."""
+    if payload.weekday_a == payload.weekday_b:
+        raise HTTPException(400, "Pick two different days to swap")
+    _, meso = _active_mesocycle(db)
+    day_a = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id, weekday=payload.weekday_a).first()
+    day_b = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id, weekday=payload.weekday_b).first()
+    if not day_a or not day_b:
+        raise HTTPException(404, "One of those days isn't part of the current program")
+
+    day_a.day_type, day_b.day_type = day_b.day_type, day_a.day_type
+    day_a.label, day_b.label = day_b.label, day_a.label
+    day_a.template, day_b.template = day_b.template, day_a.template
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/exercises/{exercise_id}/decision")
 def exercise_decision(exercise_id: int, db: Session = Depends(get_db)):
     """The Progression Decision Card: a few reasonable next-session options for
@@ -1176,6 +1212,13 @@ def update_goal(goal_id: int, payload: schemas.GoalUpdateIn, db: Session = Depen
     return _goal_out(goal)
 
 
+@app.delete("/api/goals/{goal_id}")
+def delete_goal(goal_id: int, db: Session = Depends(get_db)):
+    db.query(models.Goal).filter_by(id=goal_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"ok": True}
+
+
 # -------------------------------------------------------------- settings ----
 
 @app.get("/api/settings")
@@ -1238,6 +1281,27 @@ def _log_body_weight(db: Session, weight_kg: float, date: dt.date):
 @app.post("/api/body-weight")
 def log_body_weight(payload: schemas.BodyWeightIn, db: Session = Depends(get_db)):
     _log_body_weight(db, payload.weight_kg, dt.date.today())
+    return {"ok": True}
+
+
+@app.patch("/api/body-weight/{entry_id}")
+def update_body_weight(entry_id: int, payload: schemas.BodyWeightUpdateIn, db: Session = Depends(get_db)):
+    """Fix a past weigh-in -- a fat-fingered entry shouldn't have to sit in
+    the trend forever, and shouldn't require deleting and re-logging (which
+    for a past date isn't even possible, since logging only ever targets
+    today)."""
+    row = db.query(models.BodyMetric).filter_by(id=entry_id, user_id=DEMO_USER_ID).first()
+    if not row:
+        raise HTTPException(404, "Entry not found")
+    row.weight_kg = payload.weight_kg
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/body-weight/{entry_id}")
+def delete_body_weight(entry_id: int, db: Session = Depends(get_db)):
+    db.query(models.BodyMetric).filter_by(id=entry_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
     return {"ok": True}
 
 

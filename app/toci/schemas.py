@@ -28,6 +28,14 @@ class SetIn(BaseModel):
     confidence_next: Optional[str] = None  # "yes" | "maybe" | "no"
 
 
+class SetUpdateIn(BaseModel):
+    actual_reps: Optional[int] = None
+    actual_load_kg: Optional[float] = Field(None, ge=0)
+    rir: Optional[float] = None
+    feel: Optional[str] = None
+    confidence_next: Optional[str] = None
+
+
 class GoalIn(BaseModel):
     title: str
     kind: str = "custom"  # "strength" | "endurance" | "consistency" | "custom"
@@ -37,6 +45,11 @@ class GoalIn(BaseModel):
     target_value: Optional[float] = None
     is_secondary: bool = False
     target_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
+
+
+class ScheduleSwapIn(BaseModel):
+    weekday_a: int = Field(ge=0, le=6)
+    weekday_b: int = Field(ge=0, le=6)
 
 
 class GoalUpdateIn(BaseModel):
@@ -186,6 +199,10 @@ class WearableDisplayStatsIn(BaseModel):
 
 class BodyWeightIn(BaseModel):
     weight_kg: float
+
+
+class BodyWeightUpdateIn(BaseModel):
+    weight_kg: float = Field(gt=0)
 
 
 class BodyFatIn(BaseModel):
