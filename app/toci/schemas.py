@@ -67,6 +67,13 @@ class RunIn(BaseModel):
     perceived_effort: Optional[float] = None
 
 
+class RunUpdateIn(BaseModel):
+    duration_seconds: Optional[int] = Field(None, gt=0)
+    distance_meters: Optional[float] = Field(None, ge=0)
+    avg_hr: Optional[int] = None
+    perceived_effort: Optional[float] = None
+
+
 class InjuryIn(BaseModel):
     body_region: str
     description: Optional[str] = None

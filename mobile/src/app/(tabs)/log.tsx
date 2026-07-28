@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { useLiftDays, useLogSummary, useStartWorkout, useToday } from '@/api/hooks';
 import { RecentSession } from '@/api/types';
@@ -207,31 +207,35 @@ function ActionCard({
 function RecentSessionCard({ session }: { session: RecentSession }) {
   const { colors } = useTheme();
   return (
-    <Card style={{ width: 140, gap: 4 }}>
-      <View
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: RADIUS.small,
-          backgroundColor: colors.accentWash,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Ionicons name={session.type === 'lift' ? 'barbell' : 'walk'} size={15} color={colors.accentInk} />
-      </View>
-      <Text variant="bodyStrong" numberOfLines={1}>
-        {session.title}
-      </Text>
-      <Text variant="caption" tone="tertiary">
-        {session.date}
-      </Text>
-      <Text
-        variant="microLabel"
-        style={{ color: colors.accentInk, backgroundColor: colors.accentWash, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}
-      >
-        {session.type.toUpperCase()}
-      </Text>
-    </Card>
+    <Pressable
+      onPress={() => router.push(session.type === 'lift' ? `/workout/${session.id}/detail` : `/workout/run/${session.id}`)}
+    >
+      <Card style={{ width: 140, gap: 4 }}>
+        <View
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: RADIUS.small,
+            backgroundColor: colors.accentWash,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={session.type === 'lift' ? 'barbell' : 'walk'} size={15} color={colors.accentInk} />
+        </View>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {session.title}
+        </Text>
+        <Text variant="caption" tone="tertiary">
+          {session.date}
+        </Text>
+        <Text
+          variant="microLabel"
+          style={{ color: colors.accentInk, backgroundColor: colors.accentWash, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}
+        >
+          {session.type.toUpperCase()}
+        </Text>
+      </Card>
+    </Pressable>
   );
 }

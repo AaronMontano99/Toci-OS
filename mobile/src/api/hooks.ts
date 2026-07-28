@@ -98,6 +98,18 @@ export function useCompleteWorkout() {
   });
 }
 
+export function useDeleteWorkoutSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: number) => api.delete(`/api/workouts/${sessionId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['logSummary'] });
+      qc.invalidateQueries({ queryKey: ['logHistory'] });
+      qc.invalidateQueries({ queryKey: ['today'] });
+    },
+  });
+}
+
 export function useLogRun() {
   const qc = useQueryClient();
   return useMutation({
@@ -106,6 +118,49 @@ export function useLogRun() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['today'] });
       qc.invalidateQueries({ queryKey: ['logSummary'] });
+    },
+  });
+}
+
+export interface RunDetail {
+  id: number;
+  date: string;
+  activity_type: string;
+  duration_min: number;
+  distance_km: number | null;
+  pace_per_km: string | null;
+  avg_hr: number | null;
+  perceived_effort: number | null;
+}
+
+export function useRun(runId: number | null) {
+  return useQuery({
+    queryKey: ['run', runId],
+    queryFn: () => api.get<RunDetail>(`/api/runs/${runId}`),
+    enabled: runId != null,
+  });
+}
+
+export function useUpdateRun(runId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { duration_seconds?: number; distance_meters?: number; avg_hr?: number; perceived_effort?: number }) =>
+      api.patch(`/api/runs/${runId}`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['run', runId] });
+      qc.invalidateQueries({ queryKey: ['logSummary'] });
+      qc.invalidateQueries({ queryKey: ['logHistory'] });
+    },
+  });
+}
+
+export function useDeleteRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number) => api.delete(`/api/runs/${runId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['logSummary'] });
+      qc.invalidateQueries({ queryKey: ['logHistory'] });
     },
   });
 }

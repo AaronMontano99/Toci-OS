@@ -292,6 +292,16 @@ def start_workout(payload: schemas.WorkoutStartIn, db: Session = Depends(get_db)
     return {"id": session.id}
 
 
+@app.delete("/api/workouts/{session_id}")
+def delete_workout_session(session_id: int, db: Session = Depends(get_db)):
+    """Delete a whole logged workout (e.g. logged against the wrong day, or a
+    test/accidental entry) -- not just individual sets within it."""
+    db.query(models.WorkoutSet).filter_by(workout_session_id=session_id).delete()
+    db.query(models.WorkoutSession).filter_by(id=session_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/workouts/{session_id}")
 def get_workout_session(session_id: int, db: Session = Depends(get_db)):
     """Used to resume an in-progress session (Today's "Resume Workout") without
@@ -381,7 +391,7 @@ def log_run(payload: schemas.RunIn, db: Session = Depends(get_db)):
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: int, db: Session = Depends(get_db)):
     """Read-only detail for a single completed run -- powers the Log tab's
-    completed-session detail view. Not used for editing (no PATCH exists)."""
+    completed-session detail view."""
     row = db.query(models.CardioSession).filter_by(id=run_id, user_id=DEMO_USER_ID).first()
     if not row:
         raise HTTPException(404, "Run not found")
@@ -392,6 +402,24 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
         "pace_per_km": _run_pace_per_km(row),
         "avg_hr": row.avg_hr, "perceived_effort": row.perceived_effort,
     }
+
+
+@app.patch("/api/runs/{run_id}")
+def update_run(run_id: int, payload: schemas.RunUpdateIn, db: Session = Depends(get_db)):
+    row = db.query(models.CardioSession).filter_by(id=run_id, user_id=DEMO_USER_ID).first()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: int, db: Session = Depends(get_db)):
+    db.query(models.CardioSession).filter_by(id=run_id, user_id=DEMO_USER_ID).delete()
+    db.commit()
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------- log ----

@@ -1,6 +1,7 @@
 """Coverage for the "let people fix things" pass: editing a logged set,
-deleting a goal, editing/deleting a past body-weight entry, and swapping two
-scheduled days. All were previously add-only or view-only."""
+deleting a goal, editing/deleting a past body-weight entry, editing/deleting
+a logged run, deleting a whole logged workout, and swapping two scheduled
+days. All were previously add-only or view-only."""
 import datetime as dt
 
 from toci import models
@@ -12,6 +13,13 @@ def _lift_session(db_session, date):
     db_session.add(session)
     db_session.commit()
     return session
+
+
+def _run(db_session, date, duration_seconds=1800, distance_meters=5000):
+    row = models.CardioSession(user_id=DEMO_USER_ID, date=date, activity_type="run", duration_seconds=duration_seconds, distance_meters=distance_meters)
+    db_session.add(row)
+    db_session.commit()
+    return row
 
 
 # ------------------------------------------------------------------- sets ----
@@ -108,6 +116,42 @@ def test_body_weight_history_includes_id_for_targeting(client, db_session, seede
 
     history = client.get("/api/body-weight/history?days=30").json()
     assert history["points"][0]["id"] == entry.id
+
+
+# -------------------------------------------------------------------- runs ----
+
+def test_update_run(client, db_session, seeded):
+    run = _run(db_session, seeded["today"])
+
+    resp = client.patch(f"/api/runs/{run.id}", json={"distance_meters": 6000, "duration_seconds": 2000})
+    assert resp.status_code == 200
+
+    detail = client.get(f"/api/runs/{run.id}").json()
+    assert detail["distance_km"] == 6.0
+    assert detail["duration_min"] == round(2000 / 60)
+
+
+def test_delete_run(client, db_session, seeded):
+    run = _run(db_session, seeded["today"])
+
+    resp = client.delete(f"/api/runs/{run.id}")
+    assert resp.status_code == 200
+    assert client.get(f"/api/runs/{run.id}").status_code == 404
+
+
+# --------------------------------------------------------------- workouts ----
+
+def test_delete_workout_session_removes_its_sets_too(client, db_session, seeded):
+    session = _lift_session(db_session, seeded["today"])
+    row = models.WorkoutSet(workout_session_id=session.id, exercise_id=seeded["exercise_id"], set_index=1, actual_reps=5, actual_load_kg=100)
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.delete(f"/api/workouts/{session.id}")
+    assert resp.status_code == 200
+
+    assert db_session.query(models.WorkoutSession).filter_by(id=session.id).first() is None
+    assert db_session.query(models.WorkoutSet).filter_by(workout_session_id=session.id).count() == 0
 
 
 # --------------------------------------------------------------- schedule ----
