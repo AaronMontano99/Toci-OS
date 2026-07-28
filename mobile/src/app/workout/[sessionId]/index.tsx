@@ -1,0 +1,198 @@
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import { Alert, View } from 'react-native';
+
+import {
+  useCompleteWorkout,
+  useLiftDayPrescription,
+  useLogSet,
+  useSettings,
+  useToday,
+  useWorkoutSession,
+} from '@/api/hooks';
+import { LiftPrescription, LoggedSet, PrescriptionExercise } from '@/api/types';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Text } from '@/components/ui/Text';
+import { useWorkoutContext } from '@/context/WorkoutContext';
+import { ActiveExerciseCard } from '@/features/workout/ActiveExerciseCard';
+import { ExerciseOutlineRow } from '@/features/workout/ExerciseOutlineRow';
+import { RestTimerBar } from '@/features/workout/RestTimerBar';
+import { SPACING } from '@/theme/tokens';
+
+const DEFAULT_REST_SECONDS = 90;
+
+export default function ActiveWorkoutScreen() {
+  const params = useLocalSearchParams<{ sessionId: string; weekday?: string }>();
+  const sessionId = Number(params.sessionId);
+  const weekday = params.weekday != null ? Number(params.weekday) : null;
+
+  const { data: session, isLoading: sessionLoading } = useWorkoutSession(sessionId);
+  const { data: today } = useToday();
+  const { data: weekdayPrescription } = useLiftDayPrescription(weekday);
+  const { data: settings } = useSettings();
+  const logSet = useLogSet(sessionId);
+  const completeWorkout = useCompleteWorkout();
+  const { startRest } = useWorkoutContext();
+
+  const units = settings?.units ?? 'imperial';
+
+  const prescriptionExercises: PrescriptionExercise[] | undefined = useMemo(() => {
+    if (weekday != null) return weekdayPrescription?.exercises;
+    if (today?.recommendation.session_type === 'lift') {
+      return (today.recommendation.prescription as LiftPrescription).exercises;
+    }
+    return undefined;
+  }, [weekday, weekdayPrescription, today]);
+
+  // Freeform fallback (no prescription resolvable): derived straight from
+  // whatever's already logged in this session, generous per-exercise set cap
+  // since there's no real target.
+  const freeformExercises = useMemo<PrescriptionExercise[] | undefined>(() => {
+    if (!session || prescriptionExercises?.length) return undefined;
+    return session.exercises_with_sets.map((ex) => {
+      const last = ex.logged_sets[ex.logged_sets.length - 1];
+      return {
+        exercise_id: ex.exercise_id,
+        name: ex.name,
+        sets: 20,
+        reps: last?.reps ?? 8,
+        load_kg: last?.weight_kg ?? 20,
+        target_rir: 2,
+      };
+    });
+  }, [session, prescriptionExercises]);
+
+  const exercisesList = useMemo(
+    () => (prescriptionExercises?.length ? prescriptionExercises : freeformExercises ?? []),
+    [prescriptionExercises, freeformExercises],
+  );
+
+  const loggedSetsByExercise = useMemo(() => {
+    const map = new Map<number, LoggedSet[]>();
+    session?.exercises_with_sets.forEach((ex) => map.set(ex.exercise_id, ex.logged_sets));
+    return map;
+  }, [session]);
+
+  // The active exercise defaults to the first one not yet fully logged (so
+  // resuming a session lands you back where you left off), but a manual tap
+  // (outline row / skip button) overrides that default until it's cleared.
+  const derivedIndex = useMemo(() => {
+    const firstIncomplete = exercisesList.findIndex(
+      (ex) => (loggedSetsByExercise.get(ex.exercise_id)?.length ?? 0) < ex.sets,
+    );
+    return firstIncomplete === -1 ? exercisesList.length : firstIncomplete;
+  }, [exercisesList, loggedSetsByExercise]);
+
+  const [manualIndex, setManualIndex] = useState<number | null>(null);
+  const currentIndex = manualIndex ?? derivedIndex;
+
+  if (sessionLoading || !session) {
+    return (
+      <ScreenContainer>
+        <Skeleton height={200} radius={20} />
+      </ScreenContainer>
+    );
+  }
+
+  const currentExercise = exercisesList[currentIndex];
+  const completedCount = exercisesList.filter((ex) => (loggedSetsByExercise.get(ex.exercise_id)?.length ?? 0) >= ex.sets).length;
+  const allDone = exercisesList.length > 0 && currentIndex >= exercisesList.length;
+
+  const onFinishWorkout = () => {
+    const remaining = exercisesList.length - completedCount;
+    const go = async () => {
+      await completeWorkout.mutateAsync(sessionId);
+      router.replace(`/workout/${sessionId}/complete`);
+    };
+    if (remaining > 0 && !allDone) {
+      Alert.alert('Finish workout?', `${remaining} exercise${remaining === 1 ? '' : 's'} not fully logged yet.`, [
+        { text: 'Keep training', style: 'cancel' },
+        { text: 'Finish anyway', style: 'destructive', onPress: go },
+      ]);
+    } else {
+      go();
+    }
+  };
+
+  return (
+    <ScreenContainer
+      scroll
+      contentContainerStyle={{ gap: SPACING.base }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+          <IconButton name="chevron-back" onPress={() => router.back()} />
+          <View>
+            <Text variant="cardTitle">{session.label ?? 'Workout'}</Text>
+            <Text variant="caption" tone="tertiary">
+              {exercisesList.length ? `Exercise ${Math.min(currentIndex + 1, exercisesList.length)} of ${exercisesList.length}` : 'Freeform session'}
+            </Text>
+          </View>
+        </View>
+        <Button label="End" variant="tertiary" size="compact" fullWidth={false} onPress={onFinishWorkout} />
+      </View>
+
+      <RestTimerBar />
+
+      {exercisesList.length === 0 && (
+        <EmptyState title="No plan for this session" detail="Add exercises from the library to log a freeform session." />
+      )}
+
+      {currentExercise && (
+        <ActiveExerciseCard
+          key={`${currentExercise.exercise_id}-${loggedSetsByExercise.get(currentExercise.exercise_id)?.length ?? 0}`}
+          exercise={currentExercise}
+          loggedSets={loggedSetsByExercise.get(currentExercise.exercise_id) ?? []}
+          units={units}
+          logging={logSet.isPending}
+          onLogSet={async (input) => {
+            await logSet.mutateAsync({ exercise_id: currentExercise.exercise_id, ...input });
+            startRest(DEFAULT_REST_SECONDS);
+          }}
+        />
+      )}
+
+      {allDone && (
+        <View style={{ alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.lg }}>
+          <Text style={{ fontSize: 32 }}>🎉</Text>
+          <Text variant="cardTitle">All exercises logged</Text>
+          <Button label="Finish Workout" onPress={onFinishWorkout} loading={completeWorkout.isPending} />
+        </View>
+      )}
+
+      {currentExercise && !allDone && (
+        <Button
+          label="Skip to next exercise"
+          variant="tertiary"
+          size="compact"
+          onPress={() => setManualIndex(Math.min(currentIndex + 1, exercisesList.length))}
+        />
+      )}
+
+      {exercisesList.length > 0 && (
+        <View style={{ gap: 2 }}>
+          <Text variant="sectionTitle" style={{ marginBottom: SPACING.sm }}>
+            Workout outline
+          </Text>
+          {exercisesList.map((ex, i) => {
+            const logged = loggedSetsByExercise.get(ex.exercise_id)?.length ?? 0;
+            const state = logged >= ex.sets ? 'done' : i === currentIndex ? 'active' : 'upcoming';
+            return (
+              <ExerciseOutlineRow
+                key={ex.exercise_id}
+                name={ex.name}
+                detail={`${logged}/${ex.sets} sets · ${ex.reps} reps target`}
+                state={state}
+                onPress={i <= completedCount || i === currentIndex ? () => setManualIndex(i) : undefined}
+              />
+            );
+          })}
+        </View>
+      )}
+    </ScreenContainer>
+  );
+}

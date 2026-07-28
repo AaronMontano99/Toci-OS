@@ -9,12 +9,13 @@ An adaptive AI fitness coach — not a workout tracker. It remembers your workou
 | Layer | State |
 |---|---|
 | Local demo (FastAPI + SQLite + vanilla JS) | **Working** — real UI, real database, log in and use it today |
+| Mobile app (Expo / React Native / Expo Router) | **Working** — runs in Expo Go on iOS and Android against the same FastAPI backend; see [`mobile/README.md`](mobile/README.md) |
 | UI | All 6 tabs structurally rebuilt on the **Toci Pastel Apricot** design system (dark by default) — hero cards, segmented sub-tabs, sparkline/donut stat cards; pixel-exact pass against the reference mockups still pending |
-| Native apps (Kotlin Multiplatform / SwiftUI / Jetpack Compose) | Not started — this is the local demo the real apps will be built from |
+| Native apps (Kotlin Multiplatform / SwiftUI / Jetpack Compose) | Superseded by the Expo mobile app above — see [Decisions locked](#decisions-locked) |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Code complete with tested fallback paths; live model output not yet verified on this hardware — see [Known gaps](#known-gaps) |
 
-**Run it:** see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
+**Run the backend:** see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000` (the vanilla-JS web frontend) — or run the **mobile app**: see [`mobile/README.md`](mobile/README.md) — `cd mobile && npm install && npm run start`, then open in Expo Go.
 
 Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See [Known gaps](#known-gaps) and the app README's "what's deliberately not production-ready" section before mistaking this for more than it is.
 
@@ -74,13 +75,20 @@ The running app is built on the **[Toci Pastel Apricot Design System](docs/desig
 
 | Decision | Choice |
 |---|---|
-| Codebase strategy | Kotlin Multiplatform (KMM) core, native SwiftUI / Jetpack Compose UI |
-| Recommendation engine location | Server-side |
+| Codebase strategy | **Expo / React Native (TypeScript, Expo Router)**, one codebase for iOS + Android — supersedes the original Kotlin Multiplatform + native SwiftUI/Compose plan below, to ship a real Expo Go app quickly against the existing FastAPI backend without a rewrite |
+| Recommendation engine location | Server-side (unchanged — the mobile app is a pure client of it) |
 | Recommendation engine approach | Deterministic rules engine, ML-ready |
-| MVP data sources | Apple HealthKit + Google Health Connect |
+| MVP data sources | Apple HealthKit + Google Health Connect (not yet wired into the Expo app — see `mobile/README.md`) |
 
-## Stack (planned)
+## Stack
 
-Kotlin Multiplatform · SwiftUI · Jetpack Compose · Python + FastAPI · PostgreSQL · Redis
+Expo · React Native · TypeScript · Expo Router · TanStack Query · Python + FastAPI · SQLite (Postgres-ready)
+
+The original architecture draft (`docs/architecture.md`) specifies Kotlin
+Multiplatform + native SwiftUI/Jetpack Compose UI; the mobile app actually
+built is Expo/React Native instead, chosen to reuse the existing FastAPI
+backend as-is and run in Expo Go without native toolchains. The backend,
+data model, and recommendation engine described in that doc are otherwise
+still accurate.
 
 See [docs/architecture.md](docs/architecture.md) for the full breakdown: system architecture, tech stack rationale, database schema, and the recommendation engine's readiness scoring, training-load tracking, and progression rules.
