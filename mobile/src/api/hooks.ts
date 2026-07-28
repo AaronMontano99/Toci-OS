@@ -4,6 +4,7 @@ import { api } from './client';
 import {
   CheckinPayload,
   Exercise,
+  Feel,
   FoodItem,
   Goal,
   LogSummary,
@@ -71,6 +72,15 @@ export function useDeleteSet(sessionId: number | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (setId: number) => api.delete(`/api/sets/${setId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workout', sessionId] }),
+  });
+}
+
+export function useUpdateSet(sessionId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ setId, ...payload }: { setId: number; actual_reps?: number; actual_load_kg?: number; feel?: Feel | null }) =>
+      api.patch(`/api/sets/${setId}`, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workout', sessionId] }),
   });
 }

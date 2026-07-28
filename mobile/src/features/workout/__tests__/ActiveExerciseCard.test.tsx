@@ -26,12 +26,23 @@ const NO_HISTORY: ExerciseMemory = { has_history: false, last_session: null, bes
 
 function renderCard(props: Partial<React.ComponentProps<typeof ActiveExerciseCard>> = {}) {
   const onLogSet = jest.fn();
+  const onUpdateSet = jest.fn();
+  const onDeleteSet = jest.fn();
   render(
     <ThemeProvider>
-      <ActiveExerciseCard exercise={EXERCISE} loggedSets={[]} units="metric" logging={false} onLogSet={onLogSet} {...props} />
+      <ActiveExerciseCard
+        exercise={EXERCISE}
+        loggedSets={[]}
+        units="metric"
+        logging={false}
+        onLogSet={onLogSet}
+        onUpdateSet={onUpdateSet}
+        onDeleteSet={onDeleteSet}
+        {...props}
+      />
     </ThemeProvider>,
   );
-  return { onLogSet };
+  return { onLogSet, onUpdateSet, onDeleteSet };
 }
 
 describe('ActiveExerciseCard', () => {
@@ -63,7 +74,7 @@ describe('ActiveExerciseCard', () => {
   });
 
   it('carries forward the last logged set as the next suggestion, not the static prescription', () => {
-    renderCard({ loggedSets: [{ id: 1, set_number: 1, weight_kg: 95, reps: 6, rest_seconds: null }] });
+    renderCard({ loggedSets: [{ id: 1, set_number: 1, weight_kg: 95, reps: 6, rest_seconds: null, feel: null }] });
     expect(screen.getByText('95')).toBeTruthy();
     expect(screen.getByText('6')).toBeTruthy();
   });
@@ -71,9 +82,9 @@ describe('ActiveExerciseCard', () => {
   it('shows a completion summary once every set is logged', () => {
     renderCard({
       loggedSets: [
-        { id: 1, set_number: 1, weight_kg: 95, reps: 5, rest_seconds: null },
-        { id: 2, set_number: 2, weight_kg: 95, reps: 5, rest_seconds: null },
-        { id: 3, set_number: 3, weight_kg: 95, reps: 5, rest_seconds: null },
+        { id: 1, set_number: 1, weight_kg: 95, reps: 5, rest_seconds: null, feel: null },
+        { id: 2, set_number: 2, weight_kg: 95, reps: 5, rest_seconds: null, feel: null },
+        { id: 3, set_number: 3, weight_kg: 95, reps: 5, rest_seconds: null, feel: null },
       ],
       memory: HISTORY,
     });
@@ -85,7 +96,16 @@ describe('ActiveExerciseCard', () => {
     const onRequestSwap = jest.fn();
     const { rerender } = render(
       <ThemeProvider>
-        <ActiveExerciseCard exercise={EXERCISE} loggedSets={[]} units="metric" logging={false} onLogSet={jest.fn()} onRequestSwap={onRequestSwap} />
+        <ActiveExerciseCard
+          exercise={EXERCISE}
+          loggedSets={[]}
+          units="metric"
+          logging={false}
+          onLogSet={jest.fn()}
+          onUpdateSet={jest.fn()}
+          onDeleteSet={jest.fn()}
+          onRequestSwap={onRequestSwap}
+        />
       </ThemeProvider>,
     );
     fireEvent.press(screen.getByText('Swap movement'));
@@ -95,14 +115,30 @@ describe('ActiveExerciseCard', () => {
       <ThemeProvider>
         <ActiveExerciseCard
           exercise={EXERCISE}
-          loggedSets={[{ id: 1, set_number: 1, weight_kg: 92.5, reps: 5, rest_seconds: null }]}
+          loggedSets={[{ id: 1, set_number: 1, weight_kg: 92.5, reps: 5, rest_seconds: null, feel: null }]}
           units="metric"
           logging={false}
           onLogSet={jest.fn()}
+          onUpdateSet={jest.fn()}
+          onDeleteSet={jest.fn()}
           onRequestSwap={onRequestSwap}
         />
       </ThemeProvider>,
     );
     expect(screen.queryByText('Swap movement')).toBeNull();
+  });
+
+  it('shows the logged set as an editable row and lets it be edited or deleted', () => {
+    const { onUpdateSet, onDeleteSet } = renderCard({
+      loggedSets: [{ id: 42, set_number: 1, weight_kg: 90, reps: 5, rest_seconds: null, feel: null }],
+    });
+    expect(screen.getByText(/Set 1: 90 kg × 5/)).toBeTruthy();
+
+    fireEvent.press(screen.getByText(/Set 1: 90 kg × 5/));
+    fireEvent.press(screen.getByText('Save'));
+    expect(onUpdateSet).toHaveBeenCalledWith(42, { actual_reps: 5, actual_load_kg: 90 });
+
+    fireEvent.press(screen.getByTestId('icon-button-trash-outline'));
+    expect(onDeleteSet).toHaveBeenCalledWith(42);
   });
 });

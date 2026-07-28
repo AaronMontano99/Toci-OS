@@ -92,6 +92,7 @@ export interface LoggedSet {
   weight_kg: number | null;
   reps: number | null;
   rest_seconds: number | null;
+  feel: Feel | null;
 }
 
 export interface ExerciseWithSets {

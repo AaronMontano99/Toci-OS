@@ -311,7 +311,7 @@ def get_workout_session(session_id: int, db: Session = Depends(get_db)):
         entry = by_exercise.setdefault(s.exercise_id, {"exercise_id": s.exercise_id, "name": name, "logged_sets": []})
         entry["logged_sets"].append({
             "id": s.id, "set_number": s.set_index,
-            "weight_kg": s.actual_load_kg, "reps": s.actual_reps, "rest_seconds": s.rest_seconds,
+            "weight_kg": s.actual_load_kg, "reps": s.actual_reps, "rest_seconds": s.rest_seconds, "feel": s.feel,
         })
     exercise_count, volume_kg = _lift_session_volume_kg(db, session_id)
     return {

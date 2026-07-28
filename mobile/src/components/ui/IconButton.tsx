@@ -11,12 +11,16 @@ interface IconButtonProps {
   size?: number;
   color?: string;
   background?: boolean;
+  accessibilityLabel?: string;
+  testID?: string;
 }
 
-export function IconButton({ name, onPress, size = 20, color, background = true }: IconButtonProps) {
+export function IconButton({ name, onPress, size = 20, color, background = true, accessibilityLabel, testID }: IconButtonProps) {
   const { colors } = useTheme();
   return (
     <Pressable
+      testID={testID ?? `icon-button-${name}`}
+      accessibilityLabel={accessibilityLabel ?? name}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         onPress?.();

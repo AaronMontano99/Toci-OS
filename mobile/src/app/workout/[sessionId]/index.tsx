@@ -4,12 +4,14 @@ import { Alert, View } from 'react-native';
 
 import {
   useCompleteWorkout,
+  useDeleteSet,
   useExerciseMemory,
   useLiftDayPrescription,
   useLogSet,
   useSetExerciseSubstitution,
   useSettings,
   useToday,
+  useUpdateSet,
   useWorkoutSession,
 } from '@/api/hooks';
 import { Exercise, LiftPrescription, LoggedSet, PrescriptionExercise } from '@/api/types';
@@ -39,6 +41,8 @@ export default function ActiveWorkoutScreen() {
   const { data: weekdayPrescription } = useLiftDayPrescription(weekday);
   const { data: settings } = useSettings();
   const logSet = useLogSet(sessionId);
+  const updateSet = useUpdateSet(sessionId);
+  const deleteSet = useDeleteSet(sessionId);
   const completeWorkout = useCompleteWorkout();
   const setExerciseSubstitution = useSetExerciseSubstitution();
   const { startRest } = useWorkoutContext();
@@ -179,6 +183,8 @@ export default function ActiveWorkoutScreen() {
           memory={memory}
           reactionText={reaction?.exerciseId === currentExercise.exercise_id ? reaction.text : null}
           onRequestSwap={() => setSwapSheetOpen(true)}
+          onUpdateSet={(setId, input) => updateSet.mutate({ setId, ...input })}
+          onDeleteSet={(setId) => deleteSet.mutate(setId)}
           logging={logSet.isPending}
           onLogSet={async (input) => {
             const exerciseId = currentExercise.exercise_id;

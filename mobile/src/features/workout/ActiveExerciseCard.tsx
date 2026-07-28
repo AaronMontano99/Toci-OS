@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
+import { LoggedSetsList } from '@/features/workout/LoggedSetsList';
 import { describeCoachNote, describeExerciseSummary } from '@/lib/coachVoice';
 import { formatWeight, kgToDisplay, weightStep, Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeContext';
@@ -30,6 +31,8 @@ interface ActiveExerciseCardProps {
   memory?: ExerciseMemory;
   reactionText?: string | null;
   onRequestSwap?: () => void;
+  onUpdateSet: (setId: number, input: { actual_reps: number; actual_load_kg: number }) => void;
+  onDeleteSet: (setId: number) => void;
   onLogSet: (input: {
     set_index: number;
     actual_reps: number;
@@ -43,7 +46,18 @@ interface ActiveExerciseCardProps {
   logging: boolean;
 }
 
-export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reactionText, onRequestSwap, onLogSet, logging }: ActiveExerciseCardProps) {
+export function ActiveExerciseCard({
+  exercise,
+  loggedSets,
+  units,
+  memory,
+  reactionText,
+  onRequestSwap,
+  onUpdateSet,
+  onDeleteSet,
+  onLogSet,
+  logging,
+}: ActiveExerciseCardProps) {
   const { colors } = useTheme();
   const setNumber = loggedSets.length + 1;
   const isComplete = loggedSets.length >= exercise.sets;
@@ -89,6 +103,9 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reacti
         <Text variant="body" tone="secondary" center>
           {summary}
         </Text>
+        <View style={{ width: '100%', marginTop: SPACING.sm }}>
+          <LoggedSetsList sets={loggedSets} units={units} onUpdate={onUpdateSet} onDelete={onDeleteSet} />
+        </View>
       </Card>
     );
   }
@@ -141,6 +158,12 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reacti
           </Text>
         )}
       </View>
+
+      {loggedSets.length > 0 && (
+        <View style={{ gap: 4, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: SPACING.sm }}>
+          <LoggedSetsList sets={loggedSets} units={units} onUpdate={onUpdateSet} onDelete={onDeleteSet} />
+        </View>
+      )}
 
       <View style={{ gap: 4 }}>
         <Text variant="caption" tone="tertiary">
