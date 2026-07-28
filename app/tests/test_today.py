@@ -83,6 +83,20 @@ def test_workout_status_run_none_then_completed(db_session, seeded):
     assert status["elapsed_min"] == 30
 
 
+def test_workout_status_detects_freeform_lift_session_on_a_run_day(db_session, seeded):
+    """Log tab regression: 'Start Empty Session' lets a lift session begin on any
+    day, including one where today's recommendation is a run -- it must still be
+    reported as active so Resume Session appears and a duplicate can't be created."""
+    session = models.WorkoutSession(user_id=DEMO_USER_ID, date=seeded["today"], label="Freeform", started_at=dt.datetime.utcnow())
+    db_session.add(session)
+    db_session.commit()
+
+    status = _today_workout_status(db_session, _run_reco(), seeded["today"])
+    assert status["state"] == "active"
+    assert status["session_id"] == session.id
+    assert status["total_exercise_count"] is None  # no lift was prescribed today, so there's no target to show
+
+
 # --------------------------------------------------------------- resume session ----
 
 def test_resume_session_endpoint_returns_logged_sets(client, db_session, seeded):
@@ -141,7 +155,7 @@ def test_hydration_goal_derived_from_bodyweight(db_session, seeded):
 
 def test_hydration_log_and_read_today(client, seeded):
     resp = client.get("/api/hydration/today")
-    assert resp.json() == {"ounces": 0.0, "goal_oz": 100.0}
+    assert resp.json() == {"date": seeded["today"].isoformat(), "ounces": 0.0, "goal_oz": 100.0}
 
     resp = client.post("/api/hydration/today", json={"ounces": 8})
     assert resp.json()["ounces"] == 8.0

@@ -16,6 +16,7 @@ const state = {
   logPeriod: "this_week",
   nutritionDate: null, // set on boot to today's local date; see localDateStr()
   nutritionSegment: "food",
+  nutritionEverLoaded: false,
 };
 
 const KG_PER_LB = 0.45359237;
@@ -652,12 +653,17 @@ function renderResumeSessionCard() {
     "</div>";
   card.classList.remove("hidden");
   document.getElementById("btn-resume-session").addEventListener("click", () => openLiftSession(status.session_id));
-  document.getElementById("btn-end-session").addEventListener("click", async () => {
-    await api("/workouts/" + status.session_id + "/complete", { method: "POST" });
-    toast("Workout ended");
-    await loadToday();
-    loadLogChooser();
-  });
+  document.getElementById("btn-end-session").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
+    if (!confirm("End this workout now? Sets you've already logged are saved — you just won't be able to add more to this session.")) return;
+    try {
+      await api("/workouts/" + status.session_id + "/complete", { method: "POST" });
+      toast("Workout ended");
+      await loadToday();
+      loadLogChooser();
+    } catch (err) {
+      toast("Couldn't end the workout — try again");
+    }
+  }));
 }
 
 function sessionSkeletons(count) {
@@ -667,15 +673,24 @@ function sessionSkeletons(count) {
 async function loadLogSummary(recentLimit) {
   const row = document.getElementById("log-recent-sessions-row");
   row.innerHTML = sessionSkeletons(3);
+  const snapshotCard = document.getElementById("log-weekly-snapshot-card");
+  snapshotCard.innerHTML = '<div class="empty-note">Loading…</div>';
 
   let data;
   try {
     data = await api("/log/summary?recent_limit=" + recentLimit + "&period=" + state.logPeriod);
   } catch (e) {
+    // Recent Sessions and Weekly Snapshot share one fetch (so weekly totals are
+    // computed exactly once, not recalculated separately per component) -- a
+    // failure here needs its own isolated retry state in both places, not just
+    // the one whose skeleton happened to be visible.
     row.innerHTML =
       '<div class="empty-note">Couldn\'t load your recent sessions. ' +
       '<button type="button" class="btn subtle small" id="btn-retry-recent-sessions" style="width:auto;margin-top:0.4rem;">Retry</button></div>';
     document.getElementById("btn-retry-recent-sessions").addEventListener("click", () => loadLogSummary(recentLimit));
+    snapshotCard.innerHTML =
+      '<div class="empty-note">Weekly summary unavailable. <button type="button" class="btn subtle small" id="btn-retry-weekly-snapshot" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-weekly-snapshot").addEventListener("click", () => loadLogSummary(recentLimit));
     return;
   }
 
@@ -698,7 +713,7 @@ async function loadLogSummary(recentLimit) {
           metric = s.duration_min + " min";
         }
         return (
-          '<button type="button" class="log-session-card" data-type="' + s.type + '">' +
+          '<button type="button" class="log-session-card" data-type="' + s.type + '" data-session-id="' + s.id + '" aria-label="Recent session, ' + escapeHtml(s.title) + ", completed " + dateLabel + '.">' +
           '<div class="icon-circle md">' + icon + "</div>" +
           '<div class="name">' + escapeHtml(s.title) + "</div>" +
           '<span class="date tnum">' + dateLabel + "</span>" +
@@ -709,7 +724,7 @@ async function loadLogSummary(recentLimit) {
       })
       .join("");
     row.querySelectorAll(".log-session-card").forEach((el) => {
-      el.addEventListener("click", () => { document.querySelector('.tab-bar [data-tab="view-progress"]').click(); });
+      el.addEventListener("click", () => openSessionDetail(el.dataset.type, el.dataset.sessionId, "view-log"));
     });
   }
 
@@ -718,36 +733,49 @@ async function loadLogSummary(recentLimit) {
 
 function renderWeeklySnapshot(data) {
   const w = data.week;
-  const snapshotStat = (icon, num, lbl, goal) =>
-    '<div class="snapshot-stat"><div class="icon-circle sm">' + icon + '</div><div class="num tnum">' + num + '</div>' +
+  const snapshotStat = (icon, num, lbl, goal, ariaLabel) =>
+    '<div class="snapshot-stat" aria-label="' + ariaLabel + '"><div class="icon-circle sm">' + icon + '</div><div class="num tnum">' + num + '</div>' +
     '<div class="lbl">' + lbl + '</div><div class="goal tnum">' + goal + "</div></div>";
   const goalOrContext = (value, goal, unit) => (goal ? "Goal " + (unit ? unit(goal) : goal) : "No target set");
+  const statAria = (label, value, goal, unit) =>
+    "Weekly Snapshot. " + value + " " + label + (goal ? " out of a goal of " + goal + (unit ? " " + unit : "") + "." : ", no target set for this period.");
 
   document.getElementById("log-weekly-snapshot-card").innerHTML =
     '<div class="snapshot-head" style="position:relative;">' +
     '<span style="font-weight:700;font-size:0.95rem;">Weekly Snapshot</span>' +
-    '<button type="button" class="period-select-btn" id="btn-period-select">' + escapeHtml(PERIOD_LABELS[data.period]) +
+    '<button type="button" class="period-select-btn" id="btn-period-select" aria-haspopup="true" aria-expanded="false" aria-label="Weekly Snapshot period, currently ' + escapeHtml(PERIOD_LABELS[data.period]) + '. Tap to change.">' + escapeHtml(PERIOD_LABELS[data.period]) +
     '<svg viewBox="0 0 20 20" fill="none"><path d="M5.5 8L10 12.5L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
-    '<div class="period-menu hidden" id="period-menu">' +
-    Object.keys(PERIOD_LABELS).map((k) => '<button type="button" class="' + (k === data.period ? "active" : "") + '" data-period="' + k + '">' + PERIOD_LABELS[k] + "</button>").join("") +
+    '<div class="period-menu hidden" id="period-menu" role="menu" aria-label="Select reporting period">' +
+    Object.keys(PERIOD_LABELS)
+      .map((k) => {
+        const selected = k === data.period;
+        return '<button type="button" role="menuitemradio" aria-checked="' + selected + '" class="' + (selected ? "active" : "") + '" data-period="' + k + '">' +
+          (selected ? CHECK_SVG.replace("<svg ", '<svg style="width:13px;height:13px;margin-right:0.35rem;flex:none;" ') : "") + PERIOD_LABELS[k] + "</button>";
+      })
+      .join("") +
     "</div></div>" +
     '<div class="snapshot-row">' +
-    snapshotStat(PROGRAM_TODAY_ICONS.lift, w.lift_sessions, "Lift Sessions", goalOrContext(w.lift_sessions, w.lift_goal)) +
-    snapshotStat(PROGRAM_TODAY_ICONS.run, w.runs, "Runs", goalOrContext(w.runs, w.run_goal)) +
-    snapshotStat(META_CLOCK_SVG.replace('width="12" height="12"', 'width="16" height="16" style=""'), fmtHours(w.total_time_min), "Total Time", goalOrContext(w.total_time_min, w.time_goal_min, fmtHours)) +
-    snapshotStat(GOAL_KIND_ICONS.consistency, w.est_calories.toLocaleString(), "Est. Calories", goalOrContext(w.est_calories, w.calorie_goal, (n) => n.toLocaleString())) +
+    snapshotStat(PROGRAM_TODAY_ICONS.lift, w.lift_sessions, "Lift Sessions", goalOrContext(w.lift_sessions, w.lift_goal), statAria("lift sessions", w.lift_sessions, w.lift_goal)) +
+    snapshotStat(PROGRAM_TODAY_ICONS.run, w.runs, "Runs", goalOrContext(w.runs, w.run_goal), statAria("runs", w.runs, w.run_goal)) +
+    snapshotStat(META_CLOCK_SVG.replace('width="12" height="12"', 'width="16" height="16" style=""'), fmtHours(w.total_time_min), "Total Time", goalOrContext(w.total_time_min, w.time_goal_min, fmtHours), statAria("training time", fmtHours(w.total_time_min), w.time_goal_min ? fmtHours(w.time_goal_min) : null)) +
+    snapshotStat(GOAL_KIND_ICONS.consistency, w.est_calories.toLocaleString(), "Est. Calories", goalOrContext(w.est_calories, w.calorie_goal, (n) => n.toLocaleString()), statAria("estimated calories burned", w.est_calories.toLocaleString(), w.calorie_goal ? w.calorie_goal.toLocaleString() : null)) +
     "</div>" +
-    '<button type="button" class="snapshot-coach-row" id="btn-snapshot-coach">' +
+    '<button type="button" class="snapshot-coach-row" id="btn-snapshot-coach" aria-label="Coach note: ' + escapeHtml(data.encouragement) + '">' +
     '<span class="icon-circle sm">' + SPARKLE_SVG + "</span>" +
     '<span class="msg">' + escapeHtml(data.encouragement) + "</span>" +
     "</button>";
 
   const menuBtn = document.getElementById("btn-period-select");
   const menu = document.getElementById("period-menu");
-  menuBtn.addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); });
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const nowHidden = !menu.classList.toggle("hidden");
+    menuBtn.setAttribute("aria-expanded", nowHidden ? "true" : "false");
+  });
   menu.querySelectorAll("button").forEach((b) => {
     b.addEventListener("click", () => {
       menu.classList.add("hidden");
+      menuBtn.setAttribute("aria-expanded", "false");
       if (b.dataset.period === state.logPeriod) return;
       state.logPeriod = b.dataset.period;
       loadLogSummary(3);
@@ -760,42 +788,126 @@ document.addEventListener("click", (e) => {
   if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && e.target.id !== "btn-period-select") menu.classList.add("hidden");
 });
 
+const LOG_HISTORY_PAGE_SIZE = 20;
+
+function sessionRowHtml(s) {
+  const icon = s.type === "lift" ? PROGRAM_TODAY_ICONS.lift : PROGRAM_TODAY_ICONS.run;
+  const dateLabel = new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const metric = s.type === "lift"
+    ? s.exercise_count + " exercises" + (s.volume_kg ? " · " + fmtWeight(s.volume_kg) + " vol" : "")
+    : (s.distance_km ? s.distance_km + " km · " : "") + s.duration_min + " min";
+  return (
+    '<button type="button" class="session-row" style="width:100%;text-align:left;" data-type="' + s.type + '" data-session-id="' + s.id + '" aria-label="' + (s.type === "lift" ? "Lift" : "Run") + " session, " + escapeHtml(s.title) + ", completed " + dateLabel + '.">' +
+    '<div class="icon-circle md">' + icon + "</div>" +
+    '<div style="flex:1;min-width:0;"><div class="name">' + escapeHtml(s.title) + "</div>" +
+    '<div class="meta tnum">' + dateLabel + " · " + metric + "</div></div>" +
+    '<span class="activity-badge ' + s.type + '">' + s.type.toUpperCase() + "</span>" +
+    "</button>"
+  );
+}
+
+function wireSessionRows(container) {
+  container.querySelectorAll(".session-row").forEach((el) => {
+    el.addEventListener("click", () => openSessionDetail(el.dataset.type, el.dataset.sessionId, "view-log-history"));
+  });
+}
+
 async function loadLogHistory() {
   const list = document.getElementById("log-history-list");
   list.innerHTML = Array.from({ length: 4 }, () => '<div class="session-skeleton" style="width:100%;height:60px;margin-bottom:0.65rem;"></div>').join("");
   let data;
   try {
-    data = await api("/log/summary?recent_limit=500&period=" + state.logPeriod);
+    data = await api("/log/history?limit=" + LOG_HISTORY_PAGE_SIZE + "&offset=0");
   } catch (e) {
     list.innerHTML = '<div class="empty-note">Couldn\'t load your history. <button type="button" class="btn subtle small" id="btn-retry-history" style="width:auto;">Retry</button></div>';
     document.getElementById("btn-retry-history").addEventListener("click", loadLogHistory);
     return;
   }
-  if (!data.recent_sessions.length) {
+  if (!data.sessions.length) {
     list.innerHTML = '<div class="empty-note">No sessions yet. Your completed workouts and runs will appear here.</div>';
     return;
   }
-  list.innerHTML = data.recent_sessions
-    .map((s) => {
-      const icon = s.type === "lift" ? PROGRAM_TODAY_ICONS.lift : PROGRAM_TODAY_ICONS.run;
-      const dateLabel = new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-      const metric = s.type === "lift"
-        ? s.exercise_count + " exercises" + (s.volume_kg ? " · " + fmtWeight(s.volume_kg) + " vol" : "")
-        : (s.distance_km ? s.distance_km + " km · " : "") + s.duration_min + " min";
-      return (
-        '<div class="session-row">' +
-        '<div class="icon-circle md">' + icon + "</div>" +
-        '<div style="flex:1;min-width:0;"><div class="name">' + escapeHtml(s.title) + "</div>" +
-        '<div class="meta tnum">' + dateLabel + " · " + metric + "</div></div>" +
-        '<span class="activity-badge ' + s.type + '">' + s.type.toUpperCase() + "</span>" +
-        "</div>"
-      );
-    })
-    .join("");
+  list.innerHTML = data.sessions.map(sessionRowHtml).join("") +
+    (data.has_more ? '<button type="button" class="btn subtle" id="btn-history-load-more" style="margin-top:0.5rem;">Load More</button>' : "");
+  wireSessionRows(list);
+
+  if (data.has_more) {
+    document.getElementById("btn-history-load-more").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
+      const loadedCount = list.querySelectorAll(".session-row").length;
+      const more = await api("/log/history?limit=" + LOG_HISTORY_PAGE_SIZE + "&offset=" + loadedCount);
+      const loadMoreBtn = document.getElementById("btn-history-load-more");
+      const wrap = document.createElement("div");
+      wrap.innerHTML = more.sessions.map(sessionRowHtml).join("");
+      wireSessionRows(wrap);
+      while (wrap.firstChild) loadMoreBtn.before(wrap.firstChild);
+      loadMoreBtn.classList.toggle("hidden", !more.has_more);
+    }));
+  }
 }
 
 document.getElementById("btn-log-view-all").addEventListener("click", () => { showView("view-log-history"); loadLogHistory(); });
 document.getElementById("btn-log-history").addEventListener("click", () => { showView("view-log-history"); loadLogHistory(); });
+
+// ------------------------------------------------------- session detail (read-only) ----
+
+let sessionDetailReturnView = "view-log";
+
+async function openSessionDetail(type, id, fromView) {
+  sessionDetailReturnView = fromView || "view-log";
+  showView("view-session-detail");
+  document.getElementById("session-detail-kicker").textContent = type === "lift" ? "Lift Session" : "Run";
+  document.getElementById("session-detail-title").textContent = "Loading…";
+  document.getElementById("session-detail-date").textContent = "";
+  const body = document.getElementById("session-detail-body");
+  body.innerHTML = sessionSkeletons(1).replace('class="session-skeleton"', 'class="session-skeleton" style="width:100%;height:180px;"');
+
+  try {
+    if (type === "lift") {
+      const data = await api("/workouts/" + id);
+      document.getElementById("session-detail-title").textContent = data.label || "Lift Session";
+      document.getElementById("session-detail-date").textContent =
+        new Date(data.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) +
+        (data.duration_min ? " · " + data.duration_min + " min" : "") + (data.volume_kg ? " · " + fmtWeight(data.volume_kg) + " volume" : "");
+      if (!data.exercises_with_sets.length) {
+        body.innerHTML = '<div class="empty-note">No sets were logged in this session.</div>';
+      } else {
+        body.innerHTML = data.exercises_with_sets
+          .map((ex) => (
+            '<div class="set-group-label">' + escapeHtml(ex.name) + '</div><div class="card tight">' +
+            ex.logged_sets
+              .map((s) => (
+                '<div class="set-row"><span class="k">Set ' + s.set_number + '</span>' +
+                '<span class="v tnum">' + (s.weight_kg != null ? fmtWeight(s.weight_kg) : "—") + " × " + (s.reps != null ? s.reps : "—") + " reps</span></div>"
+              ))
+              .join("") +
+            "</div>"
+          ))
+          .join("");
+      }
+    } else {
+      const data = await api("/runs/" + id);
+      document.getElementById("session-detail-title").textContent = "Run";
+      document.getElementById("session-detail-date").textContent =
+        new Date(data.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+      body.innerHTML =
+        '<div class="stat-row">' +
+        '<div class="stat-tile"><div class="label">Duration</div><div class="value tnum">' + data.duration_min + " min</div></div>" +
+        '<div class="stat-tile"><div class="label">Distance</div><div class="value tnum">' + (data.distance_km != null ? data.distance_km + " km" : "—") + "</div></div>" +
+        '<div class="stat-tile"><div class="label">Pace</div><div class="value tnum">' + (data.pace_per_km ? data.pace_per_km + "/km" : "—") + "</div></div>" +
+        "</div>" +
+        '<div class="stat-row">' +
+        '<div class="stat-tile"><div class="label">Avg HR</div><div class="value tnum">' + (data.avg_hr != null ? data.avg_hr + " bpm" : "—") + "</div></div>" +
+        '<div class="stat-tile"><div class="label">Effort</div><div class="value tnum">' + (data.perceived_effort != null ? data.perceived_effort + "/10" : "—") + "</div></div>" +
+        "</div>";
+    }
+  } catch (e) {
+    document.getElementById("session-detail-title").textContent = "Session unavailable";
+    body.innerHTML =
+      '<div class="empty-note">Couldn\'t load this session. <button type="button" class="btn subtle small" id="btn-retry-session-detail" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-session-detail").addEventListener("click", () => openSessionDetail(type, id, fromView));
+  }
+}
+document.getElementById("btn-session-detail-back").addEventListener("click", () => showView(sessionDetailReturnView));
 
 document.getElementById("btn-open-lift").addEventListener("click", () => {
   const status = state.today.workout_status;
@@ -869,7 +981,8 @@ async function loadLiftStartOptions() {
         rowEl.style.opacity = "0.6";
         try {
           const prescription = await api("/log/lift-days/" + rowEl.dataset.weekday + "/prescription");
-          await openLiftSession(undefined, prescription);
+          const started = await openLiftSession(undefined, prescription);
+          if (!started) rowEl.style.opacity = "1"; // openLiftSession already toasted its own failure
         } catch (e) {
           toast("Couldn't load that workout — try again");
           rowEl.style.opacity = "1";
@@ -903,25 +1016,34 @@ async function openLiftSession(resumeSessionId, customPrescription) {
   const baseExercises = exercises.map((e) => Object.assign({}, e, { loggedSets: [] }));
   let sessionId;
 
-  if (resumeSessionId) {
-    // Reuse the session already in progress instead of creating a duplicate --
-    // merge in whatever sets are already logged, and keep any custom exercises
-    // the user added beyond the original prescription.
-    sessionId = resumeSessionId;
-    const sessionData = await api("/workouts/" + resumeSessionId);
-    const byExerciseId = {};
-    baseExercises.forEach((e) => { byExerciseId[e.exercise_id] = e; });
-    sessionData.exercises_with_sets.forEach((se) => {
-      const loggedSets = se.logged_sets.map((s) => ({ id: s.id, setNumber: s.set_number, weightKg: s.weight_kg, reps: s.reps, restSeconds: s.rest_seconds }));
-      if (byExerciseId[se.exercise_id]) {
-        byExerciseId[se.exercise_id].loggedSets = loggedSets;
-      } else {
-        baseExercises.push({ exercise_id: se.exercise_id, name: se.name, sets: loggedSets.length, reps: null, load_kg: null, loggedSets: loggedSets });
-      }
-    });
-  } else {
-    const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: prescription.label || "Freeform" }) });
-    sessionId = session.id;
+  // Every failure path below leaves the caller's current screen in place (never
+  // navigates to view-lift) and surfaces a toast -- the user can just tap the
+  // same button again rather than getting stranded in a half-built session.
+  try {
+    if (resumeSessionId) {
+      // Reuse the session already in progress instead of creating a duplicate --
+      // merge in whatever sets are already logged, and keep any custom exercises
+      // the user added beyond the original prescription.
+      sessionId = resumeSessionId;
+      const sessionData = await api("/workouts/" + resumeSessionId);
+      const byExerciseId = {};
+      baseExercises.forEach((e) => { byExerciseId[e.exercise_id] = e; });
+      sessionData.exercises_with_sets.forEach((se) => {
+        const loggedSets = se.logged_sets.map((s) => ({ id: s.id, setNumber: s.set_number, weightKg: s.weight_kg, reps: s.reps, restSeconds: s.rest_seconds }));
+        if (byExerciseId[se.exercise_id]) {
+          byExerciseId[se.exercise_id].loggedSets = loggedSets;
+        } else {
+          baseExercises.push({ exercise_id: se.exercise_id, name: se.name, sets: loggedSets.length, reps: null, load_kg: null, loggedSets: loggedSets });
+        }
+      });
+    } else {
+      const session = await api("/workouts", { method: "POST", body: JSON.stringify({ label: prescription.label || "Freeform" }) });
+      sessionId = session.id;
+    }
+    await ensureExercisesLoaded();
+  } catch (e) {
+    toast(resumeSessionId ? "Couldn't resume the workout — try again" : "Couldn't start the workout — try again");
+    return false;
   }
 
   state.activeWorkoutSessionId = sessionId;
@@ -930,11 +1052,11 @@ async function openLiftSession(resumeSessionId, customPrescription) {
   document.getElementById("lift-session-kicker").textContent = state.activeWorkoutExercises.length ? "In progress" : "Freeform";
   document.getElementById("lift-session-title").textContent = prescription.label || "Workout";
 
-  await ensureExercisesLoaded();
   populateAddExerciseSelect();
   resetAddExerciseForm();
   renderLiftExercises();
   showView("view-lift");
+  return true;
 }
 
 function populateAddExerciseSelect() {
@@ -1268,6 +1390,18 @@ function nutritionDateLabel(dateStr) {
   return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
+// Shared duplicate-submission guard: disables the button for the duration of
+// its own async handler so a fast double-tap can't fire the request twice.
+async function withButtonGuard(btn, fn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    await fn();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // Every nutrition fetch below is tagged with the sequence number active when it
 // started. If a newer load (a fast double-tap, a date change while a fetch is
 // still in flight, etc.) starts before this one's response lands, its result is
@@ -1279,8 +1413,20 @@ async function loadFoodToday() {
   if (!state.nutritionDate) state.nutritionDate = localDateStr();
   document.getElementById("nutrition-date-input").value = state.nutritionDate;
   document.getElementById("nutrition-date-text").textContent = nutritionDateLabel(state.nutritionDate);
+
+  const macroRow = document.querySelector("#view-food > .stat-row");
+  const heroCard = document.getElementById("log-food-card");
+  if (!state.nutritionEverLoaded) {
+    macroRow.classList.add("nutrition-loading");
+    heroCard.classList.add("nutrition-loading");
+  }
+
   const seq = ++nutritionLoadSeq;
   await Promise.all([loadNutritionMacros(seq), loadRecentMeals(seq), loadSmartNutritionPlan(seq), loadNutritionHydrationCard(seq)]);
+
+  macroRow.classList.remove("nutrition-loading");
+  heroCard.classList.remove("nutrition-loading");
+  state.nutritionEverLoaded = true;
 }
 
 async function loadNutritionMacros(seq) {
@@ -1299,14 +1445,23 @@ async function loadNutritionMacros(seq) {
   const proteinTarget = goal ? (goal * MACRO_SPLIT.protein) / MACRO_KCAL_PER_G.protein : null;
   const carbsTarget = goal ? (goal * MACRO_SPLIT.carbs) / MACRO_KCAL_PER_G.carbs : null;
   const fatTarget = goal ? (goal * MACRO_SPLIT.fat) / MACRO_KCAL_PER_G.fat : null;
-  const setSub = (key, target, unit, value) => {
+  const setSub = (key, label, target, unit, value) => {
     document.getElementById("food-" + key + "-sub").textContent = target ? "/ " + Math.round(target).toLocaleString() + (unit || "") : "/ —";
     document.getElementById("food-" + key + "-bar").style.width = (target ? Math.min(100, Math.round((100 * value) / target)) : 0) + "%";
+    const unitWord = unit === "g" ? "grams" : "kcal";
+    const roundedValue = Math.round(value).toLocaleString();
+    const card = document.getElementById("macro-card-" + key);
+    if (target) {
+      const pct = Math.round((100 * value) / target);
+      card.setAttribute("aria-label", label + ", " + roundedValue + " " + unitWord + " consumed out of a target of " + Math.round(target).toLocaleString() + " " + unitWord + ", " + pct + " percent complete.");
+    } else {
+      card.setAttribute("aria-label", label + ", " + roundedValue + " " + unitWord + " consumed. No target set.");
+    }
   };
-  setSub("calories", goal, "", totals.calories);
-  setSub("protein", proteinTarget, "g", totals.protein_g);
-  setSub("carbs", carbsTarget, "g", totals.carbs_g);
-  setSub("fat", fatTarget, "g", totals.fat_g);
+  setSub("calories", "Calories", goal, "", totals.calories);
+  setSub("protein", "Protein", proteinTarget, "g", totals.protein_g);
+  setSub("carbs", "Carbs", carbsTarget, "g", totals.carbs_g);
+  setSub("fat", "Fat", fatTarget, "g", totals.fat_g);
 
   const proteinKcal = totals.protein_g * MACRO_KCAL_PER_G.protein;
   const carbsKcal = totals.carbs_g * MACRO_KCAL_PER_G.carbs;
@@ -1320,9 +1475,18 @@ async function loadNutritionMacros(seq) {
   const dailyPct = goal ? Math.round((100 * totals.calories) / goal) : 0;
   document.getElementById("daily-progress-ring").innerHTML = ringSvg(Math.max(0, Math.min(100, dailyPct)), "var(--brand)", 56, 6);
   document.getElementById("daily-progress-pct").textContent = goal ? dailyPct + "%" : "—";
+  document.getElementById("daily-progress-card").setAttribute(
+    "aria-label",
+    goal ? "Daily Progress, " + dailyPct + " percent of calorie goal. Opens your logged food for " + nutritionDateLabel(state.nutritionDate) + "." : "Daily Progress, no calorie goal set."
+  );
 
   const streak = data.logging_streak || 0;
+  const longestStreak = data.longest_streak || 0;
   document.getElementById("food-streak-title").textContent = streak + " Day Streak";
+  document.getElementById("nutrition-streak-card").setAttribute(
+    "aria-label",
+    streak + " day nutrition streak" + (longestStreak > streak ? ", longest streak " + longestStreak + " days" : "") + ". Opens streak details."
+  );
   document.getElementById("food-streak-sub").textContent =
     streak > 0 ? "Keep it going! You're building great habits." : "Log a meal today to start building a streak.";
 
@@ -1333,7 +1497,10 @@ async function loadNutritionMacros(seq) {
 function renderDailyLogList(data) {
   const list = document.getElementById("food-log-list");
   if (!data.entries.length) {
-    list.innerHTML = '<div class="empty-note">Nothing logged ' + (data.is_today ? "yet today" : "that day") + ".</div>";
+    list.innerHTML =
+      '<div class="empty-note">Nothing logged yet.<br>' +
+      '<button type="button" class="btn subtle small" id="btn-empty-log-add-food" style="width:auto;margin-top:0.5rem;">Add Food</button></div>';
+    document.getElementById("btn-empty-log-add-food").addEventListener("click", () => { resetFoodAddView(); showView("view-food-add"); });
     return;
   }
   const groups = {};
@@ -1403,14 +1570,14 @@ async function loadRecentMeals(seq) {
   state.recentMealsCache = data.meals;
   if (!data.meals.length) {
     row.innerHTML =
-      '<div class="empty-note" style="max-width:240px;">No recent meals yet. Meals you log will appear here for faster reuse.<br>' +
+      '<div class="empty-note" style="max-width:240px;">Your recent meals will appear here.<br>' +
       '<button type="button" class="btn subtle small" id="btn-browse-foods" style="width:auto;margin-top:0.5rem;">Browse Foods</button></div>';
     document.getElementById("btn-browse-foods").addEventListener("click", () => { resetFoodAddView(); showView("view-food-add"); });
     return;
   }
   row.innerHTML = data.meals
     .map((m, i) => (
-      '<button type="button" class="log-session-card" style="width:170px;" data-meal-idx="' + i + '">' +
+      '<button type="button" class="log-session-card" style="width:170px;" data-meal-idx="' + i + '" aria-label="Recent meal, ' + escapeHtml(m.name) + ", " + Math.round(m.calories) + " calories, " + Math.round(m.protein_g) + ' grams protein. Tap to add to selected date.">' +
       '<div style="display:flex;align-items:center;gap:0.35rem;color:var(--brand);font-size:0.7rem;font-weight:700;text-transform:uppercase;">' + MEAL_SLOT_ICONS[m.meal_slot] + MEAL_SLOT_LABELS[m.meal_slot] + "</div>" +
       '<div class="name" style="margin-top:0.4rem;">' + escapeHtml(m.name) + "</div>" +
       '<div class="date tnum">' + Math.round(m.calories) + " kcal · " + Math.round(m.protein_g) + "P " + Math.round(m.carbs_g) + "C " + Math.round(m.fat_g) + "F</div>" +
@@ -1429,21 +1596,15 @@ function showRecentMealConfirm(meal) {
     '<div class="tnum" style="font-size:0.8rem;color:var(--neutral-2);margin-top:0.2rem;">' + Math.round(meal.calories) + " kcal · P" + Math.round(meal.protein_g) + "g C" + Math.round(meal.carbs_g) + "g F" + Math.round(meal.fat_g) + "g</div>" +
     '<button type="button" class="btn primary small" id="btn-recent-meal-add" style="width:auto;margin-top:0.7rem;">Add to Selected Date</button>';
   panel.classList.remove("hidden");
-  document.getElementById("btn-recent-meal-add").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      await api("/nutrition/log", {
-        method: "POST",
-        body: JSON.stringify({ food_item_id: meal.food_item_id, servings: meal.servings, meal_slot: meal.meal_slot, date: state.nutritionDate }),
-      });
-      toast(meal.name + " added");
-      panel.classList.add("hidden");
-      loadFoodToday();
-    } finally {
-      btn.disabled = false;
-    }
-  });
+  document.getElementById("btn-recent-meal-add").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
+    await api("/nutrition/log", {
+      method: "POST",
+      body: JSON.stringify({ food_item_id: meal.food_item_id, servings: meal.servings, meal_slot: meal.meal_slot, date: state.nutritionDate }),
+    });
+    toast(meal.name + " added");
+    panel.classList.add("hidden");
+    loadFoodToday();
+  }));
 }
 
 document.getElementById("btn-food-see-all").addEventListener("click", async () => {
@@ -1452,7 +1613,7 @@ document.getElementById("btn-food-see-all").addEventListener("click", async () =
   list.innerHTML = '<div class="empty-note">Loading…</div>';
   const data = await api("/nutrition/recent-meals?limit=30");
   if (!data.meals.length) {
-    list.innerHTML = '<div class="empty-note">No recent meals yet.</div>';
+    list.innerHTML = '<div class="empty-note">Your recent meals will appear here.</div>';
     return;
   }
   list.innerHTML = data.meals
@@ -1506,12 +1667,12 @@ async function loadSmartNutritionPlan(seq) {
     '<div class="smart-plan-headline">' + escapeHtml(data.headline) + "</div>" +
     (data.detail ? '<div class="smart-plan-detail">' + escapeHtml(data.detail) + "</div>" : "");
   if (!data.configured) {
-    html += '<button type="button" class="btn subtle small" id="btn-smart-plan-set-goal" style="width:auto;margin-top:0.7rem;">Set Calorie Goal</button>';
+    html += '<button type="button" class="btn subtle small" id="btn-smart-plan-set-goal" style="width:auto;margin-top:0.7rem;">Set Up Nutrition</button>';
   }
   if (data.recommendation) {
     const r = data.recommendation;
     html +=
-      '<div class="smart-plan-rec" id="smart-plan-rec-card">' +
+      '<div class="smart-plan-rec" id="smart-plan-rec-card" role="button" tabindex="0" aria-label="Smart Nutrition Plan recommends ' + escapeHtml(r.name) + ", " + Math.round(r.calories) + ' calories. Tap to view the recipe.">' +
       '<div class="rec-icon recipe-gradient-' + r.gradient_key + '">' + r.icon_emoji + "</div>" +
       '<div class="rec-body"><div class="rec-label">Recommended</div>' +
       '<div class="rec-name">' + escapeHtml(r.name) + "</div>" +
@@ -1534,20 +1695,22 @@ async function loadSmartNutritionPlan(seq) {
       if (e.target.closest("#btn-smart-plan-add")) return;
       openRecipeDetail(data.recommendation.id);
     });
-    document.getElementById("btn-smart-plan-add").addEventListener("click", async (e) => {
+    document.getElementById("smart-plan-rec-card").addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !e.target.closest("#btn-smart-plan-add")) {
+        e.preventDefault();
+        openRecipeDetail(data.recommendation.id);
+      }
+    });
+    document.getElementById("btn-smart-plan-add").addEventListener("click", (e) => {
       e.stopPropagation();
-      const btn = e.currentTarget;
-      btn.disabled = true;
-      try {
+      withButtonGuard(e.currentTarget, async () => {
         await api("/recipes/" + data.recommendation.id + "/log", {
           method: "POST",
           body: JSON.stringify({ servings: 1, meal_slot: defaultMealSlot(), date: state.nutritionDate }),
         });
         toast(data.recommendation.name + " added");
         loadFoodToday();
-      } finally {
-        btn.disabled = false;
-      }
+      });
     });
   }
 }
@@ -1556,12 +1719,24 @@ async function loadSmartNutritionPlan(seq) {
 
 async function loadNutritionHydrationCard(seq) {
   seq = seq || ++nutritionLoadSeq;
-  const data = await api("/hydration/today?date=" + state.nutritionDate);
+  let data;
+  try {
+    data = await api("/hydration/today?date=" + state.nutritionDate);
+  } catch (e) {
+    if (seq !== nutritionLoadSeq) return;
+    document.getElementById("hydration-pct").textContent = "—";
+    document.getElementById("hydration-sub").textContent = "Hydration unavailable";
+    return;
+  }
   if (seq !== nutritionLoadSeq) return;
   const pct = data.goal_oz ? Math.round((100 * data.ounces) / data.goal_oz) : 0;
   document.getElementById("hydration-ring").innerHTML = ringSvg(Math.max(0, Math.min(100, pct)), "var(--recovery)", 56, 6);
   document.getElementById("hydration-pct").textContent = ozToDisplay(data.ounces) + hydrationUnit();
   document.getElementById("hydration-sub").textContent = "of " + ozToDisplay(data.goal_oz) + " " + hydrationUnit() + " goal";
+  document.getElementById("hydration-card").setAttribute(
+    "aria-label",
+    "Hydration, " + ozToDisplay(data.ounces) + " " + hydrationUnit() + " of a " + ozToDisplay(data.goal_oz) + " " + hydrationUnit() + " goal, " + pct + " percent. Tap to log water."
+  );
 }
 
 document.getElementById("hydration-card").addEventListener("click", () => {
@@ -1720,7 +1895,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-document.getElementById("btn-save-targets").addEventListener("click", async () => {
+document.getElementById("btn-save-targets").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   const val = parseFloat(document.getElementById("edit-targets-calorie-input").value);
   if (Number.isNaN(val) || val <= 0) {
     toast("Enter a valid calorie target");
@@ -1731,14 +1906,14 @@ document.getElementById("btn-save-targets").addEventListener("click", async () =
   document.getElementById("nutrition-edit-targets-panel").classList.add("hidden");
   toast("Daily target updated");
   loadFoodToday();
-});
+}));
 
 document.getElementById("copy-day-meal-chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   setActiveChip(document.getElementById("copy-day-meal-chips"), chip.dataset.val);
 });
-document.getElementById("btn-do-copy-day").addEventListener("click", async () => {
+document.getElementById("btn-do-copy-day").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   const fromDate = document.getElementById("copy-day-from-input").value;
   if (!fromDate) {
     toast("Choose a date to copy from");
@@ -1756,13 +1931,17 @@ document.getElementById("btn-do-copy-day").addEventListener("click", async () =>
   toast("Copied " + result.copied + " item" + (result.copied === 1 ? "" : "s"));
   document.getElementById("nutrition-copy-day-panel").classList.add("hidden");
   loadFoodToday();
-});
+}));
 
 // ---------------------------------------------------------------- segments ----
 
 function switchNutritionSegment(segment) {
   state.nutritionSegment = segment;
-  document.querySelectorAll("#food-segmented-tabs .seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.nutritionSeg === segment));
+  document.querySelectorAll("#food-segmented-tabs .seg-btn").forEach((b) => {
+    const selected = b.dataset.nutritionSeg === segment;
+    b.classList.toggle("active", selected);
+    b.setAttribute("aria-selected", selected ? "true" : "false");
+  });
   document.querySelectorAll(".nutrition-segment").forEach((el) => el.classList.toggle("hidden", el.dataset.nutritionSeg !== segment));
   if (segment === "savedMeals") {
     document.getElementById("new-meal-builder").classList.add("hidden");
@@ -1847,37 +2026,30 @@ document.getElementById("quickadd-meal-chips").addEventListener("click", (e) => 
   setActiveChip(document.getElementById("quickadd-meal-chips"), chip.dataset.val);
 });
 
-document.getElementById("btn-quick-add").addEventListener("click", async (e) => {
+document.getElementById("btn-quick-add").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   const calories = parseFloat(document.getElementById("quickadd-calories").value);
   if (Number.isNaN(calories)) {
     toast("Enter calories first");
     return;
   }
-  const btn = e.currentTarget;
-  if (btn.disabled) return;
-  btn.disabled = true;
   const mealChip = document.querySelector("#quickadd-meal-chips .chip.active");
-  try {
-    await api("/nutrition/quick-add", {
-      method: "POST",
-      body: JSON.stringify({
-        label: document.getElementById("quickadd-label").value.trim() || "Quick Add",
-        calories: calories,
-        protein_g: parseFloat(document.getElementById("quickadd-protein").value) || 0,
-        carbs_g: parseFloat(document.getElementById("quickadd-carbs").value) || 0,
-        fat_g: parseFloat(document.getElementById("quickadd-fat").value) || 0,
-        meal_slot: mealChip ? mealChip.dataset.val : "snack",
-        date: state.nutritionDate,
-      }),
-    });
-    toast("Added — delete it anytime from Logged Today");
-    switchNutritionSegment("food");
-    showView("view-food");
-    loadFoodToday();
-  } finally {
-    btn.disabled = false;
-  }
-});
+  await api("/nutrition/quick-add", {
+    method: "POST",
+    body: JSON.stringify({
+      label: document.getElementById("quickadd-label").value.trim() || "Quick Add",
+      calories: calories,
+      protein_g: parseFloat(document.getElementById("quickadd-protein").value) || 0,
+      carbs_g: parseFloat(document.getElementById("quickadd-carbs").value) || 0,
+      fat_g: parseFloat(document.getElementById("quickadd-fat").value) || 0,
+      meal_slot: mealChip ? mealChip.dataset.val : "snack",
+      date: state.nutritionDate,
+    }),
+  });
+  toast("Added — delete it anytime from Logged Today");
+  switchNutritionSegment("food");
+  showView("view-food");
+  loadFoodToday();
+}));
 
 // -- restaurants --
 
@@ -1960,7 +2132,7 @@ async function runFoodSearch(q) {
 
 // -- custom food --
 
-document.getElementById("btn-create-custom-food").addEventListener("click", async () => {
+document.getElementById("btn-create-custom-food").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   const name = document.getElementById("custom-food-name").value.trim();
   if (!name) {
     toast("Enter a food name first");
@@ -1989,7 +2161,7 @@ document.getElementById("btn-create-custom-food").addEventListener("click", asyn
   });
   toast("Food created");
   selectFoodForLogging(food);
-});
+}));
 
 // -- selected food -> add to today --
 
@@ -2044,29 +2216,22 @@ document.getElementById("food-selected-meal-chips").addEventListener("click", (e
   setActiveChip(document.getElementById("food-selected-meal-chips"), state.selectedMealSlot);
 });
 
-document.getElementById("btn-add-to-today").addEventListener("click", async (e) => {
+document.getElementById("btn-add-to-today").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   if (!state.selectedFood) return;
-  const btn = e.currentTarget;
-  if (btn.disabled) return; // guards against a double-tap firing this twice before the first request lands
-  btn.disabled = true;
-  try {
-    await api("/nutrition/log", {
-      method: "POST",
-      body: JSON.stringify({
-        food_item_id: state.selectedFood.id,
-        servings: state.selectedServings,
-        meal_slot: state.selectedMealSlot || "snack",
-        date: state.nutritionDate,
-      }),
-    });
-    toast(state.selectedFood.name + " added — delete it anytime from Logged Today");
-    switchNutritionSegment("food");
-    showView("view-food");
-    loadFoodToday();
-  } finally {
-    btn.disabled = false;
-  }
-});
+  await api("/nutrition/log", {
+    method: "POST",
+    body: JSON.stringify({
+      food_item_id: state.selectedFood.id,
+      servings: state.selectedServings,
+      meal_slot: state.selectedMealSlot || "snack",
+      date: state.nutritionDate,
+    }),
+  });
+  toast(state.selectedFood.name + " added — delete it anytime from Logged Today");
+  switchNutritionSegment("food");
+  showView("view-food");
+  loadFoodToday();
+}));
 
 // -- barcode scanning: native BarcodeDetector API (Chrome/Edge/Android) over
 // the device camera, with manual barcode entry as the fallback everywhere else --
@@ -2147,10 +2312,18 @@ document.getElementById("btn-lookup-manual-barcode").addEventListener("click", (
 // -- saved meals --
 
 async function loadSavedMeals() {
-  const data = await api("/nutrition/meals");
   const list = document.getElementById("saved-meals-list");
+  let data;
+  try {
+    data = await api("/nutrition/meals");
+  } catch (e) {
+    list.innerHTML =
+      '<div class="empty-note">Saved meals unavailable right now. <button type="button" class="btn subtle small" id="btn-retry-saved-meals" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-saved-meals").addEventListener("click", loadSavedMeals);
+    return;
+  }
   if (!data.meals.length) {
-    list.innerHTML = '<div class="empty-note">No saved meals yet.</div>';
+    list.innerHTML = '<div class="empty-note">Create your first saved meal.</div>';
     return;
   }
   list.innerHTML = data.meals
@@ -2166,7 +2339,7 @@ async function loadSavedMeals() {
     .join("");
 
   list.querySelectorAll("[data-log-meal]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
       const mealId = btn.dataset.logMeal;
       const multInput = list.querySelector('.meal-multiplier-input[data-meal="' + mealId + '"]');
       const mult = parseFloat(multInput.value) || 1;
@@ -2174,7 +2347,7 @@ async function loadSavedMeals() {
       toast("Meal logged to " + nutritionDateLabel(state.nutritionDate));
       loadNutritionMacros();
       loadRecentMeals();
-    });
+    }));
   });
   list.querySelectorAll("[data-del-meal]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -2309,14 +2482,26 @@ async function loadRecipeHub() {
   recRow.innerHTML = '<div class="empty-note">Loading…</div>';
   catContainer.innerHTML = '<div class="empty-note">Loading…</div>';
 
-  const [recommended, categories] = await Promise.all([
-    api("/recipes/recommended"),
-    api("/recipes/categories"),
-  ]);
+  let recommended, categories;
+  try {
+    [recommended, categories] = await Promise.all([api("/recipes/recommended"), api("/recipes/categories")]);
+  } catch (e) {
+    const retry = '<button type="button" class="btn subtle small" id="btn-retry-recipes" style="width:auto;">Retry</button>';
+    recRow.innerHTML = '<div class="empty-note">Recipes unavailable right now. ' + retry + '</div>';
+    catContainer.innerHTML = "";
+    document.getElementById("btn-retry-recipes").addEventListener("click", loadRecipeHub);
+    return;
+  }
 
-  recRow.innerHTML = recommended.recipes.map((r) => recipeCardHtml(r, true)).join("");
+  recRow.innerHTML = recommended.recipes.length
+    ? recommended.recipes.map((r) => recipeCardHtml(r, true)).join("")
+    : '<div class="empty-note">Explore recipes to see personalized picks here.</div>';
   wireRecipeCards(recRow);
 
+  if (!categories.categories.length) {
+    catContainer.innerHTML = '<div class="empty-note">Explore recipes as your library grows.</div>';
+    return;
+  }
   const categoryData = await Promise.all(categories.categories.map((c) => api("/recipes?category=" + encodeURIComponent(c.key))));
   catContainer.innerHTML = categories.categories
     .map((c, i) => (
@@ -2463,7 +2648,7 @@ document.getElementById("recipe-log-meal-chips").addEventListener("click", (e) =
   setActiveChip(document.getElementById("recipe-log-meal-chips"), state.recipeLogMealSlot);
 });
 
-document.getElementById("btn-log-recipe").addEventListener("click", async () => {
+document.getElementById("btn-log-recipe").addEventListener("click", (e) => withButtonGuard(e.currentTarget, async () => {
   const overrides = Object.entries(state.recipeOverrides).map(([id, o]) => ({ ingredient_id: parseInt(id, 10), ...o }));
   await api("/recipes/" + state.selectedRecipe.id + "/log", {
     method: "POST",
@@ -2478,7 +2663,7 @@ document.getElementById("btn-log-recipe").addEventListener("click", async () => 
   switchNutritionSegment("food");
   showView("view-food");
   loadFoodToday();
-});
+}));
 
 document.getElementById("btn-add-recipe-to-cart").addEventListener("click", async () => {
   const result = await api("/shopping/from-recipe/" + state.selectedRecipe.id, {
@@ -2497,7 +2682,15 @@ const CART_CATEGORY_LABELS = {
 };
 
 async function loadShoppingCart() {
-  const data = await api("/shopping");
+  let data;
+  try {
+    data = await api("/shopping");
+  } catch (e) {
+    document.getElementById("cart-categories").innerHTML =
+      '<div class="empty-note">Smart Cart unavailable right now. <button type="button" class="btn subtle small" id="btn-retry-cart" style="width:auto;">Retry</button></div>';
+    document.getElementById("btn-retry-cart").addEventListener("click", loadShoppingCart);
+    return;
+  }
   document.getElementById("cart-cost").textContent = "$" + data.estimated_cost.toFixed(2);
   document.getElementById("cart-budget").textContent = data.budget != null ? "$" + data.budget.toFixed(2) : "—";
   document.getElementById("cart-item-count").textContent = data.item_count;
@@ -2570,8 +2763,14 @@ document.getElementById("btn-add-cart-item").addEventListener("click", async () 
 });
 
 async function loadPantry() {
-  const data = await api("/pantry");
   const list = document.getElementById("pantry-list");
+  let data;
+  try {
+    data = await api("/pantry");
+  } catch (e) {
+    list.innerHTML = '<div class="empty-note">Pantry unavailable right now.</div>';
+    return;
+  }
   if (!data.items.length) {
     list.innerHTML = '<div class="empty-note">Nothing saved.</div>';
     return;

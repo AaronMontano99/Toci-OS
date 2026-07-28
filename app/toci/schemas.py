@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CheckinIn(BaseModel):
@@ -110,36 +110,36 @@ class SpotifyPlaybackIn(BaseModel):
 class FoodItemIn(BaseModel):
     name: str
     brand: Optional[str] = None
-    serving_qty: float = 1.0
+    serving_qty: float = Field(1.0, gt=0)
     serving_unit: str = "serving"
-    calories: float
-    protein_g: float = 0.0
-    carbs_g: float = 0.0
-    fat_g: float = 0.0
-    fiber_g: float = 0.0
-    sugar_g: float = 0.0
-    sodium_mg: float = 0.0
+    calories: float = Field(ge=0)
+    protein_g: float = Field(0.0, ge=0)
+    carbs_g: float = Field(0.0, ge=0)
+    fat_g: float = Field(0.0, ge=0)
+    fiber_g: float = Field(0.0, ge=0)
+    sugar_g: float = Field(0.0, ge=0)
+    sodium_mg: float = Field(0.0, ge=0)
 
 
 class FoodLogIn(BaseModel):
     food_item_id: int
-    servings: float = 1.0
+    servings: float = Field(1.0, gt=0)
     meal_slot: str = "snack"
     date: Optional[str] = None  # ISO date "YYYY-MM-DD" -- defaults to today when omitted
 
 
 class FoodLogUpdateIn(BaseModel):
-    servings: Optional[float] = None
+    servings: Optional[float] = Field(None, gt=0)
     meal_slot: Optional[str] = None
     notes: Optional[str] = None
 
 
 class QuickAddIn(BaseModel):
     label: str = "Quick Add"
-    calories: float
-    protein_g: float = 0.0
-    carbs_g: float = 0.0
-    fat_g: float = 0.0
+    calories: float = Field(ge=0)
+    protein_g: float = Field(0.0, ge=0)
+    carbs_g: float = Field(0.0, ge=0)
+    fat_g: float = Field(0.0, ge=0)
     meal_slot: str = "snack"
     date: Optional[str] = None
 
@@ -152,7 +152,7 @@ class CopyDayIn(BaseModel):
 
 class SavedMealItemIn(BaseModel):
     food_item_id: int
-    servings: float = 1.0
+    servings: float = Field(1.0, gt=0)
 
 
 class SavedMealIn(BaseModel):
@@ -161,7 +161,7 @@ class SavedMealIn(BaseModel):
 
 
 class LogSavedMealIn(BaseModel):
-    multiplier: float = 1.0
+    multiplier: float = Field(1.0, gt=0)
     date: Optional[str] = None
 
 
@@ -189,12 +189,12 @@ class BodyFatIn(BaseModel):
 
 
 class WaterLogIn(BaseModel):
-    ounces: float
+    ounces: float = Field(gt=0)
     date: Optional[str] = None
 
 
 class RecipeFitMacrosIn(BaseModel):
-    target_protein_g: float
+    target_protein_g: float = Field(gt=0)
 
 
 class RecipeIngredientOverrideIn(BaseModel):
@@ -204,7 +204,7 @@ class RecipeIngredientOverrideIn(BaseModel):
 
 
 class RecipeLogIn(BaseModel):
-    servings: float = 1.0
+    servings: float = Field(1.0, gt=0)
     meal_slot: str = "dinner"
     overrides: List[RecipeIngredientOverrideIn] = []
     date: Optional[str] = None
@@ -212,13 +212,13 @@ class RecipeLogIn(BaseModel):
 
 class ShoppingItemIn(BaseModel):
     name: str
-    quantity: float = 1.0
+    quantity: float = Field(1.0, gt=0)
     unit: str = "unit"
     category: Optional[str] = None
 
 
 class ShoppingItemUpdateIn(BaseModel):
-    quantity: Optional[float] = None
+    quantity: Optional[float] = Field(None, gt=0)
     is_checked: Optional[bool] = None
 
 

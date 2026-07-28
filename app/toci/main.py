@@ -145,29 +145,34 @@ def _today_workout_status(db: Session, reco, today: dt.date) -> dict:
     }
     if reco.session_type == "lift":
         status["total_exercise_count"] = len(reco.prescription.get("exercises", []))
-        session = (
-            db.query(models.WorkoutSession)
-            .filter_by(user_id=DEMO_USER_ID, date=today)
-            .order_by(models.WorkoutSession.id.desc())
-            .first()
+
+    # Checked unconditionally (not gated on reco.session_type == "lift") -- the Log
+    # tab's "Start Empty Session" lets a freeform lift session begin on any day,
+    # including a scheduled run or rest day, and it must still be detected as
+    # active so Resume Session shows up and a duplicate never gets created.
+    session = (
+        db.query(models.WorkoutSession)
+        .filter_by(user_id=DEMO_USER_ID, date=today)
+        .order_by(models.WorkoutSession.id.desc())
+        .first()
+    )
+    if session:
+        completed_exercise_count = (
+            db.query(models.WorkoutSet.exercise_id)
+            .filter_by(workout_session_id=session.id)
+            .distinct()
+            .count()
         )
-        if session:
-            completed_exercise_count = (
-                db.query(models.WorkoutSet.exercise_id)
-                .filter_by(workout_session_id=session.id)
-                .distinct()
-                .count()
-            )
-            elapsed_min = None
-            if session.started_at:
-                end = session.ended_at or dt.datetime.utcnow()
-                elapsed_min = max(0, round((end - session.started_at).total_seconds() / 60))
-            status.update({
-                "state": "completed" if session.ended_at else "active",
-                "session_id": session.id,
-                "completed_exercise_count": completed_exercise_count,
-                "elapsed_min": elapsed_min,
-            })
+        elapsed_min = None
+        if session.started_at:
+            end = session.ended_at or dt.datetime.utcnow()
+            elapsed_min = max(0, round((end - session.started_at).total_seconds() / 60))
+        status.update({
+            "state": "completed" if session.ended_at else "active",
+            "session_id": session.id,
+            "completed_exercise_count": completed_exercise_count,
+            "elapsed_min": elapsed_min,
+        })
     elif reco.session_type == "run":
         session = (
             db.query(models.CardioSession)
@@ -308,9 +313,12 @@ def get_workout_session(session_id: int, db: Session = Depends(get_db)):
             "id": s.id, "set_number": s.set_index,
             "weight_kg": s.actual_load_kg, "reps": s.actual_reps, "rest_seconds": s.rest_seconds,
         })
+    exercise_count, volume_kg = _lift_session_volume_kg(db, session_id)
     return {
         "id": session.id, "label": session.label, "date": session.date.isoformat(),
         "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+        "duration_min": _lift_session_duration_min(db, session) if session.ended_at else None,
+        "exercise_count": exercise_count, "volume_kg": volume_kg,
         "exercises_with_sets": list(by_exercise.values()),
     }
 
@@ -353,6 +361,22 @@ def log_run(payload: schemas.RunIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(row)
     return {"id": row.id}
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: int, db: Session = Depends(get_db)):
+    """Read-only detail for a single completed run -- powers the Log tab's
+    completed-session detail view. Not used for editing (no PATCH exists)."""
+    row = db.query(models.CardioSession).filter_by(id=run_id, user_id=DEMO_USER_ID).first()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    return {
+        "id": row.id, "date": row.date.isoformat(), "activity_type": row.activity_type,
+        "duration_min": round(row.duration_seconds / 60),
+        "distance_km": round((row.distance_meters or 0) / 1000, 2) if row.distance_meters else None,
+        "pace_per_km": _run_pace_per_km(row),
+        "avg_hr": row.avg_hr, "perceived_effort": row.perceived_effort,
+    }
 
 
 # ------------------------------------------------------------------- log ----
@@ -413,6 +437,47 @@ def log_lift_day_prescription(weekday: int, db: Session = Depends(get_db)):
     return reco_engine.build_lift_day_prescription(db, DEMO_USER_ID, day, readiness)
 
 
+def _recent_sessions(db: Session, fetch_cap: int):
+    """Shared lift+run session list, newest first, deduplicated logic used by
+    both the landing summary (small N) and the paginated history endpoint
+    (larger N) -- one place computes session dicts, nothing recalculates them."""
+    lifts = db.query(models.WorkoutSession).filter_by(user_id=DEMO_USER_ID).order_by(models.WorkoutSession.date.desc()).limit(fetch_cap).all()
+    runs = db.query(models.CardioSession).filter_by(user_id=DEMO_USER_ID).order_by(models.CardioSession.date.desc()).limit(fetch_cap).all()
+
+    recent = []
+    for s in lifts:
+        exercise_count, volume_kg = _lift_session_volume_kg(db, s.id)
+        recent.append({
+            "id": s.id, "type": "lift", "title": s.label or "Lift Session", "date": s.date.isoformat(),
+            "duration_min": _lift_session_duration_min(db, s),
+            "exercise_count": exercise_count, "volume_kg": volume_kg,
+            "sort_key": (s.date.isoformat(), s.id),
+        })
+    for s in runs:
+        recent.append({
+            "id": s.id, "type": "run", "title": "Run", "date": s.date.isoformat(),
+            "duration_min": round(s.duration_seconds / 60),
+            "distance_km": round((s.distance_meters or 0) / 1000, 2) if s.distance_meters else None,
+            "pace_per_km": _run_pace_per_km(s),
+            "sort_key": (s.date.isoformat(), s.id),
+        })
+    recent.sort(key=lambda r: r["sort_key"], reverse=True)
+    for r in recent:
+        del r["sort_key"]
+    return recent
+
+
+@app.get("/api/log/history")
+def log_history(limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
+    """Paginated activity history -- deliberately separate from /log/summary so
+    paging through history never re-triggers that endpoint's weekly-totals math."""
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+    all_recent = _recent_sessions(db, fetch_cap=offset + limit + 1)
+    page = all_recent[offset:offset + limit]
+    return {"sessions": page, "has_more": len(all_recent) > offset + limit}
+
+
 @app.get("/api/log/summary")
 def log_summary(recent_limit: int = 5, period: str = "this_week", db: Session = Depends(get_db)):
     today = dt.date.today()
@@ -424,34 +489,11 @@ def log_summary(recent_limit: int = 5, period: str = "this_week", db: Session = 
     else:
         period, period_start, period_end, period_weeks = "this_week", this_monday, today, 1
 
-    lifts = db.query(models.WorkoutSession).filter_by(user_id=DEMO_USER_ID).order_by(models.WorkoutSession.date.desc()).limit(max(10, recent_limit)).all()
-    runs = db.query(models.CardioSession).filter_by(user_id=DEMO_USER_ID).order_by(models.CardioSession.date.desc()).limit(max(10, recent_limit)).all()
-
-    recent = []
-    for s in lifts:
-        exercise_count, volume_kg = _lift_session_volume_kg(db, s.id)
-        recent.append({
-            "type": "lift", "title": s.label or "Lift Session", "date": s.date.isoformat(),
-            "duration_min": _lift_session_duration_min(db, s),
-            "exercise_count": exercise_count, "volume_kg": volume_kg,
-            "sort_key": (s.date.isoformat(), s.id),
-        })
-    for s in runs:
-        recent.append({
-            "type": "run", "title": "Run", "date": s.date.isoformat(),
-            "duration_min": round(s.duration_seconds / 60),
-            "distance_km": round((s.distance_meters or 0) / 1000, 2) if s.distance_meters else None,
-            "pace_per_km": _run_pace_per_km(s),
-            "sort_key": (s.date.isoformat(), s.id),
-        })
-    recent.sort(key=lambda r: r["sort_key"], reverse=True)
-    for r in recent:
-        del r["sort_key"]
-    recent = recent[:recent_limit]
+    recent = _recent_sessions(db, fetch_cap=max(10, recent_limit))[:recent_limit]
 
     # period range is a full week for this_week/last_week and trailing 28 days for
-    # last_4_weeks -- all queried directly by date rather than reusing the `lifts`/
-    # `runs` "most recent N" lists above, since those are capped independent of period.
+    # last_4_weeks -- all queried directly by date rather than reusing `recent` above,
+    # since that "most recent N" list is capped independent of the selected period.
     period_lifts = db.query(models.WorkoutSession).filter(
         models.WorkoutSession.user_id == DEMO_USER_ID,
         models.WorkoutSession.date >= period_start, models.WorkoutSession.date <= period_end,
@@ -1491,7 +1533,7 @@ def _smart_nutrition_plan(db: Session, user: "models.User", target_date: dt.date
     summary = nutrition_client.today_summary(db, DEMO_USER_ID, target_date)
     targets = nutrition_client.macro_targets(user.daily_calorie_goal_kcal)
     if not targets:
-        return {"configured": False, "headline": "Set up a calorie goal to unlock personalized recommendations.", "detail": None, "recommendation": None}
+        return {"configured": False, "headline": "Set up your nutrition targets", "detail": "Unlock personalized recommendations by setting a daily calorie goal.", "recommendation": None}
 
     totals = summary["totals"]
     remaining_kcal = targets["calories"] - totals["calories"]
@@ -1509,7 +1551,7 @@ def _smart_nutrition_plan(db: Session, user: "models.User", target_date: dt.date
     if remaining_kcal <= 100:
         headline = (
             f"You've gone {abs(round(remaining_kcal))} kcal over today's target."
-            if remaining_kcal < -50 else "No additional food needed to hit today's target."
+            if remaining_kcal < -50 else "You're on track. No recommendation needed right now."
         )
         return {"configured": True, "headline": headline, "detail": None, "recommendation": None}
 
