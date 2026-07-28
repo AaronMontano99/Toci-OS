@@ -1083,6 +1083,14 @@ def exercise_decision(exercise_id: int, db: Session = Depends(get_db)):
     return reco_engine.progression_options(db, DEMO_USER_ID, exercise_id, target_rir, target_reps, starting_load_kg)
 
 
+@app.get("/api/exercises/{exercise_id}/memory")
+def exercise_memory(exercise_id: int, db: Session = Depends(get_db)):
+    """What the coach already remembers about this exercise -- last session,
+    best ever, how long it's been -- so the logging screen can open with
+    context instead of a blank form."""
+    return reco_engine.exercise_memory(db, DEMO_USER_ID, exercise_id, dt.date.today())
+
+
 @app.get("/api/goals")
 def list_goals(db: Session = Depends(get_db)):
     goals = db.query(models.Goal).filter_by(user_id=DEMO_USER_ID).order_by(models.Goal.is_secondary, models.Goal.id).all()

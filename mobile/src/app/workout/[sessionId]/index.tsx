@@ -4,13 +4,14 @@ import { Alert, View } from 'react-native';
 
 import {
   useCompleteWorkout,
+  useExerciseMemory,
   useLiftDayPrescription,
   useLogSet,
   useSettings,
   useToday,
   useWorkoutSession,
 } from '@/api/hooks';
-import { LiftPrescription, LoggedSet, PrescriptionExercise } from '@/api/types';
+import { Exercise, LiftPrescription, LoggedSet, PrescriptionExercise } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
@@ -21,6 +22,8 @@ import { useWorkoutContext } from '@/context/WorkoutContext';
 import { ActiveExerciseCard } from '@/features/workout/ActiveExerciseCard';
 import { ExerciseOutlineRow } from '@/features/workout/ExerciseOutlineRow';
 import { RestTimerBar } from '@/features/workout/RestTimerBar';
+import { SwapExerciseSheet } from '@/features/workout/SwapExerciseSheet';
+import { describeSetReaction } from '@/lib/coachVoice';
 import { SPACING } from '@/theme/tokens';
 
 const DEFAULT_REST_SECONDS = 90;
@@ -66,9 +69,28 @@ export default function ActiveWorkoutScreen() {
     });
   }, [session, prescriptionExercises]);
 
-  const exercisesList = useMemo(
+  const baseExercises = useMemo(
     () => (prescriptionExercises?.length ? prescriptionExercises : freeformExercises ?? []),
     [prescriptionExercises, freeformExercises],
+  );
+
+  // Client-side, this-workout-only substitutions (equipment unavailable,
+  // movement swap, etc.) -- keyed by position in the plan so the swap sticks
+  // to "this slot" regardless of which exercise currently occupies it. Sets
+  // logged before a swap stay attached to the original exercise, exactly as
+  // they were actually performed.
+  const [substitutions, setSubstitutions] = useState<Record<number, Exercise>>({});
+
+  const exercisesList = useMemo(
+    () =>
+      baseExercises.map((ex, i) => {
+        const sub = substitutions[i];
+        // Drop the original exercise's coach rationale/progression options on
+        // swap -- they were computed for that movement, not this one, and
+        // showing them here would be a fabricated recommendation.
+        return sub ? { ...ex, exercise_id: sub.id, name: sub.name, why: undefined, progression_options: undefined, recommended_type: undefined } : ex;
+      }),
+    [baseExercises, substitutions],
   );
 
   const loggedSetsByExercise = useMemo(() => {
@@ -89,6 +111,11 @@ export default function ActiveWorkoutScreen() {
 
   const [manualIndex, setManualIndex] = useState<number | null>(null);
   const currentIndex = manualIndex ?? derivedIndex;
+  const currentExercise = exercisesList[currentIndex];
+
+  const { data: memory } = useExerciseMemory(currentExercise?.exercise_id ?? null);
+  const [reaction, setReaction] = useState<{ exerciseId: number; text: string } | null>(null);
+  const [swapSheetOpen, setSwapSheetOpen] = useState(false);
 
   if (sessionLoading || !session) {
     return (
@@ -98,7 +125,6 @@ export default function ActiveWorkoutScreen() {
     );
   }
 
-  const currentExercise = exercisesList[currentIndex];
   const completedCount = exercisesList.filter((ex) => (loggedSetsByExercise.get(ex.exercise_id)?.length ?? 0) >= ex.sets).length;
   const allDone = exercisesList.length > 0 && currentIndex >= exercisesList.length;
 
@@ -148,9 +174,29 @@ export default function ActiveWorkoutScreen() {
           exercise={currentExercise}
           loggedSets={loggedSetsByExercise.get(currentExercise.exercise_id) ?? []}
           units={units}
+          memory={memory}
+          reactionText={reaction?.exerciseId === currentExercise.exercise_id ? reaction.text : null}
+          onRequestSwap={() => setSwapSheetOpen(true)}
           logging={logSet.isPending}
           onLogSet={async (input) => {
-            await logSet.mutateAsync({ exercise_id: currentExercise.exercise_id, ...input });
+            const exerciseId = currentExercise.exercise_id;
+            const priorSets = loggedSetsByExercise.get(exerciseId) ?? [];
+            const previousSet = priorSets[priorSets.length - 1];
+            const previous = previousSet?.weight_kg != null && previousSet.reps != null
+              ? { weight_kg: previousSet.weight_kg, reps: previousSet.reps }
+              : memory?.last_session
+                ? { weight_kg: memory.last_session.weight_kg, reps: memory.last_session.reps }
+                : null;
+
+            await logSet.mutateAsync({ exercise_id: exerciseId, ...input });
+            setReaction({
+              exerciseId,
+              text: describeSetReaction(
+                { weight_kg: input.actual_load_kg, reps: input.actual_reps, feel: input.feel },
+                previous,
+                units,
+              ),
+            });
             startRest(DEFAULT_REST_SECONDS);
           }}
         />
@@ -193,6 +239,17 @@ export default function ActiveWorkoutScreen() {
           })}
         </View>
       )}
+
+      <SwapExerciseSheet
+        visible={swapSheetOpen}
+        currentExerciseId={currentExercise?.exercise_id}
+        currentExerciseName={currentExercise?.name}
+        onClose={() => setSwapSheetOpen(false)}
+        onSelect={(chosen) => {
+          setSubstitutions((prev) => ({ ...prev, [currentIndex]: chosen }));
+          setSwapSheetOpen(false);
+        }}
+      />
     </ScreenContainer>
   );
 }

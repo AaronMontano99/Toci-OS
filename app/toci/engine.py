@@ -121,6 +121,74 @@ def _last_top_set(db: Session, user_id: int, exercise_id: int):
     )
 
 
+def exercise_memory(db: Session, user_id: int, exercise_id: int, today: dt.date) -> dict:
+    """Everything the coach should already remember about this exercise before
+    the user lifts a single rep today: last time, best ever, how long it's
+    been. Powers a conversational logging intro instead of a blank form --
+    the same underlying WorkoutSet history progression_options() reads, just
+    shaped for "what happened last time" rather than "what to do next"."""
+    rows = (
+        db.query(models.WorkoutSet, models.WorkoutSession.date)
+        .join(models.WorkoutSession, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
+        .filter(
+            models.WorkoutSession.user_id == user_id,
+            models.WorkoutSet.exercise_id == exercise_id,
+            models.WorkoutSet.actual_load_kg.isnot(None),
+            models.WorkoutSet.actual_reps.isnot(None),
+        )
+        .order_by(models.WorkoutSession.date.desc())
+        .all()
+    )
+    if not rows:
+        return {
+            "has_history": False,
+            "last_session": None,
+            "best_session": None,
+            "sessions_logged": 0,
+            "days_since_last": None,
+        }
+
+    sessions_by_date: dict = {}
+    order = []
+    for s, date in rows:
+        if date not in sessions_by_date:
+            sessions_by_date[date] = []
+            order.append(date)
+        sessions_by_date[date].append(s)
+    order.sort(reverse=True)
+
+    last_date = order[0]
+    last_sets = sessions_by_date[last_date]
+    last_top = max(last_sets, key=lambda r: (r.actual_load_kg or 0))
+    last_session = {
+        "date": last_date.isoformat(),
+        "weight_kg": last_top.actual_load_kg,
+        "reps": last_top.actual_reps,
+        "sets": len(last_sets),
+        "feel": last_top.feel,
+        "rir": last_top.rir,
+    }
+
+    best_set, best_date, best_est = None, None, -1.0
+    for s, date in rows:
+        est = s.actual_load_kg * (1 + s.actual_reps / 30)
+        if est > best_est:
+            best_set, best_date, best_est = s, date, est
+    best_session = (
+        {"date": best_date.isoformat(), "weight_kg": best_set.actual_load_kg, "reps": best_set.actual_reps}
+        if best_set
+        else None
+    )
+
+    return {
+        "has_history": True,
+        "last_session": last_session,
+        "best_session": best_session,
+        "sessions_logged": len(order),
+        "days_since_last": (today - last_date).days,
+    }
+
+
 # feel ratings that mean "don't add load yet, even if reps were technically hit"
 FEEL_BLOCKS_INCREASE = {"sloppy", "partial", "assisted", "pain"}
 

@@ -146,6 +146,14 @@ export function useExerciseDecision(exerciseId: number | null) {
   });
 }
 
+export function useExerciseMemory(exerciseId: number | null) {
+  return useQuery({
+    queryKey: ['exerciseMemory', exerciseId],
+    queryFn: () => api.get<import('./types').ExerciseMemory>(`/api/exercises/${exerciseId}/memory`),
+    enabled: exerciseId != null,
+  });
+}
+
 export function useExerciseDecisions(exerciseIds: number[]) {
   return useQueries({
     queries: exerciseIds.map((id) => ({

@@ -320,6 +320,23 @@ export interface RecipeSummary {
   gradient_key: string;
 }
 
+export interface ExerciseMemorySession {
+  date: string;
+  weight_kg: number;
+  reps: number;
+  sets?: number;
+  feel?: Feel | null;
+  rir?: number | null;
+}
+
+export interface ExerciseMemory {
+  has_history: boolean;
+  last_session: ExerciseMemorySession | null;
+  best_session: Pick<ExerciseMemorySession, 'date' | 'weight_kg' | 'reps'> | null;
+  sessions_logged: number;
+  days_since_last: number | null;
+}
+
 export interface NutritionRecommendation {
   configured: boolean;
   headline: string;

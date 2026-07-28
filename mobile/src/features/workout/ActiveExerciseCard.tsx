@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { Feel, LoggedSet, PrescriptionExercise } from '@/api/types';
+import { ExerciseMemory, Feel, LoggedSet, PrescriptionExercise } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
-import { formatWeight, kgToDisplay, weightStep, Units } from '@/lib/units';
+import { describeExerciseSummary, describeMemoryIntro } from '@/lib/coachVoice';
+import { kgToDisplay, weightStep, Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeContext';
-import { SPACING } from '@/theme/tokens';
+import { RADIUS, SPACING } from '@/theme/tokens';
 
 const FEEL_OPTIONS: { key: Feel; label: string }[] = [
   { key: 'clean', label: 'Clean' },
@@ -26,6 +27,9 @@ interface ActiveExerciseCardProps {
   exercise: PrescriptionExercise;
   loggedSets: LoggedSet[];
   units: Units;
+  memory?: ExerciseMemory;
+  reactionText?: string | null;
+  onRequestSwap?: () => void;
   onLogSet: (input: {
     set_index: number;
     actual_reps: number;
@@ -39,33 +43,46 @@ interface ActiveExerciseCardProps {
   logging: boolean;
 }
 
-export function ActiveExerciseCard({ exercise, loggedSets, units, onLogSet, logging }: ActiveExerciseCardProps) {
+export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reactionText, onRequestSwap, onLogSet, logging }: ActiveExerciseCardProps) {
   const { colors } = useTheme();
   const setNumber = loggedSets.length + 1;
   const isComplete = loggedSets.length >= exercise.sets;
+  const lastSet = loggedSets[loggedSets.length - 1];
 
-  const [weightKg, setWeightKg] = useState(exercise.load_kg);
-  const [reps, setReps] = useState(exercise.reps);
+  // The suggestion carries forward from what you just did this session --
+  // repeating your own last set by default -- and falls back to real history
+  // before the static prescription, so a swapped-in exercise you've done
+  // before prefills from its own memory instead of the old movement's number.
+  const suggestedWeightKg = lastSet?.weight_kg ?? memory?.last_session?.weight_kg ?? exercise.load_kg;
+  const suggestedReps = lastSet?.reps ?? memory?.last_session?.reps ?? exercise.reps;
+
+  const [weightKg, setWeightKg] = useState(suggestedWeightKg);
+  const [reps, setReps] = useState(suggestedReps);
   const [feel, setFeel] = useState<Feel | null>(null);
   const [rir, setRir] = useState<number | null>(null);
   const [confidence, setConfidence] = useState<'yes' | 'maybe' | 'no' | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
-  // Resets when the exercise or set number changes via the `key` the caller
-  // passes (exercise_id + setNumber) -- remounting is simpler and avoids an
-  // effect-driven state reset for what's really just fresh initial state.
-  const displayWeight = kgToDisplay(weightKg, units);
+  // Round display-unit conversions to 1 decimal -- kg<->lb round-tripping
+  // otherwise surfaces float noise (e.g. 184.9678379731123) in the stepper.
+  const displayWeight = Math.round(kgToDisplay(weightKg, units) * 10) / 10;
   const step = weightStep(units);
-
-  const lastSet = loggedSets[loggedSets.length - 1];
+  const memoryLine = describeMemoryIntro(memory, units);
 
   if (isComplete) {
+    const topSet = loggedSets.reduce((top, s) => ((s.weight_kg ?? 0) > (top.weight_kg ?? 0) ? s : top), loggedSets[0]);
+    const summary =
+      topSet?.weight_kg != null && topSet.reps != null
+        ? describeExerciseSummary({ weight_kg: topSet.weight_kg, reps: topSet.reps }, memory, units)
+        : `${exercise.sets} of ${exercise.sets} sets logged.`;
     return (
       <Card style={{ gap: SPACING.sm, alignItems: 'center', paddingVertical: SPACING.xl }}>
         <Text style={{ fontSize: 28 }}>✅</Text>
-        <Text variant="cardTitle">{exercise.name} complete</Text>
-        <Text variant="caption" tone="tertiary">
-          {exercise.sets} of {exercise.sets} sets logged
+        <Text variant="cardTitle" center>
+          {exercise.name}
+        </Text>
+        <Text variant="body" tone="secondary" center>
+          {summary}
         </Text>
       </Card>
     );
@@ -73,38 +90,65 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, onLogSet, logg
 
   return (
     <Card style={{ gap: SPACING.lg }}>
-      <View>
-        <Text variant="microLabel" tone="tertiary">
-          SET {setNumber} OF {exercise.sets}
-        </Text>
-        <Text variant="cardTitle">{exercise.name}</Text>
-        {lastSet && (
-          <Text variant="caption" tone="tertiary">
-            Previous set: {formatWeight(lastSet.weight_kg, units)} × {lastSet.reps ?? '—'}
+      {reactionText && (
+        <View style={{ flexDirection: 'row', gap: SPACING.sm, backgroundColor: colors.accentWash, borderRadius: RADIUS.input, padding: SPACING.sm }}>
+          <Text style={{ fontSize: 14 }}>💬</Text>
+          <Text variant="caption" style={{ color: colors.accentInk, flex: 1 }}>
+            {reactionText}
           </Text>
-        )}
+        </View>
+      )}
+
+      <View style={{ gap: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text variant="caption" tone="tertiary">
+            Set {setNumber} of {exercise.sets}
+          </Text>
+          {onRequestSwap && loggedSets.length === 0 && (
+            <Pressable onPress={onRequestSwap} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text variant="caption" style={{ fontWeight: '700', color: colors.accentInk }}>
+                Swap movement
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        <Text variant="cardTitle">{exercise.name}</Text>
+        {memoryLine ? (
+          <Text variant="caption" tone="secondary" style={{ marginTop: 2 }}>
+            {memoryLine}
+          </Text>
+        ) : memory && !memory.has_history ? (
+          <Text variant="caption" tone="secondary" style={{ marginTop: 2 }}>
+            First time logging this one — whatever you do today becomes the baseline.
+          </Text>
+        ) : null}
         {exercise.why && (
-          <Text variant="caption" tone="secondary" style={{ marginTop: 4 }}>
+          <Text variant="caption" style={{ color: colors.accentInk, marginTop: 4 }}>
             {exercise.why}
           </Text>
         )}
       </View>
 
-      <View style={{ gap: SPACING.base }}>
-        <Stepper
-          label={`WEIGHT (${units === 'imperial' ? 'lb' : 'kg'})`}
-          value={displayWeight}
-          step={step}
-          min={0}
-          onChange={(v) => setWeightKg(units === 'imperial' ? v * 0.45359237 : v)}
-          large
-        />
-        <Stepper label="REPS" value={reps} step={1} min={0} onChange={setReps} large />
+      <View style={{ gap: 4 }}>
+        <Text variant="caption" tone="tertiary">
+          {setNumber === 1 && !exercise.why ? 'Coach suggests' : 'Suggested'}
+        </Text>
+        <View style={{ gap: SPACING.base }}>
+          <Stepper
+            label={`WEIGHT (${units === 'imperial' ? 'lb' : 'kg'})`}
+            value={displayWeight}
+            step={step}
+            min={0}
+            onChange={(v) => setWeightKg(units === 'imperial' ? v * 0.45359237 : v)}
+            large
+          />
+          <Stepper label="REPS" value={reps} step={1} min={0} onChange={setReps} large />
+        </View>
       </View>
 
       <Pressable onPress={() => setFeedbackOpen((v) => !v)} hitSlop={8}>
         <Text variant="caption" style={{ fontWeight: '700', color: colors.accentInk }}>
-          {feedbackOpen ? 'Hide optional feedback' : 'Add optional feedback'}
+          {feedbackOpen ? 'Hide optional feedback' : 'How did that feel? (optional)'}
         </Text>
       </Pressable>
 
@@ -149,7 +193,7 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, onLogSet, logg
       )}
 
       <Button
-        label="Complete Set"
+        label="Log it"
         loading={logging}
         onPress={() =>
           onLogSet({
