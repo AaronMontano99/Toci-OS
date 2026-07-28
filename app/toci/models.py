@@ -84,6 +84,20 @@ class Exercise(Base):
     unilateral = Column(Boolean, default=False)
 
 
+class ExerciseSubstitution(Base):
+    """A user's standing "swap this movement for that one" preference --
+    e.g. from tapping Swap Movement mid-workout -- so it carries into future
+    prescriptions of the same planned exercise instead of resetting every
+    session. At most one active substitute per (user, original exercise)."""
+    __tablename__ = "exercise_substitutions"
+    __table_args__ = (UniqueConstraint("user_id", "original_exercise_id", name="uq_exercise_substitution_user_original"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    original_exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=False)
+    substitute_exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=dt.datetime.utcnow)
+
+
 class Program(Base):
     __tablename__ = "programs"
     id = Column(Integer, primary_key=True)

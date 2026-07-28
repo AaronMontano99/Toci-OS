@@ -266,31 +266,60 @@ def _active_injury_regions(db: Session, user_id: int):
     return {r.body_region for r in rows}
 
 
+def _user_exercise_substitutions(db: Session, user_id: int) -> dict:
+    """The user's standing "swap this for that" preferences (from Swap Movement),
+    keyed by the original exercise_id, valued by the real substitute Exercise row --
+    so, unlike the hardcoded injury map, this can change both the exercise_id and
+    the name a prescription reports, and future sets log against the substitute."""
+    rows = (
+        db.query(models.ExerciseSubstitution, models.Exercise)
+        .join(models.Exercise, models.ExerciseSubstitution.substitute_exercise_id == models.Exercise.id)
+        .filter(models.ExerciseSubstitution.user_id == user_id)
+        .all()
+    )
+    return {sub.original_exercise_id: exercise for sub, exercise in rows}
+
+
+def _resolve_exercise(ex: models.Exercise, injury_regions: set, user_subs: dict):
+    """Injury-driven substitution (safety) takes precedence over a user's
+    standing preference. Returns (exercise_id, name, injury_reason_or_None)."""
+    for region in injury_regions:
+        sub_name = SUBSTITUTIONS.get(ex.name, {}).get(region)
+        if sub_name:
+            return ex.id, sub_name, f"Substituted {ex.name} for {sub_name} — active {region.replace('_', ' ')} injury"
+
+    preferred = user_subs.get(ex.id)
+    if preferred:
+        return preferred.id, preferred.name, None
+
+    return ex.id, ex.name, None
+
+
 def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDay, readiness: models.ReadinessScore) -> dict:
     """Build a {label, exercises} lift prescription for an arbitrary ProgramDay,
     honoring today's readiness and injuries the same way generate_recommendation's
     lift branch does. Powers the Log tab's "Choose Saved Workout" flow so it reuses
     the same progression engine instead of replaying a stale, unadjusted template."""
     injury_regions = _active_injury_regions(db, user_id)
+    user_subs = _user_exercise_substitutions(db, user_id)
     set_multiplier = 0.8 if readiness.band == "amber" else 1.0
 
     exercises_out = []
     for item in day.template.get("exercises", []):
         ex = db.query(models.Exercise).get(item["exercise_id"])
-        name = ex.name
-        for region in injury_regions:
-            sub = SUBSTITUTIONS.get(ex.name, {}).get(region)
-            if sub:
-                name = sub
-                break
+        exercise_id, name, _ = _resolve_exercise(ex, injury_regions, user_subs)
 
+        # Progression reads the resolved exercise's own history -- if it's a
+        # persisted substitution, that's a different real exercise_id, and
+        # future sets log against it, so the coach should reason about its
+        # own history, not the original movement's.
         progression = progression_options(
-            db, user_id, item["exercise_id"], item["target_rir"], item["reps"], item["starting_load_kg"]
+            db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"]
         )
         recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
         sets = max(1, round(item["sets"] * set_multiplier))
         exercises_out.append({
-            "exercise_id": item["exercise_id"],
+            "exercise_id": exercise_id,
             "name": name,
             "sets": sets,
             "reps": item["reps"],
@@ -351,25 +380,22 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
             set_multiplier = 0.8
             reasoning.append("Readiness moderate — volume trimmed ~20%")
 
+        user_subs = _user_exercise_substitutions(db, user_id)
         exercises_out = []
         for item in day.template.get("exercises", []):
             ex = db.query(models.Exercise).get(item["exercise_id"])
-            name = ex.name
-            for region in injury_regions:
-                sub = SUBSTITUTIONS.get(ex.name, {}).get(region)
-                if sub:
-                    name = sub
-                    reasoning.append(f"Substituted {ex.name} for {sub} — active {region.replace('_', ' ')} injury")
-                    break
+            exercise_id, name, injury_reason = _resolve_exercise(ex, injury_regions, user_subs)
+            if injury_reason:
+                reasoning.append(injury_reason)
 
             progression = progression_options(
-                db, user_id, item["exercise_id"], item["target_rir"], item["reps"], item["starting_load_kg"]
+                db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"]
             )
             recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
             sets = max(1, round(item["sets"] * set_multiplier))
             exercises_out.append(
                 {
-                    "exercise_id": item["exercise_id"],
+                    "exercise_id": exercise_id,
                     "name": name,
                     "sets": sets,
                     "reps": item["reps"],

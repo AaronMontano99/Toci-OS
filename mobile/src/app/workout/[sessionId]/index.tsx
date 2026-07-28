@@ -7,6 +7,7 @@ import {
   useExerciseMemory,
   useLiftDayPrescription,
   useLogSet,
+  useSetExerciseSubstitution,
   useSettings,
   useToday,
   useWorkoutSession,
@@ -39,6 +40,7 @@ export default function ActiveWorkoutScreen() {
   const { data: settings } = useSettings();
   const logSet = useLogSet(sessionId);
   const completeWorkout = useCompleteWorkout();
+  const setExerciseSubstitution = useSetExerciseSubstitution();
   const { startRest } = useWorkoutContext();
 
   const units = settings?.units ?? 'imperial';
@@ -248,6 +250,13 @@ export default function ActiveWorkoutScreen() {
         onSelect={(chosen) => {
           setSubstitutions((prev) => ({ ...prev, [currentIndex]: chosen }));
           setSwapSheetOpen(false);
+          // Persist against the true original exercise for this slot -- not
+          // whatever it currently shows, in case it was already swapped once
+          // this session -- so the preference carries into future workouts.
+          const originalExerciseId = baseExercises[currentIndex]?.exercise_id;
+          if (originalExerciseId != null) {
+            setExerciseSubstitution.mutate({ exerciseId: originalExerciseId, substituteExerciseId: chosen.id });
+          }
         }}
       />
     </ScreenContainer>

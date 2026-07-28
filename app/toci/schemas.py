@@ -65,6 +65,10 @@ class ExerciseIn(BaseModel):
     primary_muscle_group: Optional[str] = "custom"
 
 
+class ExerciseSubstitutionIn(BaseModel):
+    substitute_exercise_id: int
+
+
 class SettingsUpdateIn(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = None

@@ -181,6 +181,23 @@ export function useExerciseMemories(exerciseIds: number[], excludeSessionId?: nu
   });
 }
 
+export interface ExerciseSubstitutionStatus {
+  substituted: boolean;
+  substitute: { id: number; name: string } | null;
+}
+
+// Persists a Swap Movement choice so it carries into future prescriptions of
+// this exercise (see build_lift_day_prescription/_resolve_exercise on the
+// backend), not just the workout it was made in.
+export function useSetExerciseSubstitution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ exerciseId, substituteExerciseId }: { exerciseId: number; substituteExerciseId: number }) =>
+      api.put<ExerciseSubstitutionStatus>(`/api/exercises/${exerciseId}/substitution`, { substitute_exercise_id: substituteExerciseId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['liftDayPrescription'] }),
+  });
+}
+
 // -------------------------------------------------------------- program ----
 
 export function useProgram() {

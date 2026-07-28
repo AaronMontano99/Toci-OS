@@ -1093,6 +1093,57 @@ def exercise_memory(exercise_id: int, exclude_session_id: int | None = None, db:
     return reco_engine.exercise_memory(db, DEMO_USER_ID, exercise_id, dt.date.today(), exclude_session_id)
 
 
+@app.get("/api/exercises/{exercise_id}/substitution")
+def get_exercise_substitution(exercise_id: int, db: Session = Depends(get_db)):
+    """The user's standing swap for this exercise, if any -- so the logging
+    screen can show "You've been doing X instead of this" and offer to revert."""
+    row = (
+        db.query(models.ExerciseSubstitution, models.Exercise)
+        .join(models.Exercise, models.ExerciseSubstitution.substitute_exercise_id == models.Exercise.id)
+        .filter(models.ExerciseSubstitution.user_id == DEMO_USER_ID, models.ExerciseSubstitution.original_exercise_id == exercise_id)
+        .first()
+    )
+    if not row:
+        return {"substituted": False, "substitute": None}
+    _, substitute = row
+    return {"substituted": True, "substitute": {"id": substitute.id, "name": substitute.name}}
+
+
+@app.put("/api/exercises/{exercise_id}/substitution")
+def set_exercise_substitution(exercise_id: int, payload: schemas.ExerciseSubstitutionIn, db: Session = Depends(get_db)):
+    """Persist a swap so it carries into future prescriptions of this exercise,
+    not just the workout it was made in -- the substitution half of "the app
+    should remember" (see build_lift_day_prescription / generate_recommendation,
+    which both apply this through _resolve_exercise)."""
+    if payload.substitute_exercise_id == exercise_id:
+        raise HTTPException(400, "An exercise can't be substituted for itself")
+    if not db.query(models.Exercise).get(payload.substitute_exercise_id):
+        raise HTTPException(404, "Substitute exercise not found")
+
+    row = (
+        db.query(models.ExerciseSubstitution)
+        .filter_by(user_id=DEMO_USER_ID, original_exercise_id=exercise_id)
+        .first()
+    )
+    if row:
+        row.substitute_exercise_id = payload.substitute_exercise_id
+    else:
+        row = models.ExerciseSubstitution(
+            user_id=DEMO_USER_ID, original_exercise_id=exercise_id, substitute_exercise_id=payload.substitute_exercise_id,
+        )
+        db.add(row)
+    db.commit()
+    return {"substituted": True}
+
+
+@app.delete("/api/exercises/{exercise_id}/substitution")
+def clear_exercise_substitution(exercise_id: int, db: Session = Depends(get_db)):
+    """Revert to the original exercise for future prescriptions."""
+    db.query(models.ExerciseSubstitution).filter_by(user_id=DEMO_USER_ID, original_exercise_id=exercise_id).delete()
+    db.commit()
+    return {"substituted": False}
+
+
 @app.get("/api/goals")
 def list_goals(db: Session = Depends(get_db)):
     goals = db.query(models.Goal).filter_by(user_id=DEMO_USER_ID).order_by(models.Goal.is_secondary, models.Goal.id).all()
