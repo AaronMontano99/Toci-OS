@@ -354,7 +354,7 @@ export function usePRs() {
 export function useBodyWeightHistory(days = 30) {
   return useQuery({
     queryKey: ['bodyWeightHistory', days],
-    queryFn: () => api.get<{ points: { date: string; weight_kg: number }[] }>(`/api/body-weight/history?days=${days}`),
+    queryFn: () => api.get<{ points: { id: number; date: string; weight_kg: number }[] }>(`/api/body-weight/history?days=${days}`),
   });
 }
 
@@ -373,6 +373,23 @@ export function useLogBodyWeight() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (weight_kg: number) => api.post('/api/body-weight', { weight_kg }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bodyWeightHistory'] }),
+  });
+}
+
+export function useUpdateBodyWeight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, weight_kg }: { entryId: number; weight_kg: number }) =>
+      api.patch(`/api/body-weight/${entryId}`, { weight_kg }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bodyWeightHistory'] }),
+  });
+}
+
+export function useDeleteBodyWeight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entryId: number) => api.delete(`/api/body-weight/${entryId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bodyWeightHistory'] }),
   });
 }
