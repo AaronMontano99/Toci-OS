@@ -562,6 +562,22 @@ export function useToggleShoppingItem() {
   });
 }
 
+export function useAddShoppingItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { name: string; quantity?: number; unit?: string }) => api.post('/api/shopping/items', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+export function useDeleteShoppingItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/shopping/items/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
 export function useHydrationToday(date?: string) {
   return useQuery({
     queryKey: ['hydration', date],
