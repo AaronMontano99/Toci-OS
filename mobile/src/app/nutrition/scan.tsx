@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
@@ -21,6 +21,7 @@ function inferMealSlot(): string {
 }
 
 export default function ScanBarcodeScreen() {
+  const { date } = useLocalSearchParams<{ date?: string }>();
   const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const lookup = useLookupBarcode();
@@ -79,7 +80,7 @@ export default function ScanBarcodeScreen() {
                   label="Log this food"
                   loading={logFood.isPending}
                   onPress={async () => {
-                    await logFood.mutateAsync({ food_item_id: food.id, servings: 1, meal_slot: inferMealSlot() });
+                    await logFood.mutateAsync({ food_item_id: food.id, servings: 1, meal_slot: inferMealSlot(), date });
                     router.back();
                   }}
                 />
@@ -88,8 +89,12 @@ export default function ScanBarcodeScreen() {
               <>
                 <Text variant="cardTitle">No product found</Text>
                 <Text variant="caption" tone="tertiary">
-                  Try Custom Food from the Food tab instead.
+                  This barcode isn&rsquo;t in the catalog yet. Add it as a custom food to log it and save it for next time.
                 </Text>
+                <Button
+                  label="Add as Custom Food"
+                  onPress={() => router.push(date ? `/nutrition/custom-food?date=${date}` : '/nutrition/custom-food')}
+                />
                 <Button
                   label="Try again"
                   variant="secondary"

@@ -438,6 +438,39 @@ export function useNutritionRecommendation(date?: string) {
   });
 }
 
+export function useCreateCustomFood() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      brand?: string;
+      serving_qty?: number;
+      serving_unit?: string;
+      calories: number;
+      protein_g?: number;
+      carbs_g?: number;
+      fat_g?: number;
+    }) => api.post<FoodItem>('/api/nutrition/foods', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['foods'] }),
+  });
+}
+
+export function useCopyNutritionDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { from_date: string; to_date?: string; meal_slot?: string }) => api.post('/api/nutrition/copy', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nutritionToday'] }),
+  });
+}
+
+export function useClearNutritionDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => api.delete(`/api/nutrition/log?date=${date}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nutritionToday'] }),
+  });
+}
+
 export function useSearchFoods(q: string) {
   return useQuery({
     queryKey: ['foods', q],
@@ -477,7 +510,7 @@ export function useUpdateFoodLogEntry() {
 export function useQuickAddFood() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { label: string; calories: number; protein_g?: number; carbs_g?: number; fat_g?: number; meal_slot: string }) =>
+    mutationFn: (payload: { label: string; calories: number; protein_g?: number; carbs_g?: number; fat_g?: number; meal_slot: string; date?: string }) =>
       api.post('/api/nutrition/quick-add', payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['nutritionToday'] }),
   });

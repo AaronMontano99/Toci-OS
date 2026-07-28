@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
@@ -9,13 +9,14 @@ import { FoodPanel } from '@/features/nutrition/FoodPanel';
 import { SPACING } from '@/theme/tokens';
 
 export default function AddFoodScreen() {
+  const { date } = useLocalSearchParams<{ date?: string }>();
   return (
     <ScreenContainer>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
         <IconButton name="close" onPress={() => router.back()} />
         <Text variant="screenTitle">Add Food</Text>
       </View>
-      <FoodPanel />
+      <FoodPanel date={date} />
     </ScreenContainer>
   );
 }

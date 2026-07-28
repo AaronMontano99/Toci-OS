@@ -30,10 +30,18 @@ function macroTargets(kcal: number | null) {
   };
 }
 
-export function TodayPanel({ dailyCalorieGoal, onAddFood }: { dailyCalorieGoal: number | null; onAddFood: () => void }) {
-  const { data: nutrition, isLoading } = useNutritionToday();
-  const { data: recommendation } = useNutritionRecommendation();
-  const { data: hydration } = useHydrationToday();
+export function TodayPanel({
+  dailyCalorieGoal,
+  onAddFood,
+  date,
+}: {
+  dailyCalorieGoal: number | null;
+  onAddFood: () => void;
+  date?: string;
+}) {
+  const { data: nutrition, isLoading } = useNutritionToday(date);
+  const { data: recommendation } = useNutritionRecommendation(date);
+  const { data: hydration } = useHydrationToday(date);
   const deleteEntry = useDeleteFoodLogEntry();
   const updateEntry = useUpdateFoodLogEntry();
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -85,7 +93,7 @@ export function TodayPanel({ dailyCalorieGoal, onAddFood }: { dailyCalorieGoal: 
         <>
           <RecentMealsRow entries={nutrition.entries} />
           <View style={{ gap: SPACING.sm }}>
-            <Text variant="sectionTitle">Today&rsquo;s log</Text>
+            <Text variant="sectionTitle">{nutrition.is_today ? "Today's log" : 'Logged'}</Text>
             {nutrition.entries.map((entry) =>
               editingEntryId === entry.id ? (
                 <EditingFoodRow

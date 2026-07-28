@@ -20,7 +20,7 @@ function inferMealSlot(): string {
   return 'snack';
 }
 
-export function FoodPanel() {
+export function FoodPanel({ date }: { date?: string } = {}) {
   const [query, setQuery] = useState('');
   const { data } = useSearchFoods(query);
   const logFood = useLogFood();
@@ -28,7 +28,7 @@ export function FoodPanel() {
   const [loggedId, setLoggedId] = useState<number | null>(null);
 
   const onLog = async (food: FoodItem) => {
-    await logFood.mutateAsync({ food_item_id: food.id, servings: 1, meal_slot: inferMealSlot() });
+    await logFood.mutateAsync({ food_item_id: food.id, servings: 1, meal_slot: inferMealSlot(), date });
     setLoggedId(food.id);
     setTimeout(() => setLoggedId(null), 1500);
   };
@@ -42,14 +42,26 @@ export function FoodPanel() {
           onChangeText={setQuery}
           style={{ flex: 1 }}
         />
-        <IconButton name="barcode-outline" onPress={() => router.push('/nutrition/scan')} />
+        <IconButton
+          name="barcode-outline"
+          onPress={() => router.push({ pathname: '/nutrition/scan', params: date ? { date } : undefined })}
+        />
       </View>
 
       {!data?.foods.length ? (
-        <EmptyState
-          title={query ? 'No matches' : 'Search or scan a food'}
-          detail={query ? 'Try a different search term, or add it as a custom food.' : 'Your favorites and recent foods will appear here.'}
-        />
+        <View style={{ gap: SPACING.sm }}>
+          <EmptyState
+            title={query ? 'No matches' : 'Search or scan a food'}
+            detail={query ? 'Try a different search term, or add it as a custom food.' : 'Your favorites and recent foods will appear here.'}
+          />
+          {query.trim().length > 0 && (
+            <Button
+              label="Add as Custom Food"
+              variant="secondary"
+              onPress={() => router.push({ pathname: '/nutrition/custom-food', params: date ? { date } : undefined })}
+            />
+          )}
+        </View>
       ) : (
         <View style={{ gap: SPACING.sm }}>
           {data.foods.map((food) => (
@@ -79,7 +91,7 @@ export function FoodPanel() {
         label="Quick Add (calories only)"
         variant="tertiary"
         onPress={() =>
-          quickAdd.mutate({ label: 'Quick Add', calories: 250, protein_g: 15, carbs_g: 20, fat_g: 10, meal_slot: inferMealSlot() })
+          quickAdd.mutate({ label: 'Quick Add', calories: 250, protein_g: 15, carbs_g: 20, fat_g: 10, meal_slot: inferMealSlot(), date })
         }
       />
     </View>
