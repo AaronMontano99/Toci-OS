@@ -1,90 +1,55 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Text } from '@/components/ui/Text';
 import { ReadinessBand } from '@/api/types';
+import { Card } from '@/components/ui/Card';
+import { RingGauge } from '@/components/ui/RingGauge';
+import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
 
 interface ReadinessCardProps {
   score: number;
   band: ReadinessBand;
-  sleepMin: number | null;
-  hrvMs: number | null;
   checkedIn: boolean;
 }
 
 const BAND_COPY: Record<ReadinessBand, { label: string; interpretation: string }> = {
-  green: { label: 'Ready', interpretation: "You're recovered — today's full session is cleared." },
-  amber: { label: 'Moderate', interpretation: 'Recovery is so-so — volume is trimmed a bit today.' },
-  red: { label: 'Low', interpretation: 'Recovery is low — today leans toward active recovery.' },
+  green: { label: 'Ready', interpretation: "Energy is high — today's full session is cleared." },
+  amber: { label: 'Moderate', interpretation: 'Energy is decent — solid day to train.' },
+  red: { label: 'Low', interpretation: 'Energy is low — today leans toward active recovery.' },
 };
 
-export function ReadinessCard({ score, band, sleepMin, hrvMs, checkedIn }: ReadinessCardProps) {
+export function ReadinessCard({ score, band, checkedIn }: ReadinessCardProps) {
   const { colors } = useTheme();
   const bandColor = { green: colors.sage, amber: colors.warmAmber, red: colors.mutedTerracotta }[band];
-  const sleepHours = sleepMin != null ? (sleepMin / 60).toFixed(1) : null;
 
   return (
-    <Card style={{ gap: SPACING.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="sectionTitle">Readiness</Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: `${bandColor}22`,
-            paddingHorizontal: SPACING.sm,
-            paddingVertical: 4,
-            borderRadius: 9999,
-          }}
-        >
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: bandColor }} />
-          <Text variant="caption" style={{ fontWeight: '700', color: bandColor }}>
-            {BAND_COPY[band].label}
+    <Pressable onPress={() => router.push('/checkin')}>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.base, backgroundColor: colors.accentWash, borderColor: colors.accentBorder }}>
+        <RingGauge size={64} strokeWidth={6} progress={score / 100} color={bandColor} trackColor={colors.accentBorder}>
+          <Text variant="bodyStrong" style={{ color: colors.accentInk }}>
+            {Math.round(score)}
+          </Text>
+          <Text variant="microLabel" style={{ fontSize: 8, color: colors.accentInk, opacity: 0.7 }}>
+            /100
+          </Text>
+        </RingGauge>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text variant="caption" style={{ fontWeight: '700', color: colors.accentInk }}>
+            Readiness
+          </Text>
+          <Text variant="cardTitle" style={{ color: colors.accentInk }}>
+            {checkedIn ? BAND_COPY[band].label : `${BAND_COPY[band].label} · check in`}
+          </Text>
+          <Text variant="caption" style={{ color: colors.accentInk, opacity: 0.85 }}>
+            {BAND_COPY[band].interpretation}
           </Text>
         </View>
-      </View>
-
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.xl }}>
-        <View>
-          <Text variant="heroMetric">{Math.round(score)}</Text>
-          <Text variant="microLabel" tone="tertiary">
-            SCORE
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: SPACING.lg, paddingBottom: 4 }}>
-          <View>
-            <Text variant="bodyStrong">{sleepHours ? `${sleepHours}h` : '—'}</Text>
-            <Text variant="microLabel" tone="tertiary">
-              SLEEP
-            </Text>
-          </View>
-          <View>
-            <Text variant="bodyStrong">{hrvMs != null ? Math.round(hrvMs) : '—'}</Text>
-            <Text variant="microLabel" tone="tertiary">
-              HRV MS
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <Text variant="body" tone="secondary">
-        {BAND_COPY[band].interpretation}
-      </Text>
-
-      {!checkedIn && (
-        <Button
-          label="Do today's check-in"
-          variant="secondary"
-          size="compact"
-          onPress={() => router.push('/checkin')}
-        />
-      )}
-    </Card>
+        <Ionicons name="chevron-forward" size={18} color={colors.accentInk} />
+      </Card>
+    </Pressable>
   );
 }

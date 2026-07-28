@@ -254,6 +254,13 @@ export function useWeeklySummary() {
   return useQuery({ queryKey: ['weeklySummary'], queryFn: () => api.get('/api/progress/weekly-summary') });
 }
 
+export function useBodyFat() {
+  return useQuery({
+    queryKey: ['bodyFat'],
+    queryFn: () => api.get<{ body_fat_pct: number | null; date: string | null }>('/api/body-fat'),
+  });
+}
+
 export function useLogBodyWeight() {
   const qc = useQueryClient();
   return useMutation({
@@ -363,6 +370,44 @@ export function useLookupBarcode() {
   return useMutation({ mutationFn: (barcode: string) => api.get<FoodItem>(`/api/nutrition/lookup/${barcode}`) });
 }
 
+export interface SavedMeal {
+  id: number;
+  name: string;
+  total_calories: number;
+  items: { food_item_id: number; name: string; servings: number }[];
+}
+
+export function useSavedMeals() {
+  return useQuery({ queryKey: ['savedMeals'], queryFn: () => api.get<{ meals: SavedMeal[] }>('/api/nutrition/meals') });
+}
+
+export function useLogSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, multiplier = 1, date }: { id: number; multiplier?: number; date?: string }) =>
+      api.post(`/api/nutrition/meals/${id}/log`, { multiplier, date }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nutritionToday'] }),
+  });
+}
+
+export function useDeleteSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/nutrition/meals/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['savedMeals'] }),
+  });
+}
+
+export function useRecentLoggedMeals(limit = 3) {
+  return useQuery({
+    queryKey: ['recentLoggedMeals', limit],
+    queryFn: () =>
+      api.get<{ meals: { log_entry_id: number; food_item_id: number; name: string; meal_slot: string; servings: number; date: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }[] }>(
+        `/api/nutrition/recent-meals?limit=${limit}`,
+      ),
+  });
+}
+
 export function useRecipes(category = '') {
   return useQuery({
     queryKey: ['recipes', category],
@@ -395,6 +440,28 @@ export function useHydrationToday(date?: string) {
   return useQuery({
     queryKey: ['hydration', date],
     queryFn: () => api.get<{ date: string; ounces: number; goal_oz: number }>(`/api/hydration/today${date ? `?date=${date}` : ''}`),
+  });
+}
+
+// ------------------------------------------------------------ progress photos ----
+
+export interface ProgressPhoto {
+  id: number;
+  date: string;
+  url: string;
+  note: string | null;
+  ai_impression: string | null;
+}
+
+export function useProgressPhotos() {
+  return useQuery({ queryKey: ['progressPhotos'], queryFn: () => api.get<ProgressPhoto[]>('/api/progress/photos') });
+}
+
+export function useUploadProgressPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (form: FormData) => api.upload<ProgressPhoto>('/api/progress/photos', form),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['progressPhotos'] }),
   });
 }
 

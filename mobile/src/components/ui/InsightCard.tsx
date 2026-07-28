@@ -28,6 +28,10 @@ export function InsightCard({ tone, icon, text, actionLabel, onAction }: Insight
     accent: colors.accentWash,
   }[tone];
   const ink = tone === 'accent' ? colors.accentInk : colors[tone];
+  // `accentWash` is a solid pastel fill (not a translucent tint like the
+  // other semantic washes), so it needs the accent's own ink color rather
+  // than the theme's default light-mode-agnostic primary text.
+  const textColor = tone === 'accent' ? colors.accentInk : colors.textPrimary;
 
   return (
     <Card variant="flat" style={{ backgroundColor: wash, borderColor: 'transparent', gap: SPACING.sm }}>
@@ -44,7 +48,7 @@ export function InsightCard({ tone, icon, text, actionLabel, onAction }: Insight
         >
           <Text style={{ fontSize: 14 }}>{icon}</Text>
         </View>
-        <Text variant="body" style={{ flex: 1, color: colors.textPrimary }}>
+        <Text variant="body" style={{ flex: 1, color: textColor }}>
           {text}
         </Text>
       </View>

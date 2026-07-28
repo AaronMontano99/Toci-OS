@@ -65,7 +65,9 @@ export function CoachSegment({ observations }: { observations: string[] }) {
                 padding: SPACING.sm,
               }}
             >
-              <Text variant="body">{m.content}</Text>
+              <Text variant="body" style={m.role === 'user' ? { color: colors.accentInk } : undefined}>
+                {m.content}
+              </Text>
               {m.proposal && m.proposal_status === 'pending' && (
                 <View style={{ marginTop: SPACING.sm, gap: SPACING.xs }}>
                   <View style={{ flexDirection: 'row', gap: SPACING.sm }}>

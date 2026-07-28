@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { useMutation } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 
@@ -6,15 +6,12 @@ import { api } from '@/api/client';
 import { useSettings, useUpdateSettings } from '@/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { IconButton } from '@/components/ui/IconButton';
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
-import { useMutation } from '@tanstack/react-query';
 
-export default function AccountScreen() {
+export function AccountSegment() {
   const { data: settings } = useSettings();
   const update = useUpdateSettings();
   const [newPassword, setNewPassword] = useState('');
@@ -31,12 +28,7 @@ export default function AccountScreen() {
   });
 
   return (
-    <ScreenContainer>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
-        <IconButton name="chevron-back" onPress={() => router.back()} />
-        <Text variant="screenTitle">Account</Text>
-      </View>
-
+    <View style={{ gap: SPACING.lg }}>
       <Card style={{ gap: SPACING.sm }}>
         <Text variant="cardTitle">Name</Text>
         <TextField value={settings?.name ?? ''} onChangeText={(v) => update.mutate({ name: v })} />
@@ -60,19 +52,14 @@ export default function AccountScreen() {
         <Text variant="cardTitle">Change password</Text>
         <TextField placeholder="New password" secureTextEntry value={newPassword} onChangeText={setNewPassword} />
         <TextField placeholder="Confirm password" secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} />
-        <Button
-          label="Update password"
-          size="compact"
-          loading={updatePassword.isPending}
-          onPress={() => updatePassword.mutate()}
-        />
+        <Button label="Update password" size="compact" loading={updatePassword.isPending} onPress={() => updatePassword.mutate()} />
       </Card>
 
       <Text variant="caption" tone="tertiary">
         This is a single-user local demo — there&rsquo;s no sign-in flow yet, so &ldquo;Sign out&rdquo; and multi-account
         features aren&rsquo;t wired up (see app/README.md&rsquo;s known gaps).
       </Text>
-    </ScreenContainer>
+    </View>
   );
 }
 

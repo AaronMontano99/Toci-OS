@@ -1,8 +1,10 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 
 import { useProgram } from '@/api/hooks';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { CoachSegment } from '@/features/program/CoachSegment';
@@ -42,9 +44,10 @@ export default function ProgramScreen() {
 
   return (
     <ScreenContainer onRefresh={refetch} refreshing={isRefetching}>
+      <ScreenHeader title="Program" rightIcon="notifications-outline" onRightPress={() => router.push('/checkin')} />
       <ProgramHeader identity={program.identity} progress={program.progress} />
       <SegmentedControl segments={SEGMENTS} selected={segment} onChange={setSegment} />
-      {segment === 'overview' && <OverviewSegment program={program} />}
+      {segment === 'overview' && <OverviewSegment program={program} onOpenCoach={() => setSegment('coach')} />}
       {segment === 'schedule' && <ScheduleSegment week={program.week} />}
       {segment === 'goals' && <GoalsSegment goals={program.goals} />}
       {segment === 'coach' && <CoachSegment observations={program.coach_observations} />}

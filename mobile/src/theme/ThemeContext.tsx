@@ -76,7 +76,10 @@ function buildColors(scheme: ColorScheme, accentTheme: AccentKey): ThemeColors {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme();
-  const [appearance, setAppearanceState] = useState<AppearanceMode>('system');
+  // Dark is the default demonstrated look for this app (per approved reference
+  // mockups), overriding design-system.md's "light is primary" default --
+  // still fully user-switchable in Profile -> Appearance.
+  const [appearance, setAppearanceState] = useState<AppearanceMode>('dark');
   const [accentTheme, setAccentThemeState] = useState<AccentKey>('apricot');
   const [ready, setReady] = useState(false);
 

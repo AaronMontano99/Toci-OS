@@ -4,9 +4,18 @@ The mobile-first migration of Toci OS: TypeScript, React Native, Expo Router,
 built to run in **Expo Go** on iOS and Android. It talks to the same
 FastAPI backend in [`../app`](../app) — no backend logic was rewritten,
 only consumed. See [`../docs/design-system.md`](../docs/design-system.md)
-(the Toci Pastel Apricot design system) for the visual language this app
-implements, and [`../docs/architecture.md`](../docs/architecture.md) for the
-product's broader shape.
+for the base Toci Pastel Apricot design system this app extends, and
+[`../docs/architecture.md`](../docs/architecture.md) for the product's
+broader shape.
+
+**Visual language:** the app ships dark-first (near-black surfaces, warm
+orange accent), per approved reference mockups reviewed and signed off
+directly against this codebase — a deliberate, documented deviation from
+`design-system.md`'s "light is primary" default. All 8 accent themes from
+that doc (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) and
+the System/Light/Dark appearance modes remain fully switchable from
+Profile → Appearance; dark + Apricot is just the default first impression
+now instead of light + Apricot.
 
 ## Run it
 
@@ -48,34 +57,62 @@ URL is read from `EXPO_PUBLIC_API_URL`:
   ```
 
   and make sure the backend was started with `--host 0.0.0.0` (as above)
-  so it accepts connections from other devices on the network.
+  so it accepts connections from other devices on the network, and that
+  your phone and computer are on the same network. A remote/cloud dev
+  sandbox with no inbound network access (no LAN, no tunneling) can't
+  serve Expo Go on a physical device at all — it needs a real local or
+  tunnel-capable environment.
+
+## Navigation
+
+Six bottom tabs, matching the approved reference screens exactly:
+**Today · Log · Nutrition · Progress · Program · Profile.** Profile is a
+full tab (not a header-avatar flyout) and is itself a single screen with
+its own segmented sections — see below.
 
 ## What's implemented
 
 Every screen calls the real backend — there is no mock data layer.
 
-- **Today** — readiness card, hero workout card (Start/Resume/View
-  Summary depending on real session state), nutrition snapshot, one coach
-  observation, week strip. `docs/design-system.md` §10.
+- **Today** — wordmark header, greeting + streak pill, ring-gauge readiness
+  card, photo-style gradient hero workout card (Start/Resume/View Summary
+  depending on real session state), 4-column macro row, weight-trend +
+  this-week two-up, water/body-fat/resting-HR stat row.
 - **The core loop, end to end**: Today → Start Workout → Active Workout
   (one exercise at a time, prefilled weight/reps from the same
   progression engine, rest timer, optional feel/RIR feedback) → Log Sets
   → Finish Workout → Completion → Coach Review (per-exercise next-session
   recommendations from `engine.progression_options`, plus deterministic
-  observations from `coach.py`) → back to an updated Today/Program. §12–14.
-- **Program** — Overview / Schedule / Goals / Coach segments, including a
-  working **Ask Toci** chat wired to the existing scoped program-builder
-  endpoint (propose → Apply/Discard, never automatic). §11.
-- **Progress** — Strength (per-exercise est. 1RM trend), Running (pace
-  trend from logged runs), Body (weight trend + logging), Habits
-  (workout/nutrition/check-in consistency), and recent PRs. §15.
-- **Nutrition** — Today (macros vs. targets, AI suggestion, log), Food
+  observations from `coach.py`) → back to an updated Today/Program.
+- **Log** (the workout-entry tab) — "What are you doing today?" with
+  Log Lift Session / Log a Run action cards, recent sessions, a weekly
+  snapshot (lift/run/time/calories vs. goals), and this week's saved
+  workout days.
+- **Program** — photo-style gradient program-header card, Overview /
+  Schedule / Goals / Coach segments, goal-progress mini cards, a real
+  progress-photo capture card (library picker → `/api/progress/photos`
+  upload), and a Coach Notes card that opens straight into **Ask Toci**
+  (the scoped program-builder chat; propose → Apply/Discard, never
+  automatic).
+- **Progress** — exercise dropdown + timeframe dropdown driving a 1RM
+  trend chart with a real % change badge, Strength / Running / Body /
+  Habits categories, consistency/best-lift/trend stat pills, and a
+  styled Recent PRs list.
+- **Nutrition** — Food / Saved Meals / Recipes / Smart Cart segments. Food
+  is the daily dashboard: per-macro cards, a Log Food card with live
+  carb/protein/fat ring donuts that opens a dedicated Add Food screen
   (search, quick add, barcode scan via the device camera against Open
-  Food Facts), Recipes, Smart Cart. §16.
-- **Profile** — Overview, Goals, Body Stats (+ injuries), Training
-  Preferences, Nutrition Preferences, Devices (connection status),
-  **Appearance** (all 8 accent themes + light/dark/system, live preview,
-  persisted locally), Account. §17, §4.
+  Food Facts), recent meals, an AI Smart Nutrition Plan card, daily
+  calorie/hydration rings (tap hydration to log +8oz), and a streak
+  banner. Saved Meals lists/logs/deletes saved meals.
+- **Profile** — a single tab with its own **Overview / Goals / Prefs /
+  Devices / Account** segments (not eight separate pushed screens): a
+  profile header card (avatar, name, body stats), current-stats and
+  daily-target cards, activity level (real week-strip data), connected
+  devices preview, and an inline **Appearance** card (accent dots +
+  expandable full picker — no separate screen). Prefs consolidates body
+  stats/injuries, training preferences, and nutrition preferences into
+  one scrollable segment.
 - **Daily Recovery Check-in** — a focused modal for HRV/RHR/sleep/soreness/mood.
 
 ## What's a deliberate mobile-scope decision
@@ -84,17 +121,21 @@ Every screen calls the real backend — there is no mock data layer.
   are wired to a specific loopback redirect URI on the FastAPI server
   (`app/toci/spotify.py`, `app/toci/whoop.py`), designed for the browser
   frontend. Wiring a native deep-link redirect for Expo Go is real work
-  with its own testing surface; the Devices screen reads and displays the
+  with its own testing surface; the Devices screens read and display the
   real connection status from the existing endpoints instead of
   reimplementing the flow, so nothing is faked.
-- **No progress-photo capture/AI-impression UI yet.** The backend
-  endpoints exist and are unchanged; only the mobile capture screen
-  wasn't built in this pass.
+- **Progress-photo AI impressions aren't surfaced yet.** Capture and
+  upload are real (`/api/progress/photos`); the vision-model impression
+  text the backend can attach isn't displayed in this pass.
 - **Freeform/empty-session workout logging** falls back to whatever's
   already logged in the session (no fixed prescription), rather than a
   full ad-hoc exercise picker — the golden path (today's prescribed
-  session, or any saved day from the Workout tab) always has a real
+  session, or any saved day from the Log tab) always has a real
   prescription.
+- **No "steps" stat anywhere.** The backend has no step-count data source
+  at all (no HealthKit/Health Connect wiring yet), so rather than invent
+  one, every stat row in this app shows only real, backend-sourced
+  numbers — water, body fat, resting HR, calories, protein, etc.
 
 ## Architecture
 
@@ -102,19 +143,21 @@ Every screen calls the real backend — there is no mock data layer.
 mobile/
   src/
     app/                 Expo Router file-based routes
-      (tabs)/             Today, Program, Workout, Nutrition, Progress
+      (tabs)/             Today, Log, Nutrition, Progress, Program, Profile
       workout/             active session, completion, coach review, log-run
-      profile/             Overview, Goals, Body Stats, Preferences, Devices, Appearance, Account
+      nutrition/            add-food, barcode scan
       checkin.tsx           daily recovery check-in modal
-      nutrition/scan.tsx    barcode scanner (expo-camera)
     api/                  client.ts (fetch wrapper), types.ts (mirrors toci/schemas.py),
                            hooks.ts (React Query hooks, one per endpoint)
-    theme/                 tokens.ts (Toci Pastel Apricot design tokens) + ThemeContext
-                           (appearance + accent theme, persisted via AsyncStorage)
+    theme/                 tokens.ts (design tokens: dark-first surfaces + 8 accent
+                           themes) + ThemeContext (appearance + accent, persisted
+                           via AsyncStorage)
     components/ui/         shared primitives: Button, Card, Chip, SegmentedControl,
-                           Stepper, Sparkline (react-native-svg), Skeleton, etc.
-    features/               screen-specific composition (today/, workout/, program/,
-                           progress/, nutrition/)
+                           Stepper, Dropdown, RingGauge, GradientHeroCard,
+                           MacroStatRow, StatPill, Sparkline (react-native-svg),
+                           Avatar, ScreenHeader, Skeleton, etc.
+    features/               screen-specific composition: today/, workout/, program/,
+                           progress/, nutrition/, profile/
     context/WorkoutContext.tsx   app-wide rest timer
     lib/                    units.ts (lb/kg conversion), format.ts
 ```
@@ -128,7 +171,8 @@ API call, same as the existing web frontend.
 ## Verification
 
 - `npx tsc --noEmit` — clean.
-- `npx eslint .` — clean (see `eslint.config.js`; uses `eslint-config-expo`).
+- `npx eslint .` — clean (see `eslint.config.js`; uses `eslint-config-expo`,
+  including the React Compiler's stricter hook-purity rules).
 - `npx expo export --platform ios` — bundles cleanly (1600+ modules, no errors).
 - `npx expo-doctor` — 18/20 checks pass; the other 2 (config-schema and
   React Native Directory validation) require outbound network access to
@@ -137,6 +181,14 @@ API call, same as the existing web frontend.
 - The full golden path (Today → Start Workout → log every set → Finish
   Workout → Completion → Coach Review → back to an updated Today) was
   driven end-to-end against the real local backend via a headless
-  browser (Expo web target) with zero console errors, on a fresh seed.
-  Expo Go on a physical device/simulator should be exercised too before
-  shipping — this sandbox has no iOS/Android runtime available.
+  browser (Expo web target) with zero console errors, on a fresh seed —
+  re-verified after the dark redesign, across every tab, and again after
+  switching accent themes.
+- Fixed a real text-contrast bug found during that pass: several cards
+  used a solid pastel `accentWash` fill with the theme's default (light,
+  in dark mode) text color on top, making the text unreadable. Every such
+  spot now explicitly uses `accentInk`, the token designed for text on a
+  wash surface.
+- Expo Go on a physical device/simulator should still be exercised before
+  shipping — this sandbox has no iOS/Android runtime available, and (see
+  above) has no network path for a phone to reach it at all.

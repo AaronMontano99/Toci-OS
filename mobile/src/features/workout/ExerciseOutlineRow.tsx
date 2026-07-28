@@ -48,11 +48,14 @@ export function ExerciseOutlineRow({ name, detail, state, onPress }: ExerciseOut
       <View style={{ flex: 1 }}>
         <Text
           variant="bodyStrong"
-          style={{ textDecorationLine: isDone ? 'line-through' : 'none', color: isDone ? colors.textTertiary : colors.textPrimary }}
+          style={{
+            textDecorationLine: isDone ? 'line-through' : 'none',
+            color: isDone ? colors.textTertiary : isActive ? colors.accentInk : colors.textPrimary,
+          }}
         >
           {name}
         </Text>
-        <Text variant="caption" tone="tertiary">
+        <Text variant="caption" style={isActive ? { color: colors.accentInk, opacity: 0.8 } : { color: colors.textTertiary }}>
           {detail}
         </Text>
       </View>
