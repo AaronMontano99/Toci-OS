@@ -5,4 +5,10 @@ module.exports = [
   {
     ignores: ['dist/*', '.expo/*'],
   },
+  {
+    files: ['jest.setup.js'],
+    languageOptions: {
+      globals: { jest: 'readonly', require: 'readonly' },
+    },
+  },
 ];

@@ -45,10 +45,11 @@ export function Stepper({ value, onChange, step, min = 0, max = 9999, label, for
         </Text>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.base }}>
-        <StepButton icon="remove" onPress={() => nudge(-step)} />
+        <StepButton icon="remove" onPress={() => nudge(-step)} label="Decrease" testID="stepper-decrement" />
         {editing ? (
           <TextInput
             autoFocus
+            testID="stepper-input"
             value={draft}
             onChangeText={setDraft}
             onBlur={commitDraft}
@@ -71,6 +72,8 @@ export function Stepper({ value, onChange, step, min = 0, max = 9999, label, for
           />
         ) : (
           <Pressable
+            testID="stepper-value"
+            accessibilityLabel={label ? `Edit ${label}` : 'Edit value'}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               setDraft(String(value));
@@ -82,16 +85,28 @@ export function Stepper({ value, onChange, step, min = 0, max = 9999, label, for
             </Text>
           </Pressable>
         )}
-        <StepButton icon="add" onPress={() => nudge(step)} />
+        <StepButton icon="add" onPress={() => nudge(step)} label="Increase" testID="stepper-increment" />
       </View>
     </View>
   );
 }
 
-function StepButton({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+function StepButton({
+  icon,
+  onPress,
+  label,
+  testID,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  label: string;
+  testID?: string;
+}) {
   const { colors } = useTheme();
   return (
     <Pressable
+      testID={testID}
+      accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed }) => ({
         width: 44,
