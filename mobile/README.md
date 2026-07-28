@@ -192,3 +192,29 @@ API call, same as the existing web frontend.
 - Expo Go on a physical device/simulator should still be exercised before
   shipping — this sandbox has no iOS/Android runtime available, and (see
   above) has no network path for a phone to reach it at all.
+- `npm test` — a Jest + React Native Testing Library suite covers the
+  deterministic coaching logic (`lib/coachVoice.ts`), the small formatting
+  helpers, and a couple of key components (`Stepper`, `ActiveExerciseCard`).
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull
+request: the backend job installs `app/requirements.txt` and runs
+`pytest`; the mobile job runs `tsc --noEmit`, `eslint`, and `jest`. Nothing
+here needs secrets or network access beyond the package registries.
+
+## Building for real devices (EAS)
+
+`mobile/eas.json` defines `development` / `preview` / `production` build
+profiles, and `app.json` has placeholder bundle identifiers
+(`com.toci.app`) for iOS/Android. This repo has never been linked to an
+Expo account, so before running a real build:
+
+```
+npx eas login             # one-time, your Expo account
+npx eas init               # creates the project on expo.dev, writes projectId into app.json
+npx eas build --platform ios --profile preview      # or android
+```
+
+Swap `com.toci.app` for your own bundle identifier/package name first if
+you plan to submit to the App Store / Play Store under your own account.
