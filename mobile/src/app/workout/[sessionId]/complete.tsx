@@ -21,7 +21,10 @@ export default function WorkoutCompleteScreen() {
   const units = settings?.units ?? 'imperial';
 
   const loggedExercises = useMemo(() => session?.exercises_with_sets.filter((ex) => ex.logged_sets.length > 0) ?? [], [session]);
-  const memories = useExerciseMemories(loggedExercises.map((ex) => ex.exercise_id));
+  const memories = useExerciseMemories(
+    loggedExercises.map((ex) => ex.exercise_id),
+    id,
+  );
 
   const headline = useMemo(() => {
     const results = loggedExercises.map((ex, i) => {

@@ -163,11 +163,20 @@ export function useExerciseDecisions(exerciseIds: number[]) {
   });
 }
 
-export function useExerciseMemories(exerciseIds: number[]) {
+// excludeSessionId is for post-workout screens (Complete, Coach Review): that
+// session's own sets are already committed by the time these mount, so
+// without excluding it, "last/best" would compare the session against
+// itself. Folded into the query key so it never collides with the
+// un-excluded cache entry the logging screen fetched during this same
+// workout.
+export function useExerciseMemories(exerciseIds: number[], excludeSessionId?: number) {
   return useQueries({
     queries: exerciseIds.map((id) => ({
-      queryKey: ['exerciseMemory', id],
-      queryFn: () => api.get<import('./types').ExerciseMemory>(`/api/exercises/${id}/memory`),
+      queryKey: ['exerciseMemory', id, excludeSessionId ?? null],
+      queryFn: () =>
+        api.get<import('./types').ExerciseMemory>(
+          `/api/exercises/${id}/memory${excludeSessionId != null ? `?exclude_session_id=${excludeSessionId}` : ''}`,
+        ),
     })),
   });
 }

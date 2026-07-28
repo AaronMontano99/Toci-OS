@@ -121,13 +121,18 @@ def _last_top_set(db: Session, user_id: int, exercise_id: int):
     )
 
 
-def exercise_memory(db: Session, user_id: int, exercise_id: int, today: dt.date) -> dict:
+def exercise_memory(db: Session, user_id: int, exercise_id: int, today: dt.date, exclude_session_id: int | None = None) -> dict:
     """Everything the coach should already remember about this exercise before
     the user lifts a single rep today: last time, best ever, how long it's
     been. Powers a conversational logging intro instead of a blank form --
     the same underlying WorkoutSet history progression_options() reads, just
-    shaped for "what happened last time" rather than "what to do next"."""
-    rows = (
+    shaped for "what happened last time" rather than "what to do next".
+
+    exclude_session_id excludes one session's own sets from the history it
+    reports -- needed by the post-workout screens, which call this endpoint
+    after that session's sets are already committed. Without it, "last/best"
+    would compare a session against itself instead of against real history."""
+    query = (
         db.query(models.WorkoutSet, models.WorkoutSession.date)
         .join(models.WorkoutSession, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
         .filter(
@@ -136,6 +141,11 @@ def exercise_memory(db: Session, user_id: int, exercise_id: int, today: dt.date)
             models.WorkoutSet.actual_load_kg.isnot(None),
             models.WorkoutSet.actual_reps.isnot(None),
         )
+    )
+    if exclude_session_id is not None:
+        query = query.filter(models.WorkoutSession.id != exclude_session_id)
+    rows = (
+        query
         .order_by(models.WorkoutSession.date.desc())
         .all()
     )

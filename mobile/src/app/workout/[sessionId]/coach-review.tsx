@@ -30,7 +30,7 @@ export default function CoachReviewScreen() {
 
   const exerciseIds = session?.exercises_with_sets.map((ex) => ex.exercise_id) ?? [];
   const decisions = useExerciseDecisions(exerciseIds);
-  const memories = useExerciseMemories(exerciseIds);
+  const memories = useExerciseMemories(exerciseIds, id);
 
   const headline = useMemo(() => {
     if (!session) return '';

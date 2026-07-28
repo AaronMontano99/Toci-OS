@@ -1084,11 +1084,13 @@ def exercise_decision(exercise_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/exercises/{exercise_id}/memory")
-def exercise_memory(exercise_id: int, db: Session = Depends(get_db)):
+def exercise_memory(exercise_id: int, exclude_session_id: int | None = None, db: Session = Depends(get_db)):
     """What the coach already remembers about this exercise -- last session,
     best ever, how long it's been -- so the logging screen can open with
-    context instead of a blank form."""
-    return reco_engine.exercise_memory(db, DEMO_USER_ID, exercise_id, dt.date.today())
+    context instead of a blank form. Post-workout screens pass
+    exclude_session_id (the session just finished) so "last/best" still means
+    history before this workout, not a comparison against itself."""
+    return reco_engine.exercise_memory(db, DEMO_USER_ID, exercise_id, dt.date.today(), exclude_session_id)
 
 
 @app.get("/api/goals")

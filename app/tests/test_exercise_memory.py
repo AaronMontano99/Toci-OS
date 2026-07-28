@@ -82,3 +82,26 @@ def test_memory_scoped_to_this_exercise(client, db_session, seeded):
 
     body = client.get(f"/api/exercises/{seeded['exercise_id']}/memory").json()
     assert body["has_history"] is False
+
+
+def test_exclude_session_id_omits_that_sessions_own_sets(client, db_session, seeded):
+    """Post-workout screens call this right after a session's sets are already
+    committed. Without exclude_session_id, that session would show up as its
+    own "last/best" -- a session compared against itself instead of history."""
+    today = seeded["today"]
+    old_session = _lift_session(db_session, today - dt.timedelta(days=7))
+    _set(db_session, old_session.id, seeded["exercise_id"], 1, reps=5, load_kg=90)
+
+    just_finished = _lift_session(db_session, today)
+    _set(db_session, just_finished.id, seeded["exercise_id"], 1, reps=5, load_kg=100)
+
+    # Without excluding: today's just-logged session is the "last/best".
+    body = client.get(f"/api/exercises/{seeded['exercise_id']}/memory").json()
+    assert body["last_session"]["weight_kg"] == 100
+    assert body["days_since_last"] == 0
+
+    # Excluding it: "last/best" falls back to real prior history.
+    body = client.get(f"/api/exercises/{seeded['exercise_id']}/memory?exclude_session_id={just_finished.id}").json()
+    assert body["last_session"]["weight_kg"] == 90
+    assert body["days_since_last"] == 7
+    assert body["sessions_logged"] == 1
