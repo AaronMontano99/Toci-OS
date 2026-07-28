@@ -510,17 +510,77 @@ export function useUploadProgressPhoto() {
 
 // -------------------------------------------------------------- devices ----
 
+export interface SpotifyStatus {
+  client_id_configured: boolean;
+  client_id: string;
+  connected: boolean;
+  redirect_uri: string;
+}
+
 export function useSpotifyStatus() {
-  return useQuery({
-    queryKey: ['spotifyStatus'],
-    queryFn: () => api.get<{ client_id_configured: boolean; connected: boolean }>('/api/spotify/status'),
+  return useQuery({ queryKey: ['spotifyStatus'], queryFn: () => api.get<SpotifyStatus>('/api/spotify/status') });
+}
+
+export function useSetSpotifyClientId() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (client_id: string) => api.post('/api/spotify/client-id', { client_id }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spotifyStatus'] }),
   });
 }
 
+export function useSpotifyCallback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { code: string; code_verifier: string; redirect_uri: string }) => api.post('/api/spotify/callback', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spotifyStatus'] }),
+  });
+}
+
+export function useSpotifyDisconnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/api/spotify/disconnect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spotifyStatus'] }),
+  });
+}
+
+export interface WearableStatus {
+  connected: boolean;
+  client_id_configured: boolean;
+  client_id: string;
+  redirect_uri: string;
+  auth_url: string;
+  scopes: string;
+  catalog: Record<string, { label: string; unit: string; source: string }>;
+  display_stats: string[];
+}
+
 export function useWearableStatus() {
-  return useQuery({
-    queryKey: ['wearableStatus'],
-    queryFn: () => api.get<{ connected: boolean; client_id_configured: boolean }>('/api/wearable/status'),
+  return useQuery({ queryKey: ['wearableStatus'], queryFn: () => api.get<WearableStatus>('/api/wearable/status') });
+}
+
+export function useSetWhoopCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { client_id: string; client_secret: string }) => api.post('/api/wearable/whoop/credentials', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wearableStatus'] }),
+  });
+}
+
+export function useWhoopCallback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { code: string; redirect_uri: string; state: string }) => api.post('/api/wearable/whoop/callback', payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wearableStatus'] }),
+  });
+}
+
+export function useWhoopDisconnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/api/wearable/whoop/disconnect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wearableStatus'] }),
   });
 }
 

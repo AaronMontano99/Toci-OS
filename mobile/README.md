@@ -117,13 +117,21 @@ Every screen calls the real backend — there is no mock data layer.
 
 ## What's a deliberate mobile-scope decision
 
-- **No in-app OAuth for Spotify/Whoop.** Both providers' PKCE/OAuth flows
-  are wired to a specific loopback redirect URI on the FastAPI server
-  (`app/toci/spotify.py`, `app/toci/whoop.py`), designed for the browser
-  frontend. Wiring a native deep-link redirect for Expo Go is real work
-  with its own testing surface; the Devices screens read and display the
-  real connection status from the existing endpoints instead of
-  reimplementing the flow, so nothing is faked.
+- **In-app OAuth for Spotify/Whoop is wired, with one real caveat.**
+  Profile → Devices → Whoop/Spotify now opens a native Authorization Code
+  (+ PKCE for Spotify) flow via `expo-web-browser` and `Linking.createURL`,
+  hitting the exact same backend endpoints and scopes the web frontend
+  uses (`app/toci/spotify.py`, `app/toci/whoop.py`) — same
+  credential-entry step, same token exchange, nothing reimplemented or
+  faked. What's untested: this repo has never been linked to a real
+  Whoop/Spotify developer app, and `Linking.createURL`'s value changes
+  every Expo Go dev session, so the redirect URI can't be pre-registered
+  there — only a standalone/dev-client build gets a stable `toci://`
+  redirect worth registering. Verified so far: the sheet renders for both
+  providers, saving credentials round-trips against the real backend and
+  updates connection status live; the external authorize/token-exchange
+  round-trip itself needs a real account and a non-Expo-Go build to
+  exercise end to end.
 - **Progress-photo AI impressions aren't surfaced yet.** Capture and
   upload are real (`/api/progress/photos`); the vision-model impression
   text the backend can attach isn't displayed in this pass.
