@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
-import { describeExerciseSummary, describeMemoryIntro } from '@/lib/coachVoice';
-import { kgToDisplay, weightStep, Units } from '@/lib/units';
+import { describeCoachNote, describeExerciseSummary } from '@/lib/coachVoice';
+import { formatWeight, kgToDisplay, weightStep, Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeContext';
 import { RADIUS, SPACING } from '@/theme/tokens';
 
@@ -67,7 +67,12 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reacti
   // otherwise surfaces float noise (e.g. 184.9678379731123) in the stepper.
   const displayWeight = Math.round(kgToDisplay(weightKg, units) * 10) / 10;
   const step = weightStep(units);
-  const memoryLine = describeMemoryIntro(memory, units);
+  const isFirstSet = loggedSets.length === 0;
+  // The backend's reasoning (when the day's own recommendation engine computed
+  // one) already factors in RIR and confidence, not just feel, and is the same
+  // sentence Coach Review shows later -- prefer it, and only fall back to the
+  // memory-only note for sessions it doesn't cover (weekday picks, freeform).
+  const coachNote = isFirstSet ? exercise.why ?? describeCoachNote(memory, { reps: suggestedReps, load_kg: suggestedWeightKg }, units) : null;
 
   if (isComplete) {
     const topSet = loggedSets.reduce((top, s) => ((s.weight_kg ?? 0) > (top.weight_kg ?? 0) ? s : top), loggedSets[0]);
@@ -113,25 +118,33 @@ export function ActiveExerciseCard({ exercise, loggedSets, units, memory, reacti
           )}
         </View>
         <Text variant="cardTitle">{exercise.name}</Text>
-        {memoryLine ? (
-          <Text variant="caption" tone="secondary" style={{ marginTop: 2 }}>
-            {memoryLine}
-          </Text>
-        ) : memory && !memory.has_history ? (
+        {isFirstSet && memory?.has_history && memory.last_session && (
+          <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: 4 }}>
+            <Text variant="caption" tone="secondary">
+              Last: {formatWeight(memory.last_session.weight_kg, units)} × {memory.last_session.reps}
+            </Text>
+            {memory.best_session && (
+              <Text variant="caption" tone="secondary">
+                Best: {formatWeight(memory.best_session.weight_kg, units)} × {memory.best_session.reps}
+              </Text>
+            )}
+          </View>
+        )}
+        {isFirstSet && memory && !memory.has_history && (
           <Text variant="caption" tone="secondary" style={{ marginTop: 2 }}>
             First time logging this one — whatever you do today becomes the baseline.
           </Text>
-        ) : null}
-        {exercise.why && (
+        )}
+        {coachNote && (
           <Text variant="caption" style={{ color: colors.accentInk, marginTop: 4 }}>
-            {exercise.why}
+            {coachNote}
           </Text>
         )}
       </View>
 
       <View style={{ gap: 4 }}>
         <Text variant="caption" tone="tertiary">
-          {setNumber === 1 && !exercise.why ? 'Coach suggests' : 'Suggested'}
+          {setNumber === 1 && !coachNote ? 'Coach suggests' : 'Suggested'}
         </Text>
         <View style={{ gap: SPACING.base }}>
           <Stepper

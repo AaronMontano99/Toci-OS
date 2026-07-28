@@ -72,14 +72,14 @@ export function evaluateExercisePerformance(
   if (isNewBest) {
     return {
       outcome: 'pr',
-      sentence: `New personal best: ${formatWeight(topThisSession.weight_kg, units, 1)} × ${topThisSession.reps}. That's the strongest you've ever done this.`,
+      sentence: `New personal best: ${formatWeight(topThisSession.weight_kg, units)} × ${topThisSession.reps}. That's the strongest you've ever done this.`,
     };
   }
 
   if (!last) {
     return {
       outcome: 'first_time',
-      sentence: `That's your first time logging this — ${formatWeight(topThisSession.weight_kg, units, 1)} × ${topThisSession.reps} is your new baseline.`,
+      sentence: `That's your first time logging this — ${formatWeight(topThisSession.weight_kg, units)} × ${topThisSession.reps} is your new baseline.`,
     };
   }
 
@@ -142,17 +142,24 @@ export function summarizeWorkoutHeadline(results: { name: string; outcome: Exerc
   return 'Matched last week across the board — steady, consistent work.';
 }
 
-export function describeMemoryIntro(memory: ExerciseMemory | undefined, units: Units): string | null {
+// The forward-looking companion to describeMemoryIntro -- not "what happened
+// last time" but "here's what I'd try today, and why." Read off the same
+// memory the intro line uses (last session's reps-hit and feel), so it never
+// invents a recommendation the app can't back up.
+export function describeCoachNote(memory: ExerciseMemory | undefined, target: { reps: number; load_kg: number }, units: Units): string | null {
   if (!memory?.has_history || !memory.last_session) return null;
-  const { last_session, days_since_last } = memory;
-  const whenPhrase =
-    days_since_last === 0
-      ? 'earlier today'
-      : days_since_last === 1
-        ? 'yesterday'
-        : days_since_last != null && days_since_last <= 10
-          ? `${days_since_last} days ago`
-          : 'a while back';
-  const feelPhrase = last_session.feel === 'clean' ? ', and it looked clean' : '';
-  return `Last time (${whenPhrase}) you did ${formatWeight(last_session.weight_kg, units, 1)} × ${last_session.reps} across ${last_session.sets} set${last_session.sets === 1 ? '' : 's'}${feelPhrase}.`;
+  const { last_session } = memory;
+
+  const suggestion = `try ${formatWeight(target.load_kg, units)} for ${target.reps}`;
+
+  if (last_session.feel === 'pain') {
+    return `Last time this caused some discomfort. Let's ease back in — ${suggestion} and stop if anything feels off.`;
+  }
+  if (last_session.feel && ROUGH_FEELS.includes(last_session.feel)) {
+    return `You got through it last time, but form slipped toward the end. ${suggestion.charAt(0).toUpperCase() + suggestion.slice(1)}, and focus on staying clean.`;
+  }
+  if (last_session.feel === 'clean') {
+    return `You completed every set last time with good technique. If today's warm-ups feel smooth, ${suggestion}.`;
+  }
+  return `${suggestion.charAt(0).toUpperCase() + suggestion.slice(1)}, same as the plan for last time.`;
 }
