@@ -163,6 +163,15 @@ export function useExerciseDecisions(exerciseIds: number[]) {
   });
 }
 
+export function useExerciseMemories(exerciseIds: number[]) {
+  return useQueries({
+    queries: exerciseIds.map((id) => ({
+      queryKey: ['exerciseMemory', id],
+      queryFn: () => api.get<import('./types').ExerciseMemory>(`/api/exercises/${id}/memory`),
+    })),
+  });
+}
+
 // -------------------------------------------------------------- program ----
 
 export function useProgram() {
