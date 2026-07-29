@@ -21,14 +21,14 @@ engine's logic firsthand, not as a production consumer app — see
 
 | Layer | State |
 |---|---|
-| Mobile app (Expo / React Native / Expo Router) | **Working, feature-complete** — all 6 tabs, real CRUD throughout, runs in Expo Go or Expo web against the same FastAPI backend; see [`mobile/README.md`](mobile/README.md) |
+| Mobile app (Expo / React Native / Expo Router) | **Working, feature-complete** — all 6 tabs, real CRUD throughout, runs in Expo Go or Expo web against the same FastAPI backend; verified end-to-end in iOS Simulator (real backend data, no errors) — see [`mobile/README.md`](mobile/README.md) |
 | Backend (FastAPI + SQLite) | **Working** — the recommendation engine, all data endpoints, and the local demo web frontend; see [`app/README.md`](app/README.md) |
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Code complete with tested fallback paths; live model output not yet verified on this hardware — see [Known gaps](#known-gaps) |
 | Tests / CI | 88 backend tests (pytest), 73 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
-**Run the mobile app** (primary way to use this): see [`mobile/README.md`](mobile/README.md) — start the backend, then `cd mobile && npm install && npm run start`, and open in Expo Go or a browser (Expo web).
+**Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
 
 Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See [Known gaps](#known-gaps) before mistaking this for more than it is.

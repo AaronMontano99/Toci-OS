@@ -19,6 +19,20 @@ now instead of light + Apricot.
 
 ## Run it
 
+Quickest path: `../start-toci.sh` from the repo root — starts the backend
+(seeding on first run), writes your LAN IP into `.env.local`, and launches
+Expo pointed at iOS Simulator. Manual steps below for anything it doesn't
+cover.
+
+**Node version**: this Expo SDK (57) / RN 0.86 toolchain requires Node
+`^20.19.4 || ^22.13.0 || ^24.3.0 || >=25.0.0` (see `engines` in
+`package.json`). An out-of-range Node won't always fail loudly at
+`npm install` (you may just get `EBADENGINE` warnings) — but `expo start`
+itself can hard-crash with an unrelated-looking error
+(`TypeError: (0, _nodeUtil.parseEnv) is not a function`) on Node versions
+that predate `util.parseEnv`. If you hit that, it's this, not a real bug —
+upgrade Node.
+
 1. Start the backend first (see [`../app/README.md`](../app/README.md)):
 
    ```
@@ -38,7 +52,9 @@ now instead of light + Apricot.
    ```
 
    Open in **Expo Go** by scanning the QR code, or press `i`/`a` for a
-   simulator/emulator.
+   simulator/emulator. (`npm run ios` / `npx expo start --ios` will also
+   auto-install Expo Go into a booted iOS Simulator and open the project
+   directly, if a QR scan isn't convenient.)
 
 ### Connecting to the backend
 
@@ -62,6 +78,18 @@ URL is read from `EXPO_PUBLIC_API_URL`:
   sandbox with no inbound network access (no LAN, no tunneling) can't
   serve Expo Go on a physical device at all — it needs a real local or
   tunnel-capable environment.
+
+  **If the phone and computer are genuinely on the same Wi-Fi and it still
+  times out**: many routers (especially ISP-provided ones) enable
+  "AP isolation" / "client isolation" by default, which blocks devices on
+  the same network from reaching each other directly even though both get
+  a normal LAN IP. Symptoms: the phone shows up in `arp -a` on the
+  computer (so it's on the same subnet), but a packet capture shows zero
+  connection attempts ever arriving — the request just times out. Fix is
+  a router admin setting, not anything in this app; a Personal Hotspot
+  from the phone (computer joins the phone's own network) sidesteps it
+  entirely, or use `npx expo start --tunnel` (needs a free ngrok account)
+  to route around the LAN altogether.
 
 ## Navigation
 
@@ -211,9 +239,22 @@ API call, same as the existing web frontend.
   in dark mode) text color on top, making the text unreadable. Every such
   spot now explicitly uses `accentInk`, the token designed for text on a
   wash surface.
-- Expo Go on a physical device/simulator should still be exercised before
-  shipping — this sandbox has no iOS/Android runtime available, and (see
-  above) has no network path for a phone to reach it at all.
+- **Verified in an actual iOS Simulator run** (Xcode 15.2, iOS 17.2,
+  Expo Go SDK 57) against the real local backend: app boots, real seeded
+  data renders (readiness score, streak, today's workout), dark theme
+  correct, no red-screen errors. This caught one real bug the
+  tsc/eslint/jest/bundle-compile checks above all missed —
+  `@react-native-async-storage/async-storage` was pinned to `3.1.1`,
+  newer than the `2.2.0` native module this Expo Go build actually
+  bundles, which threw `Native module is null` at startup. Fixed via
+  `npx expo install --fix` (now pinned to the SDK-matching versions).
+  Lesson: passing typecheck/lint/tests/bundle-compile is not proof an
+  Expo Go app actually runs — those checks never execute against Expo
+  Go's fixed native module set, so a version-pin mismatch like this one
+  only surfaces on a real run.
+- Physical-device testing over Expo Go is still not verified end-to-end —
+  blocked in the environment this was built in by router client
+  isolation (see above), not by anything in the app itself.
 - `npm test` — a Jest + React Native Testing Library suite covers the
   deterministic coaching logic (`lib/coachVoice.ts`), the small formatting
   helpers, and a couple of key components (`Stepper`, `ActiveExerciseCard`).
