@@ -84,27 +84,41 @@ Every screen calls the real backend — there is no mock data layer.
   → Finish Workout → Completion → Coach Review (per-exercise next-session
   recommendations from `engine.progression_options`, plus deterministic
   observations from `coach.py`) → back to an updated Today/Program.
+  Logged sets can be edited or deleted in place while a workout is active.
 - **Log** (the workout-entry tab) — "What are you doing today?" with
   Log Lift Session / Log a Run action cards, recent sessions, a weekly
   snapshot (lift/run/time/calories vs. goals), and this week's saved
-  workout days.
+  workout days. Recent Session cards open a real detail/edit view (past
+  lift sessions and runs) — fix a set or a run's duration/distance, or
+  delete the whole session, instead of it being a dead-end summary.
 - **Program** — photo-style gradient program-header card, Overview /
   Schedule / Goals / Coach segments, goal-progress mini cards, a real
   progress-photo capture card (library picker → `/api/progress/photos`
   upload), and a Coach Notes card that opens straight into **Ask Toci**
   (the scoped program-builder chat; propose → Apply/Discard, never
-  automatic).
+  automatic). Goals can be renamed or deleted after creation; Schedule
+  days can be swapped (tap one day, tap another) to permanently rearrange
+  the week.
 - **Progress** — exercise dropdown + timeframe dropdown driving a 1RM
   trend chart with a real % change badge, Strength / Running / Body /
   Habits categories, consistency/best-lift/trend stat pills, and a
-  styled Recent PRs list.
+  styled Recent PRs list. Body's weight history is a real list, not just
+  a sparkline — past entries can be edited or deleted, not just
+  upserted for today.
 - **Nutrition** — Food / Saved Meals / Recipes / Smart Cart segments. Food
   is the daily dashboard: per-macro cards, a Log Food card with live
   carb/protein/fat ring donuts that opens a dedicated Add Food screen
   (search, quick add, barcode scan via the device camera against Open
-  Food Facts), recent meals, an AI Smart Nutrition Plan card, daily
-  calorie/hydration rings (tap hydration to log +8oz), and a streak
-  banner. Saved Meals lists/logs/deletes saved meals.
+  Food Facts, or a Custom Food form for anything not in the catalog),
+  recent meals, an AI Smart Nutrition Plan card, daily calorie/hydration
+  rings (tap hydration to log +8oz), and a streak banner. Logged entries'
+  serving sizes can be edited in place. Real date navigation (prev/next
+  day chevrons, tap the date to jump back to today) drives the whole Food
+  segment; a "..." menu can copy the previous day's log forward or clear
+  the day being viewed. Saved Meals can be created from mobile (built
+  from whatever's already logged that day) as well as logged/deleted.
+  Smart Cart items can be added or removed by hand, not just
+  auto-populated from recipes.
 - **Profile** — a single tab with its own **Overview / Goals / Prefs /
   Devices / Account** segments (not eight separate pushed screens): a
   profile header card (avatar, name, body stats), current-stats and
