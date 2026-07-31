@@ -126,7 +126,9 @@ Every screen calls the real backend — there is no mock data layer.
   (the scoped program-builder chat; propose → Apply/Discard, never
   automatic). Goals can be renamed or deleted after creation; Schedule
   days can be swapped (tap one day, tap another) to permanently rearrange
-  the week.
+  the week. The Coach segment's chat name is customizable (`Settings.coach_name`,
+  default `"Toci"`) via a card below the chat input — it drives the
+  "Ask {name}" heading and input placeholder for that session.
 - **Progress** — exercise dropdown + timeframe dropdown driving a 1RM
   trend chart with a real % change badge, Strength / Running / Body /
   Habits categories, consistency/best-lift/trend stat pills, and a
@@ -255,6 +257,20 @@ API call, same as the existing web frontend.
 - Physical-device testing over Expo Go is still not verified end-to-end —
   blocked in the environment this was built in by router client
   isolation (see above), not by anything in the app itself.
+- Two more real bugs surfaced by an actual iOS Simulator run, again missed
+  by tsc/eslint/jest: the Today tab's This Week card sized its 7 day
+  circles at a fixed 32px in a two-up half-width card, overflowing past
+  the card's (unclipped) border on any real device width — fixed by
+  shrinking the circles and letting the row's own width govern spacing
+  instead of a fixed per-item size (also reordered to Sun-first/Sat-last).
+  Separately, the shared `TextField` component applied its `style` prop
+  to the inner `TextInput` instead of the outer wrapping `View`, so every
+  call site passing `style={{ flex: 1 }}` to sit next to a button (Ask
+  Toci's chat input, the Nutrition food search box, the pain-region input
+  in Preferences) silently failed to stretch — the prop was floating on
+  a element with no flex context to grow into. Fixed by moving `style` to
+  the container and giving it a `ViewStyle`-typed prop distinct from the
+  input's own fixed visual styling.
 - `npm test` — a Jest + React Native Testing Library suite covers the
   deterministic coaching logic (`lib/coachVoice.ts`), the small formatting
   helpers, and a couple of key components (`Stepper`, `ActiveExerciseCard`).
