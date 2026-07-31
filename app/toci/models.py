@@ -65,6 +65,8 @@ class User(Base):
     household_size = Column(Integer, nullable=False, default=1)  # scales Smart Cart quantities/cost -- no multi-user profiles in this app
     shopping_weekly_budget = Column(Float)  # drives the Smart Cart budget bar
 
+    coach_name = Column(String, nullable=False, default="Toci")  # display name for the AI coach in the Coach tab
+
 
 class Injury(Base):
     __tablename__ = "injuries"

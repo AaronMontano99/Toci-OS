@@ -1283,6 +1283,7 @@ def get_settings(db: Session = Depends(get_db)):
         "food_restrictions": user.food_restrictions or [],
         "household_size": user.household_size,
         "shopping_weekly_budget": user.shopping_weekly_budget,
+        "coach_name": user.coach_name,
     }
 
 

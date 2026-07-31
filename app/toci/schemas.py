@@ -110,6 +110,7 @@ class SettingsUpdateIn(BaseModel):
     food_restrictions: Optional[List[str]] = None
     household_size: Optional[int] = None
     shopping_weekly_budget: Optional[float] = None
+    coach_name: Optional[str] = None
 
 
 class PasswordUpdateIn(BaseModel):

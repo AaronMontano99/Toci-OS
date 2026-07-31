@@ -252,6 +252,7 @@ export interface Settings {
   food_restrictions: string[];
   household_size: number;
   shopping_weekly_budget: number | null;
+  coach_name: string;
 }
 
 export interface FoodItem {

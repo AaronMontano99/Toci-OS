@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import {
@@ -6,8 +6,11 @@ import {
   useChatHistory,
   useDiscardChatProposal,
   useSendChatMessage,
+  useSettings,
+  useUpdateSettings,
 } from '@/api/hooks';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { InsightCard } from '@/components/ui/InsightCard';
 import { Text } from '@/components/ui/Text';
@@ -23,11 +26,26 @@ export function CoachSegment({ observations }: { observations: string[] }) {
   const discardProposal = useDiscardChatProposal();
   const [draft, setDraft] = useState('');
 
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const coachName = settings?.coach_name || 'Toci';
+  const [coachNameDraft, setCoachNameDraft] = useState('');
+
+  useEffect(() => {
+    if (settings?.coach_name) setCoachNameDraft(settings.coach_name);
+  }, [settings?.coach_name]);
+
   const onSend = async () => {
     const text = draft.trim();
     if (!text) return;
     setDraft('');
     await sendMessage.mutateAsync(text);
+  };
+
+  const onSaveCoachName = () => {
+    const name = coachNameDraft.trim();
+    if (!name || name === settings?.coach_name) return;
+    updateSettings.mutate({ coach_name: name });
   };
 
   return (
@@ -42,7 +60,7 @@ export function CoachSegment({ observations }: { observations: string[] }) {
       )}
 
       <View style={{ gap: SPACING.sm }}>
-        <Text variant="sectionTitle">Ask Toci</Text>
+        <Text variant="sectionTitle">Ask {coachName}</Text>
         <Text variant="caption" tone="tertiary">
           Scoped to your own program, goals, and history — ask about your schedule, exercises, or request a change.
         </Text>
@@ -106,7 +124,7 @@ export function CoachSegment({ observations }: { observations: string[] }) {
 
         <View style={{ flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-end' }}>
           <TextField
-            placeholder="Ask Toci…"
+            placeholder={`Ask ${coachName}…`}
             value={draft}
             onChangeText={setDraft}
             style={{ flex: 1 }}
@@ -116,6 +134,26 @@ export function CoachSegment({ observations }: { observations: string[] }) {
           <Button label="Send" fullWidth={false} size="compact" onPress={onSend} loading={sendMessage.isPending} />
         </View>
       </View>
+
+      <Card style={{ gap: SPACING.sm }}>
+        <Text variant="sectionTitle">Customize your coach&rsquo;s name</Text>
+        <View style={{ flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-end' }}>
+          <TextField
+            placeholder="Toci"
+            value={coachNameDraft}
+            onChangeText={setCoachNameDraft}
+            style={{ flex: 1 }}
+            onSubmitEditing={onSaveCoachName}
+          />
+          <Button
+            label="Save"
+            fullWidth={false}
+            size="compact"
+            onPress={onSaveCoachName}
+            loading={updateSettings.isPending}
+          />
+        </View>
+      </Card>
     </View>
   );
 }
