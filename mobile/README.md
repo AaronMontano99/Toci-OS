@@ -33,6 +33,28 @@ itself can hard-crash with an unrelated-looking error
 that predate `util.parseEnv`. If you hit that, it's this, not a real bug —
 upgrade Node.
 
+**Expo Go client version is pinned — do not let it auto-upgrade.** `expo
+start` checks Expo's servers for a "recommended" Expo Go build on every
+run and, when not run interactively, auto-installs it with no prompt to
+decline. On this project that auto-upgrade has actually broken things:
+Expo Go 57.0.6 segfaults on launch (`EXC_BAD_ACCESS`/`SIGSEGV` on the
+Hermes JS thread) on at least one dev Mac's iOS 17.2 Simulator runtime,
+reproduced 3/3 — while 57.0.5 on the same machine works every time.
+`../start-toci.sh` sets `EXPO_OFFLINE=1` before calling `expo start` for
+exactly this reason: it skips the version-check/auto-upgrade entirely as
+long as Expo Go is already installed on the target simulator/device, so
+whatever version currently works stays put. **If you're not using that
+script, export `EXPO_OFFLINE=1` yourself before `npx expo start`.** If
+Expo Go ever does get upgraded and starts misbehaving, Expo caches every
+version it has downloaded at
+`~/.expo/ios-simulator-app-cache/Expo-Go-<version>.tar.app` (iOS) — roll
+back a simulator to a known-good build with:
+
+```
+xcrun simctl uninstall "<device name>" host.exp.Exponent
+xcrun simctl install "<device name>" ~/.expo/ios-simulator-app-cache/Expo-Go-<version>.tar.app
+```
+
 1. Start the backend first (see [`../app/README.md`](../app/README.md)):
 
    ```

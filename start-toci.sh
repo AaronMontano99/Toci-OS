@@ -57,4 +57,12 @@ echo "  - iOS Simulator: press 'i' in this terminal, or it opens automatically"
 echo "    with --ios below."
 echo ""
 
+# Pin the installed Expo Go client version — do NOT remove this. Without it,
+# `expo start` silently auto-upgrades Expo Go to the SDK's "recommended"
+# build on every run with no way to opt out non-interactively. That
+# auto-upgrade replaced a known-working client with one that segfaulted on
+# launch every time on this Mac (see mobile/README.md). EXPO_OFFLINE=1
+# skips that version check entirely as long as Expo Go is already
+# installed on the simulator, so the working version never gets replaced.
+export EXPO_OFFLINE=1
 npx expo start --ios
