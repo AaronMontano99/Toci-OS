@@ -21,7 +21,7 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {wordmark ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 24 }}>
           <Text
             style={{
               fontFamily: 'Manrope_800ExtraBold',
@@ -37,7 +37,7 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
               name="leaf"
               size={11}
               color="#7ED321"
-              style={{ position: 'absolute', top: -10, left: 1, transform: [{ rotate: '20deg' }] }}
+              style={{ position: 'absolute', top: -6, left: 1, transform: [{ rotate: '20deg' }] }}
             />
             <Text
               style={{
