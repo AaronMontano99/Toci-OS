@@ -21,7 +21,7 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {wordmark ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 24 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 55 }}>
           <Text
             style={{
               fontFamily: 'Manrope_800ExtraBold',
