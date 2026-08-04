@@ -8,9 +8,13 @@
     "scheme": "toci",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.toci.app"
+      "bundleIdentifier": "com.toci.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Toci uses your camera to scan food barcodes and capture progress photos.",
+        "NSPhotoLibraryUsageDescription": "Toci uses your photo library to attach progress photos and upload custom food images.",
+        "NSPhotoLibraryAddUsageDescription": "Toci saves progress photos you capture to your photo library."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,9 +35,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FBF8F3",
+          "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "imageWidth": 380
         }
       ]
     ],
