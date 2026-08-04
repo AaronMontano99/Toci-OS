@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 
 import { IconButton } from '@/components/ui/IconButton';
 import { Text } from '@/components/ui/Text';
@@ -21,11 +21,36 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {wordmark ? (
-        <Image
-          source={require('@/assets/images/icon.png')}
-          style={{ width: 40, height: 40, borderRadius: 10 }}
-          resizeMode="cover"
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 14 }}>
+          <Text
+            style={{
+              fontFamily: 'Manrope_800ExtraBold',
+              fontSize: 24,
+              letterSpacing: 3,
+              color: '#F58A4B',
+            }}
+          >
+            TOC
+          </Text>
+          <View>
+            <Ionicons
+              name="leaf"
+              size={11}
+              color="#7ED321"
+              style={{ position: 'absolute', top: -10, left: 1, transform: [{ rotate: '20deg' }] }}
+            />
+            <Text
+              style={{
+                fontFamily: 'Manrope_800ExtraBold',
+                fontSize: 24,
+                letterSpacing: 3,
+                color: '#F58A4B',
+              }}
+            >
+              i
+            </Text>
+          </View>
+        </View>
       ) : (
         <Text variant="screenTitle">{title}</Text>
       )}
