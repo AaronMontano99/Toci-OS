@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { InsightCard } from '@/components/ui/InsightCard';
+import { PaywallCard } from '@/components/ui/PaywallCard';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { useTheme } from '@/theme/ThemeContext';
@@ -20,13 +21,14 @@ import { SPACING } from '@/theme/tokens';
 
 export function CoachSegment({ observations }: { observations: string[] }) {
   const { colors } = useTheme();
+  const { data: settings } = useSettings();
+  const isPremium = settings?.is_premium ?? false;
   const { data: messages } = useChatHistory();
   const sendMessage = useSendChatMessage();
   const applyProposal = useApplyChatProposal();
   const discardProposal = useDiscardChatProposal();
   const [draft, setDraft] = useState('');
 
-  const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const coachName = settings?.coach_name || 'Toci';
   const [coachNameDraft, setCoachNameDraft] = useState('');
@@ -61,6 +63,12 @@ export function CoachSegment({ observations }: { observations: string[] }) {
         </View>
       )}
 
+      {!isPremium ? (
+        <PaywallCard
+          title={`Ask ${coachName}`}
+          detail="Chat with your coach about your program, goals, and history — propose changes, apply or discard them."
+        />
+      ) : (
       <View style={{ gap: SPACING.sm }}>
         <Text variant="sectionTitle">Ask {coachName}</Text>
         <Text variant="caption" tone="tertiary">
@@ -136,6 +144,7 @@ export function CoachSegment({ observations }: { observations: string[] }) {
           <Button label="Send" fullWidth={false} size="compact" onPress={onSend} loading={sendMessage.isPending} />
         </View>
       </View>
+      )}
 
       <Card style={{ gap: SPACING.sm }}>
         <Text variant="sectionTitle">Customize your coach&rsquo;s name</Text>

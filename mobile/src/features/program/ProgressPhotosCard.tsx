@@ -3,18 +3,29 @@ import * as ImagePicker from 'expo-image-picker';
 import React from 'react';
 import { Image, ScrollView, View } from 'react-native';
 
-import { useProgressPhotos, useUploadProgressPhoto } from '@/api/hooks';
+import { useProgressPhotos, useSettings, useUploadProgressPhoto } from '@/api/hooks';
 import { API_BASE_URL } from '@/api/config';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PaywallCard } from '@/components/ui/PaywallCard';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/theme/ThemeContext';
 import { RADIUS, SPACING } from '@/theme/tokens';
 
 export function ProgressPhotosCard() {
   const { colors } = useTheme();
+  const { data: settings } = useSettings();
   const { data: photos } = useProgressPhotos();
   const upload = useUploadProgressPhoto();
+
+  if (!settings?.is_premium) {
+    return (
+      <PaywallCard
+        title="Progress photos"
+        detail="Track your physique over time, with a short AI read on posture and build for every photo you add."
+      />
+    );
+  }
 
   const onAddPhotos = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();

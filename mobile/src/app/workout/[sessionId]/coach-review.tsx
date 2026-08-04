@@ -7,6 +7,7 @@ import { LoggedSet } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { InsightCard } from '@/components/ui/InsightCard';
+import { PaywallCard } from '@/components/ui/PaywallCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Text } from '@/components/ui/Text';
@@ -27,6 +28,7 @@ export default function CoachReviewScreen() {
   const { data: program } = useProgram();
   const { data: settings } = useSettings();
   const units = settings?.units ?? 'imperial';
+  const isPremium = settings?.is_premium ?? false;
 
   const exerciseIds = session?.exercises_with_sets.map((ex) => ex.exercise_id) ?? [];
   const decisions = useExerciseDecisions(exerciseIds);
@@ -78,6 +80,12 @@ export default function CoachReviewScreen() {
         </View>
       )}
 
+      {!isPremium ? (
+        <PaywallCard
+          title="Adaptive next-session coaching"
+          detail="Weight and rep recommendations that adjust to how this session actually felt, not a fixed plan."
+        />
+      ) : (
       <View style={{ gap: SPACING.sm }}>
         <Text variant="sectionTitle">Next session</Text>
         {session.exercises_with_sets.map((ex, i) => {
@@ -115,6 +123,7 @@ export default function CoachReviewScreen() {
           );
         })}
       </View>
+      )}
 
       <Button
         label="See Next Workout"

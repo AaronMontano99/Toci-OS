@@ -33,6 +33,7 @@ function RootNavigator() {
       <Stack.Screen name="workout" options={{ presentation: 'fullScreenModal' }} />
       <Stack.Screen name="nutrition" options={{ presentation: 'fullScreenModal' }} />
       <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

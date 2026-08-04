@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Switch, View } from 'react-native';
+import { Alert, Pressable, Switch, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { useSettings, useUpdateSettings } from '@/api/hooks';
@@ -12,6 +13,7 @@ import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
 
 export function AccountSegment() {
+  const { colors } = useTheme();
   const { data: settings } = useSettings();
   const update = useUpdateSettings();
   const [newPassword, setNewPassword] = useState('');
@@ -33,6 +35,26 @@ export function AccountSegment() {
         <Text variant="cardTitle">Name</Text>
         <TextField value={settings?.name ?? ''} onChangeText={(v) => update.mutate({ name: v })} />
       </Card>
+
+      <Pressable onPress={() => router.push('/subscription')}>
+        <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View>
+            <Text variant="cardTitle">Toci Premium</Text>
+            <Text variant="caption" tone="tertiary">
+              {settings?.is_premium ? 'Active — $6.99/mo' : 'Ask Toci, adaptive coaching, progress photos'}
+            </Text>
+          </View>
+          <Text
+            variant="caption"
+            style={{
+              fontWeight: '700',
+              color: settings?.is_premium ? colors.sage : colors.accentInk,
+            }}
+          >
+            {settings?.is_premium ? 'Active' : 'Upgrade'}
+          </Text>
+        </Card>
+      </Pressable>
 
       <Card style={{ gap: SPACING.md }}>
         <Text variant="cardTitle">Notifications</Text>
