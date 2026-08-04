@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
-import { View } from 'react-native';
+import { deepLinkToSubscriptions, ErrorCode, getAvailablePurchases, useIAP } from 'expo-iap';
+import React, { useEffect, useState } from 'react';
+import { Alert, Platform, View } from 'react-native';
 
-import { useSettings, useUpdateSettings } from '@/api/hooks';
+import { useSubscriptionStatus, useVerifyPurchase } from '@/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
@@ -12,6 +13,12 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
+
+// Must match the auto-renewable subscription product created in App Store
+// Connect exactly -- see docs/app-store-setup.md. Kept in sync with the
+// backend's own copy (toci/apple_iap.py's PRODUCT_ID_MONTHLY) manually;
+// there's no shared config file between the two apps in this repo.
+const PRODUCT_ID = 'com.toci.app.premium_monthly';
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; detail: string }[] = [
   {
@@ -31,16 +38,84 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; detail: s
   },
 ];
 
-// Demo-only paywall: toggles the existing `is_premium` setting (already
-// modeled server-side, see app/toci/models.py -- "demo stub, no real payment
-// processor exists"). No App Store/Play Store billing wired up; this shows
-// what the gating looks like without real payments behind it.
+// Real Apple StoreKit 2 subscription via expo-iap -- see
+// docs/app-store-setup.md for what has to exist in App Store Connect before
+// any of this actually works on a device (the product, a Sandbox tester,
+// and a real signed build; this screen can't be exercised in Expo Go).
 export default function SubscriptionScreen() {
   const { colors } = useTheme();
-  const { data: settings, isLoading } = useSettings();
-  const update = useUpdateSettings();
+  const { data: status, isLoading: statusLoading, refetch: refetchStatus } = useSubscriptionStatus();
+  const verifyPurchase = useVerifyPurchase();
+  const [restoring, setRestoring] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
 
-  if (isLoading || !settings) {
+  const { connected, subscriptions, fetchProducts, requestPurchase } = useIAP({
+    onPurchaseSuccess: async (purchase) => {
+      if (!purchase.purchaseToken) {
+        setPurchasing(false);
+        Alert.alert("Couldn't confirm purchase", 'No transaction data came back from the App Store — try again.');
+        return;
+      }
+      try {
+        await verifyPurchase.mutateAsync(purchase.purchaseToken);
+        await refetchStatus();
+        router.back();
+      } catch {
+        Alert.alert(
+          "Purchase went through, but we couldn't confirm it",
+          'Your payment succeeded, but Toci couldn’t verify it with the App Store just now. Try "Restore Purchases" in a moment.',
+        );
+      } finally {
+        setPurchasing(false);
+      }
+    },
+    onPurchaseError: (error) => {
+      setPurchasing(false);
+      if (error.code === ErrorCode.UserCancelled) return;
+      Alert.alert('Purchase failed', error.message);
+    },
+  });
+
+  useEffect(() => {
+    if (connected) {
+      fetchProducts({ skus: [PRODUCT_ID], type: 'subs' });
+    }
+  }, [connected, fetchProducts]);
+
+  const product = subscriptions.find((s) => s.id === PRODUCT_ID);
+  const priceLabel = product?.displayPrice ?? '$6.99';
+
+  const onSubscribe = async () => {
+    setPurchasing(true);
+    try {
+      await requestPurchase({ request: { apple: { sku: PRODUCT_ID } }, type: 'subs' });
+    } catch {
+      // Synchronous rejections (not-prepared, validation) also surface via
+      // onPurchaseError above -- this catch just stops an unhandled-rejection
+      // warning; setPurchasing(false) already happens in that callback.
+    }
+  };
+
+  const onRestore = async () => {
+    setRestoring(true);
+    try {
+      const purchases = await getAvailablePurchases();
+      const match = purchases.find((p) => p.productId === PRODUCT_ID && p.purchaseToken);
+      if (!match?.purchaseToken) {
+        Alert.alert('Nothing to restore', "No previous Toci Premium purchase was found on this Apple ID.");
+        return;
+      }
+      await verifyPurchase.mutateAsync(match.purchaseToken);
+      await refetchStatus();
+      Alert.alert('Restored', 'Your Toci Premium subscription is active again.');
+    } catch {
+      Alert.alert("Couldn't restore purchases", 'Try again in a moment.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  if (statusLoading || !status) {
     return (
       <ScreenContainer>
         <Skeleton height={200} radius={20} />
@@ -48,7 +123,7 @@ export default function SubscriptionScreen() {
     );
   }
 
-  const isPremium = settings.is_premium;
+  const isPremium = status.is_premium;
 
   return (
     <ScreenContainer contentContainerStyle={{ gap: SPACING.base }}>
@@ -66,10 +141,15 @@ export default function SubscriptionScreen() {
           <Text variant="caption" style={{ color: colors.accentInk }} center>
             Ask Toci, adaptive next-session coaching, and progress photos are all unlocked.
           </Text>
+          {status.expires_at && (
+            <Text variant="caption" style={{ color: colors.accentInk }} center>
+              Renews {new Date(status.expires_at).toLocaleDateString()}
+            </Text>
+          )}
         </Card>
       ) : (
         <Card style={{ gap: 2, alignItems: 'center' }}>
-          <Text variant="heroMetricSmall">$6.99</Text>
+          <Text variant="heroMetricSmall">{priceLabel}</Text>
           <Text variant="caption" tone="tertiary">
             per month
           </Text>
@@ -102,28 +182,24 @@ export default function SubscriptionScreen() {
       </View>
 
       {isPremium ? (
-        <Button
-          label="Cancel Premium"
-          variant="tertiary"
-          loading={update.isPending}
-          onPress={async () => {
-            await update.mutateAsync({ is_premium: false });
-            router.back();
-          }}
-        />
+        Platform.OS === 'ios' ? (
+          <Button label="Manage Subscription" variant="tertiary" onPress={() => deepLinkToSubscriptions()} />
+        ) : null
       ) : (
-        <Button
-          label="Subscribe — $6.99/mo"
-          loading={update.isPending}
-          onPress={async () => {
-            await update.mutateAsync({ is_premium: true });
-            router.back();
-          }}
-        />
+        <>
+          <Button
+            label={`Subscribe — ${priceLabel}/mo`}
+            loading={purchasing}
+            disabled={!connected}
+            onPress={onSubscribe}
+          />
+          <Button label="Restore Purchases" variant="tertiary" loading={restoring} onPress={onRestore} />
+        </>
       )}
 
       <Text variant="caption" tone="tertiary" center>
-        Demo only — no real payment is processed. This toggles a setting so you can see what the paid experience looks like.
+        Payment charged to your Apple ID at confirmation. Renews automatically unless canceled at least 24 hours
+        before the current period ends — manage or cancel anytime in Settings &gt; Apple ID &gt; Subscriptions.
       </Text>
     </ScreenContainer>
   );

@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.toci.app",
+      "deploymentTarget": "15.0",
       "infoPlist": {
         "NSCameraUsageDescription": "Toci uses your camera to scan food barcodes and capture progress photos.",
         "NSPhotoLibraryUsageDescription": "Toci uses your photo library to attach progress photos and upload custom food images.",
@@ -46,7 +47,8 @@
         {
           "locationWhenInUsePermission": "Toci uses your location to track the route, distance, and pace of your outdoor runs."
         }
-      ]
+      ],
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true,

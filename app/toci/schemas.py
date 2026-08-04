@@ -119,12 +119,27 @@ class SettingsUpdateIn(BaseModel):
     onboarding_completed: Optional[bool] = None  # lets Settings offer a "redo onboarding" reset
     sex: Optional[str] = None
     daily_calorie_goal_kcal: Optional[float] = None
-    is_premium: Optional[bool] = None  # demo-only "Simulate Premium" toggle -- no real billing
+    # is_premium is intentionally NOT here -- it's derived from a verified
+    # Apple subscription (see models.User's comment and toci/apple_iap.py),
+    # never client-settable. Setting it via this endpoint would make the
+    # paywall meaningless.
     dietary_preferences: Optional[List[str]] = None
     food_restrictions: Optional[List[str]] = None
     household_size: Optional[int] = None
     shopping_weekly_budget: Optional[float] = None
     coach_name: Optional[str] = None
+
+
+class PurchaseVerifyIn(BaseModel):
+    signed_transaction: str  # StoreKit 2's Transaction.jwsRepresentation, sent right after a purchase completes
+
+
+class RestorePurchaseIn(BaseModel):
+    original_transaction_id: str  # from StoreKit's Transaction.currentEntitlements on the client
+
+
+class AppStoreNotificationIn(BaseModel):
+    signedPayload: str  # Apple's exact field name for App Store Server Notifications V2 -- not renamed to snake_case
 
 
 class PasswordUpdateIn(BaseModel):

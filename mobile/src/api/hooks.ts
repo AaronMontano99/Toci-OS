@@ -447,6 +447,34 @@ export function useUpdateSettings() {
   });
 }
 
+// --------------------------------------------------------- subscription ----
+// Real Toci Premium ($6.99/mo) -- see mobile/src/app/subscription.tsx for
+// the purchase flow itself (expo-iap + useIAP), and app/toci/apple_iap.py
+// for how the backend verifies what these endpoints receive against Apple.
+
+export interface SubscriptionStatus {
+  is_premium: boolean;
+  product_id: string | null;
+  status: string | null;
+  expires_at: string | null;
+  product_id_to_purchase: string;
+}
+
+export function useSubscriptionStatus() {
+  return useQuery({ queryKey: ['subscriptionStatus'], queryFn: () => api.get<SubscriptionStatus>('/api/subscription/status') });
+}
+
+export function useVerifyPurchase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (signed_transaction: string) => api.post('/api/subscription/verify-purchase', { signed_transaction }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscriptionStatus'] });
+      qc.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+}
+
 export function useRecalculateCalories() {
   const qc = useQueryClient();
   return useMutation({

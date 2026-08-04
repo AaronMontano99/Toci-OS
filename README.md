@@ -95,11 +95,14 @@ now a matching edit and delete, wherever that makes sense.
 **Theming**
 - One shared theme context drives every screen — no per-screen color logic. Switching accent (Profile → Appearance) or appearance mode (System/Light/Dark) changes the whole app instantly and persists across restarts (`AsyncStorage`). All 8 accents ship fully built, not just the default Apricot.
 
+**Toci Premium ($6.99/mo)** — a real Apple StoreKit 2 subscription (not a demo toggle) gating Ask Toci, adaptive next-session coaching, and progress photos. Purchases go through `expo-iap`, and the backend verifies every transaction against Apple's real App Store Server API using Apple's own official library (`app/toci/apple_iap.py`) — the client's claim of being premium is never trusted on its own. See [`docs/app-store-setup.md`](docs/app-store-setup.md) for what's still needed to actually ship it: an Apple Developer Program membership, App Store Connect product setup, and a signed build — none of which can happen inside this repo, since they require your own Apple account.
+
 ## Known gaps
 
 - **Live local-AI output not verified**: Coach narration, Ask Toci, and photo AI impressions are fully coded with tested graceful-fallback paths (the app never hangs or breaks without them), but this machine has no pre-built Ollama package — `brew install ollama` compiles it and its `llama.cpp` dependency from source, which is slow on older/modest hardware. Vision models in particular are heavy; realistic expectations are set in `app/README.md`.
 - **Ask Toci's scope guardrail** is a strong deterrent (pre-filter + system prompt), not a mathematically airtight guarantee against a determined adversarial prompt on a local open-weight model.
-- **No auth** — single hardcoded demo user; the architecture doc's Sign in with Apple/Google plan isn't wired up, and the Profile → Account "Sign Out" control is explicitly a no-op that says so on screen.
+- **No auth** — single hardcoded demo user; the architecture doc's Sign in with Apple/Google plan isn't wired up, and the Profile → Account "Sign Out" control is explicitly a no-op that says so on screen. This also means Toci Premium currently applies to that one demo user, not per-real-person — a real multi-user launch needs auth before the paywall means anything.
+- **Toci Premium is iOS/App Store only** — no Android/Play Billing integration yet (the backend's `subscription_platform` field is ready for it, the verification code isn't written).
 - **No real wearable data** — HRV/RHR/sleep are simulated around a seeded baseline until manually overridden on the Recovery Check-in screen. Whoop/Spotify OAuth is real end to end, but this repo has never been linked to a real Whoop/Spotify developer app.
 - **SQLite, not Postgres** — a one-line change in `toci/database.py` when that matters.
 - **No training-load/ACWR tracking, no deload auto-trigger, no program version history** — this implements the readiness + progression core loop, not every table in the full architecture spec.

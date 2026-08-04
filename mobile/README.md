@@ -146,7 +146,9 @@ Every screen calls the real backend — there is no mock data layer.
   progress-photo capture card (library picker → `/api/progress/photos`
   upload), and a Coach Notes card that opens straight into **Ask Toci**
   (the scoped program-builder chat; propose → Apply/Discard, never
-  automatic). Goals can be renamed or deleted after creation; Schedule
+  automatic). Ask Toci, the post-workout adaptive coaching, and progress
+  photos are all Toci Premium features — see below. Goals can be renamed or
+  deleted after creation; Schedule
   days can be swapped (tap one day, tap another) to permanently rearrange
   the week. The Coach segment's chat name is customizable (`Settings.coach_name`,
   default `"Toci"`) via a card below the chat input — it drives the
@@ -180,6 +182,25 @@ Every screen calls the real backend — there is no mock data layer.
   stats/injuries, training preferences, and nutrition preferences into
   one scrollable segment.
 - **Daily Recovery Check-in** — a focused modal for HRV/RHR/sleep/soreness/mood.
+
+## Toci Premium ($6.99/mo)
+
+A real Apple StoreKit 2 subscription, not a demo toggle — Ask Toci, adaptive
+next-session coaching, and progress photos are gated behind it (Profile →
+Account → Toci Premium, or the "Unlock with Toci Premium" card each locked
+feature shows). Purchases go through `expo-iap`'s `useIAP()` hook
+(`mobile/src/app/subscription.tsx`), and the backend verifies every
+transaction against Apple's real App Store Server API using Apple's own
+`app-store-server-library` (`app/toci/apple_iap.py`) — nothing here trusts
+the client's word for whether it's premium.
+
+**None of this can be exercised in Expo Go.** `expo-iap` is a native module;
+it requires a real signed build (`eas build`) and, for testing, a Sandbox
+tester account and a real Apple Developer Program membership. See
+[`docs/app-store-setup.md`](../docs/app-store-setup.md) for the exact
+checklist — App Store Connect product setup, App Store Connect API
+credentials, the Sandbox testing flow, and App Review submission notes —
+none of which this repo can do on its own.
 
 ## What's a deliberate mobile-scope decision
 

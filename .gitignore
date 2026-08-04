@@ -4,6 +4,9 @@ app/toci/__pycache__/
 app/*.db
 app/uploads/
 app/.encryption_key
+app/certs/
+*.p8
+AppleRootCA*.cer
 __pycache__/
 *.pyc
 .DS_Store

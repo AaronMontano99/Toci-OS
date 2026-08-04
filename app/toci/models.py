@@ -81,7 +81,21 @@ class User(Base):
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     sex = Column(String)  # "male" | "female" -- used only for the Mifflin-St Jeor BMR formula
     daily_calorie_goal_kcal = Column(Float)  # computed once at onboarding; editable after, not auto-recomputed
-    is_premium = Column(Boolean, nullable=False, default=False)  # demo stub -- no real payment processor exists
+
+    # Toci Premium ($6.99/mo) -- real Apple StoreKit 2 subscription, verified
+    # against Apple's App Store Server API (see toci/apple_iap.py). is_premium
+    # is a derived cache of subscription_status, recomputed by
+    # main._apply_apple_transaction() every time a verified purchase, restore,
+    # or App Store Server Notification comes in -- it is intentionally NOT
+    # settable via PATCH /api/settings (see schemas.SettingsUpdateIn), since a
+    # client-settable premium flag would make the whole paywall pointless.
+    is_premium = Column(Boolean, nullable=False, default=False)
+    apple_original_transaction_id = Column(String, index=True)  # stable across renewals -- how a webhook finds this user
+    apple_latest_transaction_id = Column(String)
+    subscription_product_id = Column(String)
+    subscription_platform = Column(String)  # "ios" -- Android/Play Billing not built yet
+    subscription_status = Column(String)  # "active" | "expired" | "revoked" | "billing_retry" -- Apple's own signal, not guessed
+    subscription_expires_at = Column(DateTime)
 
     dietary_preferences = Column(JSON, nullable=False, default=list)  # e.g. ["high_protein", "mediterranean"]
     food_restrictions = Column(JSON, nullable=False, default=list)  # e.g. ["shellfish", "peanuts"] -- excluded ingredient tags

@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from . import apple_iap
 from . import coach
 from . import coach_chat as coach_chat_client
 from . import engine as reco_engine
@@ -1310,6 +1311,103 @@ def update_settings(payload: schemas.SettingsUpdateIn, db: Session = Depends(get
     for field, value in updates.items():
         setattr(user, field, value)
     db.commit()
+    return {"ok": True}
+
+
+# ------------------------------------------------------------ subscription ----
+# Toci Premium ($6.99/mo) -- real StoreKit 2 purchases, verified against
+# Apple's App Store Server API (see apple_iap.py). Nothing here trusts the
+# client's word for whether it's premium; every state change traces back to
+# a signed transaction Apple itself vouches for.
+
+def _apply_apple_transaction(user: "models.User", tx) -> None:
+    """Updates a user's subscription fields from a verified
+    JWSTransactionDecodedPayload -- shared by verify-purchase, restore, and
+    the notifications webhook so all three land on identical state."""
+    user.apple_original_transaction_id = tx.originalTransactionId
+    user.apple_latest_transaction_id = tx.transactionId
+    user.subscription_product_id = tx.productId
+    user.subscription_platform = "ios"
+    if tx.expiresDate is not None:
+        user.subscription_expires_at = dt.datetime.utcfromtimestamp(tx.expiresDate / 1000)
+
+    if tx.revocationReason is not None:
+        user.subscription_status = "revoked"
+    elif user.subscription_expires_at and user.subscription_expires_at > dt.datetime.utcnow():
+        user.subscription_status = "active"
+    else:
+        user.subscription_status = "expired"
+
+    user.is_premium = user.subscription_status == "active"
+
+
+@app.get("/api/subscription/status")
+def subscription_status(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    return {
+        "is_premium": user.is_premium,
+        "product_id": user.subscription_product_id,
+        "status": user.subscription_status,
+        "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
+        "product_id_to_purchase": apple_iap.PRODUCT_ID_MONTHLY,
+    }
+
+
+@app.post("/api/subscription/verify-purchase")
+def verify_purchase(payload: schemas.PurchaseVerifyIn, db: Session = Depends(get_db)):
+    try:
+        tx = apple_iap.verify_signed_transaction(payload.signed_transaction)
+    except apple_iap.AppleNotConfiguredError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:  # appstoreserverlibrary.VerificationException, or a malformed JWS
+        raise HTTPException(400, f"Could not verify purchase: {e}")
+
+    user = db.query(models.User).get(DEMO_USER_ID)
+    _apply_apple_transaction(user, tx)
+    db.commit()
+    return {"is_premium": user.is_premium, "expires_at": user.subscription_expires_at}
+
+
+@app.post("/api/subscription/restore")
+def restore_purchase(payload: schemas.RestorePurchaseIn, db: Session = Depends(get_db)):
+    """Apple requires a restore path independent of the original purchase
+    (App Store Review Guideline 3.1.2) -- re-verifies directly with Apple
+    rather than trusting a client-cached entitlement."""
+    try:
+        tx = apple_iap.fetch_transaction_info(payload.original_transaction_id)
+    except apple_iap.AppleNotConfiguredError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Could not restore purchase: {e}")
+
+    user = db.query(models.User).get(DEMO_USER_ID)
+    _apply_apple_transaction(user, tx)
+    db.commit()
+    return {"is_premium": user.is_premium, "expires_at": user.subscription_expires_at}
+
+
+@app.post("/api/subscription/app-store-notifications")
+def app_store_notifications(payload: schemas.AppStoreNotificationIn, db: Session = Depends(get_db)):
+    """Webhook target for App Store Server Notifications V2 -- configure
+    this URL in App Store Connect (Users and Access > Integrations) so
+    renewals, cancellations, refunds, and billing failures update
+    subscription state even when the user never reopens the app."""
+    try:
+        notification = apple_iap.verify_notification(payload.signedPayload)
+    except apple_iap.AppleNotConfiguredError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Could not verify notification: {e}")
+
+    signed_tx = getattr(notification.data, "signedTransactionInfo", None) if notification.data else None
+    if not signed_tx:
+        return {"ok": True}  # a notification type with no transaction payload (e.g. TEST) -- nothing to apply
+
+    tx = apple_iap.verify_signed_transaction(signed_tx)
+    user = db.query(models.User).filter_by(apple_original_transaction_id=tx.originalTransactionId).first()
+    if user:
+        _apply_apple_transaction(user, tx)
+        db.commit()
     return {"ok": True}
 
 
