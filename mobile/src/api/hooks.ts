@@ -110,11 +110,27 @@ export function useDeleteWorkoutSession() {
   });
 }
 
+export interface RunRoutePoint {
+  lat: number;
+  lng: number;
+  t: string;
+}
+
+export interface LogRunPayload {
+  duration_seconds: number;
+  distance_meters: number;
+  avg_hr?: number;
+  perceived_effort?: number;
+  run_type?: 'outdoor' | 'treadmill';
+  incline_percent?: number;
+  treadmill_speed_kmh?: number;
+  route?: RunRoutePoint[];
+}
+
 export function useLogRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { duration_seconds: number; distance_meters: number; avg_hr?: number; perceived_effort?: number }) =>
-      api.post<{ id: number }>('/api/runs', payload),
+    mutationFn: (payload: LogRunPayload) => api.post<{ id: number }>('/api/runs', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['today'] });
       qc.invalidateQueries({ queryKey: ['logSummary'] });
@@ -131,6 +147,10 @@ export interface RunDetail {
   pace_per_km: string | null;
   avg_hr: number | null;
   perceived_effort: number | null;
+  run_type: 'outdoor' | 'treadmill' | null;
+  incline_percent: number | null;
+  treadmill_speed_kmh: number | null;
+  route: RunRoutePoint[] | null;
 }
 
 export function useRun(runId: number | null) {

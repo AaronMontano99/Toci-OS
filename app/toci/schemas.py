@@ -60,11 +60,21 @@ class GoalUpdateIn(BaseModel):
     target_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
 
 
+class RunRoutePoint(BaseModel):
+    lat: float
+    lng: float
+    t: str  # ISO8601 timestamp
+
+
 class RunIn(BaseModel):
     duration_seconds: int
     distance_meters: float
     avg_hr: Optional[int] = None
     perceived_effort: Optional[float] = None
+    run_type: Optional[str] = None  # "outdoor" | "treadmill"
+    incline_percent: Optional[float] = None
+    treadmill_speed_kmh: Optional[float] = None
+    route: Optional[List[RunRoutePoint]] = None
 
 
 class RunUpdateIn(BaseModel):
@@ -72,6 +82,10 @@ class RunUpdateIn(BaseModel):
     distance_meters: Optional[float] = Field(None, ge=0)
     avg_hr: Optional[int] = None
     perceived_effort: Optional[float] = None
+    run_type: Optional[str] = None
+    incline_percent: Optional[float] = None
+    treadmill_speed_kmh: Optional[float] = None
+    route: Optional[List[RunRoutePoint]] = None
 
 
 class InjuryIn(BaseModel):

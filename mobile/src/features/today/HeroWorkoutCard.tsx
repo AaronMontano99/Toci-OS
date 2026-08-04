@@ -15,7 +15,6 @@ interface HeroWorkoutCardProps {
   sessionType: SessionType;
   prescription: LiftPrescription | RunPrescription | Record<string, unknown>;
   workoutStatus: WorkoutStatus;
-  reasoning: string[];
 }
 
 const SESSION_ICON: Record<SessionType, keyof typeof Ionicons.glyphMap> = {
@@ -25,16 +24,8 @@ const SESSION_ICON: Record<SessionType, keyof typeof Ionicons.glyphMap> = {
   rest: 'moon',
 };
 
-const SESSION_CAPTION: Record<SessionType, string> = {
-  lift: 'Warm-up · Mobility · Let’s go',
-  run: 'Stretch · Pace yourself · Let’s go',
-  recover: 'Easy pace · Mobility work',
-  rest: 'No training required today',
-};
-
-export function HeroWorkoutCard({ sessionType, prescription, workoutStatus, reasoning }: HeroWorkoutCardProps) {
+export function HeroWorkoutCard({ sessionType, prescription, workoutStatus }: HeroWorkoutCardProps) {
   const startWorkout = useStartWorkout();
-  const heroReason = reasoning[1] ?? reasoning[0];
 
   const isLift = sessionType === 'lift';
   const lift = prescription as LiftPrescription;
@@ -78,7 +69,7 @@ export function HeroWorkoutCard({ sessionType, prescription, workoutStatus, reas
             : 'Start Workout';
 
   return (
-    <GradientHeroCard watermarkIcon={SESSION_ICON[sessionType]} badgeIcon={isRestDay ? undefined : SESSION_ICON[sessionType]}>
+    <GradientHeroCard compact watermarkIcon={SESSION_ICON[sessionType]} badgeIcon={isRestDay ? undefined : SESSION_ICON[sessionType]}>
       <Text variant="microLabel" tone="accent">
         TODAY&rsquo;S WORKOUT
       </Text>
@@ -88,26 +79,15 @@ export function HeroWorkoutCard({ sessionType, prescription, workoutStatus, reas
       </Text>
 
       {!isRestDay && (
-        <View style={{ flexDirection: 'row', gap: SPACING.lg, marginTop: 2 }}>
+        <View style={{ flexDirection: 'row', gap: SPACING.lg }}>
           {durationLabel && <MetaItem icon="time-outline" label={durationLabel} />}
           <MetaItem icon="stats-chart-outline" label={isLift ? 'Strength' : sessionType === 'run' ? 'Cardio' : 'Recovery'} />
           {isLift && <MetaItem icon="list-outline" label={`${exerciseCount} exercises`} />}
         </View>
       )}
 
-      {heroReason && (
-        <Text variant="caption" tone="tertiary" style={{ marginTop: 2 }}>
-          {heroReason}
-        </Text>
-      )}
-
       {!isRestDay && (
-        <>
-          <Button label={primaryLabel} onPress={onPrimaryPress} loading={startWorkout.isPending} style={{ marginTop: SPACING.sm }} />
-          <Text variant="caption" tone="tertiary" center>
-            {SESSION_CAPTION[sessionType]}
-          </Text>
-        </>
+        <Button label={primaryLabel} onPress={onPrimaryPress} loading={startWorkout.isPending} size="compact" />
       )}
     </GradientHeroCard>
   );

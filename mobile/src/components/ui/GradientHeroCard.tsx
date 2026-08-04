@@ -9,6 +9,7 @@ import { RADIUS, SPACING, shadow } from '@/theme/tokens';
 interface GradientHeroCardProps {
   watermarkIcon?: keyof typeof Ionicons.glyphMap;
   badgeIcon?: keyof typeof Ionicons.glyphMap;
+  compact?: boolean;
   children: React.ReactNode;
 }
 
@@ -16,7 +17,7 @@ interface GradientHeroCardProps {
 // header -- a photo-background look approximated with a gradient + a large
 // faded glyph watermark rather than a stock photo, so nothing here is a
 // fabricated image standing in for a real one.
-export function GradientHeroCard({ watermarkIcon, badgeIcon, children }: GradientHeroCardProps) {
+export function GradientHeroCard({ watermarkIcon, badgeIcon, compact, children }: GradientHeroCardProps) {
   const { colors, colorScheme } = useTheme();
 
   return (
@@ -31,8 +32,8 @@ export function GradientHeroCard({ watermarkIcon, badgeIcon, children }: Gradien
       style={[
         {
           borderRadius: RADIUS.hero,
-          padding: SPACING.xl,
-          gap: SPACING.md,
+          padding: compact ? SPACING.lg : SPACING.xl,
+          gap: compact ? SPACING.xs : SPACING.md,
           overflow: 'hidden',
           borderWidth: 1,
           borderColor: colors.border,
@@ -43,7 +44,7 @@ export function GradientHeroCard({ watermarkIcon, badgeIcon, children }: Gradien
       {watermarkIcon && (
         <Ionicons
           name={watermarkIcon}
-          size={180}
+          size={compact ? 130 : 180}
           color={colors.accent}
           style={{ position: 'absolute', right: -40, bottom: -40, opacity: 0.08 }}
         />
@@ -52,10 +53,10 @@ export function GradientHeroCard({ watermarkIcon, badgeIcon, children }: Gradien
         <View
           style={{
             position: 'absolute',
-            top: SPACING.lg,
-            right: SPACING.lg,
-            width: 48,
-            height: 48,
+            top: compact ? SPACING.md : SPACING.lg,
+            right: compact ? SPACING.md : SPACING.lg,
+            width: compact ? 36 : 48,
+            height: compact ? 36 : 48,
             borderRadius: RADIUS.card,
             backgroundColor: 'rgba(255,255,255,0.06)',
             borderWidth: 1,
@@ -64,7 +65,7 @@ export function GradientHeroCard({ watermarkIcon, badgeIcon, children }: Gradien
             justifyContent: 'center',
           }}
         >
-          <Ionicons name={badgeIcon} size={22} color={colors.accent} />
+          <Ionicons name={badgeIcon} size={compact ? 18 : 22} color={colors.accent} />
         </View>
       )}
       {children}

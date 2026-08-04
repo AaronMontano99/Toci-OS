@@ -401,6 +401,10 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
         "distance_km": round((row.distance_meters or 0) / 1000, 2) if row.distance_meters else None,
         "pace_per_km": _run_pace_per_km(row),
         "avg_hr": row.avg_hr, "perceived_effort": row.perceived_effort,
+        "run_type": row.run_type,
+        "incline_percent": row.incline_percent,
+        "treadmill_speed_kmh": row.treadmill_speed_kmh,
+        "route": row.route,
     }
 
 

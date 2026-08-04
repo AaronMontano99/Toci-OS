@@ -23,9 +23,6 @@ export function ProgramHeader({ identity, progress }: { identity: ProgramIdentit
     <GradientHeroCard watermarkIcon="calendar">
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text variant="microLabel" tone="accent">
-            CURRENT PROGRAM
-          </Text>
           <Text variant="displayLarge">{identity.program_name}</Text>
           <Text variant="body" tone="secondary">
             {identity.focus} · Week {identity.current_week} of {identity.total_weeks}

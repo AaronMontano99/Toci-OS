@@ -167,6 +167,10 @@ class CardioSession(Base):
     distance_meters = Column(Float)
     avg_hr = Column(Integer)
     perceived_effort = Column(Float)
+    run_type = Column(String)  # "outdoor" | "treadmill" -- null for pre-existing/legacy runs
+    incline_percent = Column(Float)  # treadmill only
+    treadmill_speed_kmh = Column(Float)  # treadmill only -- the set/target speed, not a derived average
+    route = Column(JSON)  # outdoor only -- [{"lat": float, "lng": float, "t": "<ISO8601>"}, ...]
 
 
 class DailyRecoveryMetric(Base):

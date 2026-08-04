@@ -1,14 +1,13 @@
 import React from 'react';
 import { View } from 'react-native';
 
-import { useBodyFat, useHydrationToday, useNutritionToday, useSettings, useToday } from '@/api/hooks';
+import { useNutritionToday, useSettings, useToday } from '@/api/hooks';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { MacroStatRow } from '@/components/ui/MacroStatRow';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { StatPill, StatPillRow } from '@/components/ui/StatPill';
 import { StreakPill } from '@/components/ui/StreakPill';
 import { Text } from '@/components/ui/Text';
 import { HeroWorkoutCard } from '@/features/today/HeroWorkoutCard';
@@ -23,8 +22,6 @@ export default function TodayScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useToday();
   const { data: settings } = useSettings();
   const { data: nutrition } = useNutritionToday();
-  const { data: hydration } = useHydrationToday();
-  const { data: bodyFat } = useBodyFat();
 
   if (isLoading) {
     return (
@@ -84,7 +81,6 @@ export default function TodayScreen() {
         sessionType={data.recommendation.session_type}
         prescription={data.recommendation.prescription}
         workoutStatus={data.workout_status}
-        reasoning={data.recommendation.reasoning}
       />
 
       {nutrition && (
@@ -127,28 +123,6 @@ export default function TodayScreen() {
         <WeightTrendCard />
         <ThisWeekCard week={data.week} />
       </View>
-
-      <StatPillRow>
-        <StatPill
-          icon="water"
-          label="Water"
-          value={hydration ? `${Math.round(hydration.ounces)} oz` : '—'}
-          detail={hydration ? `of ${Math.round(hydration.goal_oz)} oz` : undefined}
-          progress={hydration ? hydration.ounces / hydration.goal_oz : undefined}
-        />
-        <StatPill
-          icon="body-outline"
-          label="Body Fat"
-          value={bodyFat?.body_fat_pct != null ? `${bodyFat.body_fat_pct}%` : '—'}
-          detail={bodyFat?.date ? `Last ${bodyFat.date}` : 'Not logged'}
-        />
-        <StatPill
-          icon="heart-outline"
-          label="Resting HR"
-          value={data.recovery.resting_hr_bpm != null ? `${Math.round(data.recovery.resting_hr_bpm)}` : '—'}
-          detail="bpm"
-        />
-      </StatPillRow>
     </ScreenContainer>
   );
 }

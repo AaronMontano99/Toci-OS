@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Toci uses your camera to scan food barcodes and capture progress photos.",
         "NSPhotoLibraryUsageDescription": "Toci uses your photo library to attach progress photos and upload custom food images.",
-        "NSPhotoLibraryAddUsageDescription": "Toci saves progress photos you capture to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "Toci saves progress photos you capture to your photo library.",
+        "NSLocationWhenInUseUsageDescription": "Toci uses your location to track the route, distance, and pace of your outdoor runs."
       }
     },
     "android": {
@@ -38,6 +39,12 @@
           "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 380
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Toci uses your location to track the route, distance, and pace of your outdoor runs."
         }
       ]
     ],
