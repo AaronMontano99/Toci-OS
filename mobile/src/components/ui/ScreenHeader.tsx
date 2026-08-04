@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 
 import { IconButton } from '@/components/ui/IconButton';
 import { Text } from '@/components/ui/Text';
@@ -21,16 +21,11 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {wordmark ? (
-        <Text
-          style={{
-            fontFamily: 'Manrope_700Bold',
-            fontSize: 22,
-            letterSpacing: 4,
-            color: colors.accent,
-          }}
-        >
-          TOCI
-        </Text>
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={{ width: 40, height: 40, borderRadius: 10 }}
+          resizeMode="cover"
+        />
       ) : (
         <Text variant="screenTitle">{title}</Text>
       )}
