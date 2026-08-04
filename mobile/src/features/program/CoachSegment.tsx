@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import {
@@ -30,10 +30,12 @@ export function CoachSegment({ observations }: { observations: string[] }) {
   const updateSettings = useUpdateSettings();
   const coachName = settings?.coach_name || 'Toci';
   const [coachNameDraft, setCoachNameDraft] = useState('');
+  const [syncedCoachName, setSyncedCoachName] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    if (settings?.coach_name) setCoachNameDraft(settings.coach_name);
-  }, [settings?.coach_name]);
+  if (settings?.coach_name && settings.coach_name !== syncedCoachName) {
+    setSyncedCoachName(settings.coach_name);
+    setCoachNameDraft(settings.coach_name);
+  }
 
   const onSend = async () => {
     const text = draft.trim();
