@@ -101,7 +101,12 @@ hardware.
 This is a local demo, not a deployable build:
 
 - **No auth.** Single hardcoded demo user — the architecture doc's Sign in with
-  Apple/Google plan isn't wired up.
+  Apple/Google plan isn't wired up. (Whoop/Spotify OAuth client secrets and
+  access/refresh tokens *are* encrypted at rest in SQLite — see
+  `toci/crypto.py` — via a key auto-generated into a gitignored
+  `app/.encryption_key` on first run, or set `TOCI_ENCRYPTION_KEY` yourself.
+  That's independent of the "no auth" gap above: it protects the stored
+  provider credentials, not who can call this API.)
 - **No real wearable data.** There's no HealthKit/Health Connect on a laptop, so
   HRV/RHR/sleep are simulated around a seeded baseline until you override them
   on the Recovery Check-in screen.

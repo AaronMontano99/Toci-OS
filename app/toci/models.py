@@ -12,8 +12,31 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.types import TypeDecorator
 
+from .crypto import decrypt_secret, encrypt_secret
 from .database import Base
+
+
+class EncryptedString(TypeDecorator):
+    """Transparently encrypts on write, decrypts on read (see crypto.py) --
+    every other part of the codebase reads/writes these columns as plain
+    strings same as any other Column(String); the encryption happens once,
+    here, at the ORM boundary. Used only for real secrets (OAuth client
+    secrets, access/refresh tokens), not identifiers like client_id."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return encrypt_secret(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return decrypt_secret(value)
 
 
 class User(Base):
@@ -33,18 +56,19 @@ class User(Base):
 
     # Spotify: real OAuth (Authorization Code + PKCE), no client secret needed.
     # User supplies their own client_id from developer.spotify.com/dashboard.
+    # client_id is a public identifier, not a secret -- left as plain String.
     spotify_client_id = Column(String)
-    spotify_access_token = Column(String)
-    spotify_refresh_token = Column(String)
+    spotify_access_token = Column(EncryptedString)
+    spotify_refresh_token = Column(EncryptedString)
     spotify_token_expires_at = Column(DateTime)
 
     # Whoop: real OAuth (Authorization Code, confidential client -- Whoop requires
     # a client secret, unlike Spotify's PKCE-only flow). User supplies their own
     # client_id/secret from developer.whoop.com.
     whoop_client_id = Column(String)
-    whoop_client_secret = Column(String)
-    whoop_access_token = Column(String)
-    whoop_refresh_token = Column(String)
+    whoop_client_secret = Column(EncryptedString)
+    whoop_access_token = Column(EncryptedString)
+    whoop_refresh_token = Column(EncryptedString)
     whoop_token_expires_at = Column(DateTime)
     wearable_display_stats = Column(JSON)  # up to 3 keys from whoop.STAT_CATALOG, e.g. ["recovery_score","hrv_rmssd_milli","strain"]
 

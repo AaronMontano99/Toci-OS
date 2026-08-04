@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Path as ApiPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,7 +49,18 @@ SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/spotify/callback"
 WHOOP_REDIRECT_URI = "http://127.0.0.1:8000/whoop/callback"
 
 app = FastAPI(title="Toci OS API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Native mobile requests (Expo Go, a built app) aren't browser fetches and
+# aren't subject to CORS at all -- this only ever gates browser-based access
+# (the vanilla-JS web frontend, Expo web preview), both of which run on
+# localhost/127.0.0.1 at some dev port. A wildcard origin here would let any
+# website a user's browser visits make authenticated-looking requests
+# against this API with no auth layer to stop them.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 
 def _ensure_recovery_reading(db: Session, date: dt.date) -> models.DailyRecoveryMetric:
@@ -1544,7 +1556,10 @@ def nutrition_toggle_favorite(food_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/nutrition/lookup/{barcode}")
-def nutrition_lookup_barcode(barcode: str, db: Session = Depends(get_db)):
+def nutrition_lookup_barcode(
+    barcode: str = ApiPath(..., pattern=r"^\d{6,14}$", description="UPC/EAN barcode digits only"),
+    db: Session = Depends(get_db),
+):
     food = nutrition_client.lookup_barcode(db, DEMO_USER_ID, barcode)
     if not food:
         raise HTTPException(404, "No product found for that barcode — try Custom Food instead")

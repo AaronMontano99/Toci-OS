@@ -3,6 +3,7 @@ app/__pycache__/
 app/toci/__pycache__/
 app/*.db
 app/uploads/
+app/.encryption_key
 __pycache__/
 *.pyc
 .DS_Store
