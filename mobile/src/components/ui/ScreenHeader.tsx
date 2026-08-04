@@ -27,7 +27,7 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
               fontFamily: 'Manrope_800ExtraBold',
               fontSize: 24,
               letterSpacing: 3,
-              color: '#F58A4B',
+              color: colors.accent,
             }}
           >
             TOC
@@ -44,7 +44,7 @@ export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot
                 fontFamily: 'Manrope_800ExtraBold',
                 fontSize: 24,
                 letterSpacing: 3,
-                color: '#F58A4B',
+                color: colors.accent,
               }}
             >
               i

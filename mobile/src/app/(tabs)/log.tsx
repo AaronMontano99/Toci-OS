@@ -55,12 +55,6 @@ export default function LogTabScreen() {
   return (
     <ScreenContainer onRefresh={refetch} refreshing={isRefetching}>
       <View>
-        <Text variant="microLabel" tone="accent" style={{ letterSpacing: 2 }}>
-          TOCI LOG
-        </Text>
-      </View>
-
-      <View>
         <Text variant="displayLarge">What are you doing today?</Text>
         <Text variant="body" tone="secondary">
           Track your training and keep building.
