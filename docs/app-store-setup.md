@@ -97,12 +97,27 @@ the user never reopens the app:
 
 ## 7. A real signed build (Expo Go won't work for this feature)
 
-`expo-iap` is a native module — it explicitly doesn't run in Expo Go or even
-a generic Expo Dev Client without the module baked in. You need:
+`expo-iap` and `react-native-maps` are native modules — they explicitly don't
+run in Expo Go or even a generic Expo Dev Client without the module baked in.
+That means a real native build is required to test (or ship) either the
+subscription flow or the outdoor-run map.
+
+**Building locally on this dev Mac (2017 MacBook Pro, macOS 13.7.8) is not
+possible** — confirmed 2026-08-04. This Expo SDK's React Native version
+requires Xcode 16.1+ (`node_modules/react-native/scripts/cocoapods/helpers.rb`
+→ `min_xcode_version_supported`), and Xcode 16.x requires macOS 14.5+
+(Sonoma or later). macOS 13.7.8 is the last version this specific Mac's
+hardware supports — there's no local fix, not even a from-source Xcode
+install (Xcode itself has the same macOS floor).
+
+**The real path is EAS Build** — Expo's cloud build service compiles the iOS
+app on Expo's own macOS build servers, so the machine kicking off the build
+never needs Xcode installed at all. This works from *any* machine (this Mac,
+a Windows laptop, anything with Node.js):
 
 ```bash
 cd mobile
-npx eas login              # one-time, your Expo account
+npx eas login              # one-time, needs an Expo account (free) -- not yet created as of 2026-08-04
 npx eas init                # creates the project on expo.dev if not already done
 npx eas build --platform ios --profile development   # for a testable dev-client build
 # once ready for the store:
@@ -111,6 +126,30 @@ npx eas build --platform ios --profile production
 
 `mobile/eas.json` already has `development` / `preview` / `production`
 profiles defined (from earlier CI/build setup) — no new config needed there.
+
+**Status as of 2026-08-04**: no Expo account exists yet — this is the very
+next blocking step. Once logged in, `eas build` needs no further local
+environment work; CocoaPods problems on this Mac (also solved that day —
+see below) only matter for local `expo run:ios`, which is no longer the
+plan.
+
+<details>
+<summary>If a local build is ever attempted again on a capable Mac</summary>
+
+This Mac's system Ruby (2.6.0, macOS-bundled) can't build CocoaPods' native
+extensions (`nkf` gem fails against the installed Xcode SDK), and
+`brew install cocoapods` pulls in llvm/rust as dependencies with no
+precompiled bottles on macOS 13, meaning a 30-60+ min source compile. The
+fix that worked: use Homebrew's own bundled portable Ruby instead of both —
+`/usr/local/Homebrew/Library/Homebrew/vendor/portable-ruby/<version>/bin/gem
+install cocoapods --no-document --user-install`, then symlink that same
+portable `ruby` binary into `~/.gem/ruby/<version>/bin/` so the generated
+`pod` shim script (which assumes `ruby` lives alongside it) resolves
+correctly. No compilation needed since `ffi`'s native extension ships as a
+precompiled `x86_64-darwin` gem. This gets `pod install` itself working —
+it just doesn't solve the separate, unfixable Xcode-version wall above.
+
+</details>
 
 ## 8. Test with a Sandbox account before going live
 

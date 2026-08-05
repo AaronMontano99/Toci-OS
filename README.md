@@ -97,6 +97,36 @@ now a matching edit and delete, wherever that makes sense.
 
 **Toci Premium ($6.99/mo)** — a real Apple StoreKit 2 subscription (not a demo toggle) gating Ask Toci, adaptive next-session coaching, and progress photos. Purchases go through `expo-iap`, and the backend verifies every transaction against Apple's real App Store Server API using Apple's own official library (`app/toci/apple_iap.py`) — the client's claim of being premium is never trusted on its own. See [`docs/app-store-setup.md`](docs/app-store-setup.md) for what's still needed to actually ship it: an Apple Developer Program membership, App Store Connect product setup, and a signed build — none of which can happen inside this repo, since they require your own Apple account.
 
+## Next steps to actually ship
+
+Everything code-side that can be done without external accounts is done —
+what's left is genuinely gated on setup only you can do. In order:
+
+1. **Create an Expo account** (free, expo.dev) — unblocks `eas login` /
+   `eas build`, the cloud build service needed for a real native build
+   (subscriptions and the outdoor-run map are native modules; Expo Go can't
+   run them). Building locally isn't an option on this dev Mac — its
+   hardware caps out at macOS 13.7.8, and this Expo SDK needs Xcode 16.1+,
+   which needs macOS 14.5+. EAS Build sidesteps this by compiling on Expo's
+   own Mac servers instead of this one; kicking it off just needs Node.js,
+   so it works from any machine, Mac or not.
+2. **Log into Fly.io** (`flyctl` is already installed at
+   `~/.fly/bin/flyctl`) — run `flyctl auth login`, then the backend can
+   actually be deployed somewhere public. Right now it only runs on
+   `localhost`/this Mac's LAN IP, which a real App Store build can't reach.
+3. **Apple Developer Program** ($99/yr, developer.apple.com) — in progress
+   as of 2026-08-04. Nothing in `docs/app-store-setup.md` steps 2 onward
+   (App Store Connect app registration, the subscription product, the API
+   key, the notifications webhook) can start without it.
+4. Once 1-3 are done: `eas build` for a real testable build, Sandbox-test
+   the subscription on a physical device, fill in App Store Connect's
+   listing metadata (screenshots, description, privacy policy, support
+   URL), submit for review.
+
+See [`docs/app-store-setup.md`](docs/app-store-setup.md) for the full
+step-by-step, including exactly what broke trying to build natively on this
+Mac and why (kept there in case a capable Mac becomes available later).
+
 ## Known gaps
 
 - **Live local-AI output not verified**: Coach narration, Ask Toci, and photo AI impressions are fully coded with tested graceful-fallback paths (the app never hangs or breaks without them), but this machine has no pre-built Ollama package — `brew install ollama` compiles it and its `llama.cpp` dependency from source, which is slow on older/modest hardware. Vision models in particular are heavy; realistic expectations are set in `app/README.md`.
