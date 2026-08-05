@@ -8,52 +8,18 @@ import { useTheme } from '@/theme/ThemeContext';
 
 interface ScreenHeaderProps {
   title?: string;
-  wordmark?: boolean;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightPress?: () => void;
   showDot?: boolean;
   right?: React.ReactNode;
 }
 
-export function ScreenHeader({ title, wordmark, rightIcon, onRightPress, showDot, right }: ScreenHeaderProps) {
+export function ScreenHeader({ title, rightIcon, onRightPress, showDot, right }: ScreenHeaderProps) {
   const { colors } = useTheme();
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      {wordmark ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 68 }}>
-          <Text
-            style={{
-              fontFamily: 'Manrope_800ExtraBold',
-              fontSize: 24,
-              letterSpacing: 3,
-              color: colors.accent,
-            }}
-          >
-            TOC
-          </Text>
-          <View>
-            <Ionicons
-              name="leaf"
-              size={11}
-              color="#7ED321"
-              style={{ position: 'absolute', top: -6, left: 1, transform: [{ rotate: '20deg' }] }}
-            />
-            <Text
-              style={{
-                fontFamily: 'Manrope_800ExtraBold',
-                fontSize: 24,
-                letterSpacing: 3,
-                color: colors.accent,
-              }}
-            >
-              i
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <Text variant="screenTitle">{title}</Text>
-      )}
+      {title ? <Text variant="screenTitle">{title}</Text> : <View />}
 
       {right ?? (
         rightIcon && (

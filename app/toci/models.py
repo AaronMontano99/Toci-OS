@@ -105,6 +105,12 @@ class User(Base):
 
     coach_name = Column(String, nullable=False, default="Toci")  # display name for the AI coach in the Coach tab
 
+    # A user-written weekly schedule, independent of the AI-generated Program
+    # engine -- free text per day (split/movements/notes), no exercise-library
+    # integration, no progression tracking. [{"weekday": 0-6, "split": str,
+    # "movements": str, "notes": str}, ...], one entry per weekday at most.
+    custom_schedule = Column(JSON, nullable=False, default=list)
+
 
 class Injury(Base):
     __tablename__ = "injuries"

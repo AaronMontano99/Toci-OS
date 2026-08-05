@@ -1304,6 +1304,23 @@ def get_settings(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/custom-schedule")
+def get_custom_schedule(db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    return {"days": user.custom_schedule or []}
+
+
+@app.put("/api/custom-schedule")
+def update_custom_schedule(payload: schemas.CustomScheduleUpdateIn, db: Session = Depends(get_db)):
+    user = db.query(models.User).get(DEMO_USER_ID)
+    by_weekday = {}
+    for day in payload.days:
+        by_weekday[day.weekday] = day.model_dump()
+    user.custom_schedule = list(by_weekday.values())
+    db.commit()
+    return {"days": user.custom_schedule}
+
+
 @app.patch("/api/settings")
 def update_settings(payload: schemas.SettingsUpdateIn, db: Session = Depends(get_db)):
     user = db.query(models.User).get(DEMO_USER_ID)

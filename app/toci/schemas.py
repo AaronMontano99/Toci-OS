@@ -103,6 +103,17 @@ class ExerciseSubstitutionIn(BaseModel):
     substitute_exercise_id: int
 
 
+class CustomScheduleDayIn(BaseModel):
+    weekday: int = Field(..., ge=0, le=6)  # 0=Monday .. 6=Sunday, matching ProgramDay/WeekDetailDay elsewhere
+    split: str = ""
+    movements: str = ""
+    notes: str = ""
+
+
+class CustomScheduleUpdateIn(BaseModel):
+    days: List[CustomScheduleDayIn]
+
+
 class SettingsUpdateIn(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = None

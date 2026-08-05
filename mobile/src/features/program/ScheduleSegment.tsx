@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { useSwapScheduleDays } from '@/api/hooks';
+import { useCustomSchedule, useSwapScheduleDays } from '@/api/hooks';
 import { WeekDetailDay } from '@/api/types';
 import { Card } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
@@ -10,6 +11,39 @@ import { Text } from '@/components/ui/Text';
 import { weekdayFull } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
+
+function CustomScheduleCard() {
+  const { colors } = useTheme();
+  const { data: customSchedule } = useCustomSchedule();
+  const dayCount = customSchedule?.days.filter((d) => d.split.trim() || d.movements.trim() || d.notes.trim()).length ?? 0;
+
+  return (
+    <Pressable onPress={() => router.push('/custom-schedule')}>
+      <Card
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: SPACING.base,
+          backgroundColor: colors.accentWash,
+          borderColor: colors.accentBorder,
+        }}
+      >
+        <Ionicons name="create-outline" size={22} color={colors.accentInk} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text variant="cardTitle" style={{ color: colors.accentInk }}>
+            {dayCount > 0 ? 'Your Own Program' : 'Create Your Own Program'}
+          </Text>
+          <Text variant="caption" style={{ color: colors.accentInk, opacity: 0.85 }}>
+            {dayCount > 0
+              ? `${dayCount} day${dayCount === 1 ? '' : 's'} set — tap to edit`
+              : 'Write in your own split, movements, and notes for each day.'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.accentInk} />
+      </Card>
+    </Pressable>
+  );
+}
 
 const DAY_TYPE_LABEL: Record<string, string> = { lift: 'Lift', run: 'Run', recover: 'Recovery', rest: 'Rest' };
 
@@ -36,6 +70,8 @@ export function ScheduleSegment({ week }: { week: WeekDetailDay[] }) {
 
   return (
     <View style={{ gap: SPACING.sm }}>
+      <CustomScheduleCard />
+
       {swapFrom != null && (
         <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.accentWash, borderColor: colors.accentBorder }}>
           <Text variant="caption" style={{ color: colors.accentInk }}>

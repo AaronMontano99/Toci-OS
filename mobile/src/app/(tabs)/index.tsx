@@ -6,7 +6,6 @@ import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { MacroStatRow } from '@/components/ui/MacroStatRow';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StreakPill } from '@/components/ui/StreakPill';
 import { Text } from '@/components/ui/Text';
@@ -54,13 +53,6 @@ export default function TodayScreen() {
 
   return (
     <ScreenContainer onRefresh={refetch} refreshing={isRefetching}>
-      <ScreenHeader
-        wordmark
-        rightIcon="notifications-outline"
-        showDot={!data.checked_in}
-        onRightPress={() => router.push('/checkin')}
-      />
-
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
         <Avatar name={settings?.name ?? 'T'} />
         <View style={{ flex: 1 }}>

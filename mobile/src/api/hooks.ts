@@ -334,6 +334,28 @@ export function useSwapScheduleDays() {
   });
 }
 
+export interface CustomScheduleDay {
+  weekday: number;
+  split: string;
+  movements: string;
+  notes: string;
+}
+
+export function useCustomSchedule() {
+  return useQuery({
+    queryKey: ['customSchedule'],
+    queryFn: () => api.get<{ days: CustomScheduleDay[] }>('/api/custom-schedule'),
+  });
+}
+
+export function useUpdateCustomSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (days: CustomScheduleDay[]) => api.put<{ days: CustomScheduleDay[] }>('/api/custom-schedule', { days }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['customSchedule'] }),
+  });
+}
+
 // ------------------------------------------------------------- coach chat ----
 
 export interface ChatMessage {

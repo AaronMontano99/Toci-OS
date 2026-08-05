@@ -48,6 +48,7 @@ export function PreferencesSegment() {
   const removeInjury = useRemoveInjury();
   const recalc = useRecalculateCalories();
   const [region, setRegion] = useState('');
+  const [customRestriction, setCustomRestriction] = useState('');
 
   if (isLoading || !settings) return <Skeleton height={300} radius={20} />;
 
@@ -128,15 +129,52 @@ export function PreferencesSegment() {
         </Card>
 
         <Text variant="cardTitle">Food restrictions</Text>
-        <Card style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm }}>
-          {RESTRICTIONS.map((tag) => (
-            <Chip
-              key={tag}
-              label={tag.replace('_', ' ')}
-              selected={settings.food_restrictions.includes(tag)}
-              onPress={() => update.mutate({ food_restrictions: toggle(settings.food_restrictions, tag) })}
+        <Card style={{ gap: SPACING.sm }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm }}>
+            {RESTRICTIONS.map((tag) => (
+              <Chip
+                key={tag}
+                label={tag.replace('_', ' ')}
+                selected={settings.food_restrictions.includes(tag)}
+                onPress={() => update.mutate({ food_restrictions: toggle(settings.food_restrictions, tag) })}
+              />
+            ))}
+            {settings.food_restrictions
+              .filter((tag) => !RESTRICTIONS.includes(tag))
+              .map((tag) => (
+                <Chip
+                  key={tag}
+                  label={tag}
+                  selected
+                  onPress={() => update.mutate({ food_restrictions: toggle(settings.food_restrictions, tag) })}
+                />
+              ))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+            <TextField
+              placeholder="Add your own, e.g. cilantro"
+              value={customRestriction}
+              onChangeText={setCustomRestriction}
+              style={{ flex: 1 }}
+              onSubmitEditing={() => {
+                const value = customRestriction.trim().toLowerCase().replace(/\s+/g, '_');
+                if (!value || settings.food_restrictions.includes(value)) return;
+                update.mutate({ food_restrictions: [...settings.food_restrictions, value] });
+                setCustomRestriction('');
+              }}
             />
-          ))}
+            <Button
+              label="Add"
+              fullWidth={false}
+              size="compact"
+              onPress={() => {
+                const value = customRestriction.trim().toLowerCase().replace(/\s+/g, '_');
+                if (!value || settings.food_restrictions.includes(value)) return;
+                update.mutate({ food_restrictions: [...settings.food_restrictions, value] });
+                setCustomRestriction('');
+              }}
+            />
+          </View>
         </Card>
 
         <Text variant="cardTitle">Smart Cart settings</Text>
