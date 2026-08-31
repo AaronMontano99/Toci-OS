@@ -4,6 +4,10 @@ app/toci/__pycache__/
 app/*.db
 app/uploads/
 app/.encryption_key
+app/.env.braintrust
+app/evals/.env*
+app/evals/_eval_scratch.db
+.env*
 app/certs/
 *.p8
 AppleRootCA*.cer
