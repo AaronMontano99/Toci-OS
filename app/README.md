@@ -82,6 +82,49 @@ machine — if not, `brew install ollama` will compile it (and its
 `llama.cpp` dependency) from source, which can take a long time on older
 hardware.
 
+### Evaluating Ask Toci with Braintrust
+
+`evals/eval_coach_chat.py` is a [Braintrust](https://braintrust.dev) eval for
+`coach_chat.py` — it runs a fixed set of off-topic, on-topic, and
+program-change-request messages through the real `chat()` function against a
+scratch copy of the seeded DB (never the live `toci.db`, so eval runs never
+pollute real conversation history), then scores:
+
+- **`off_topic_correct`** — does the off-topic pre-filter block what it
+  should and let through what it shouldn't
+- **`proposal_presence_correct`** — does a program-change request produce a
+  validated JSON proposal, and does everything else *not* produce one
+- **`model_available`** — did Ollama actually respond, vs. falling back to
+  the "unavailable" message
+
+Run it:
+
+```
+pip install braintrust autoevals   # one-time, into this venv
+echo "BRAINTRUST_API_KEY=bt_..." > .env.braintrust   # from braintrust.dev → Settings → API Keys; gitignored
+set -a; source .env.braintrust; set +a
+ollama serve &                     # if not already running
+braintrust eval evals/eval_coach_chat.py
+```
+
+**Use `--num-workers 1`.** This machine's Ollama runs a single inference
+slot — Braintrust's default worker count (one per CPU core) fires multiple
+test cases at Ollama concurrently, which just queues behind that one slot.
+Since the client-side timeout counts from when a request is *sent*, not when
+Ollama starts on it, queued requests can spuriously time out with zero
+relation to actual generation speed. `--num-workers 1` serializes eval
+requests to match reality and removes that noise from the `model_available`
+score.
+
+So far this eval has driven two real fixes, both landed in `coach_chat.py`:
+1. The off-topic pre-filter's regexes required matched words to sit
+   immediately adjacent, missing natural phrasing like "weather **like**
+   tomorrow" or "debug this **Python** code" — fixed by allowing a small gap
+   between them. Took `off_topic_correct` to 100%.
+2. Ollama calls had no seed/temperature pinned, making the JSON-proposal path
+   non-deterministic. Pinning `{"seed": 42, "temperature": 0}` improved
+   `proposal_presence_correct` from 81.8% to 88.9%.
+
 ## What's real here
 
 - **Readiness scoring** — HRV/RHR z-scores against a rolling baseline, sleep vs.

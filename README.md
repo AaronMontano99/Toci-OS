@@ -25,7 +25,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Backend (FastAPI + SQLite) | **Working** — the recommendation engine, all data endpoints, and the local demo web frontend; see [`app/README.md`](app/README.md) |
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
-| Local AI features (Coach narration, Ask Toci, photo impressions) | Code complete with tested fallback paths; live model output not yet verified on this hardware — see [Known gaps](#known-gaps) |
+| Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
 | Tests / CI | 88 backend tests (pytest), 73 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
@@ -129,7 +129,7 @@ Mac and why (kept there in case a capable Mac becomes available later).
 
 ## Known gaps
 
-- **Live local-AI output not verified**: Coach narration, Ask Toci, and photo AI impressions are fully coded with tested graceful-fallback paths (the app never hangs or breaks without them), but this machine has no pre-built Ollama package — `brew install ollama` compiles it and its `llama.cpp` dependency from source, which is slow on older/modest hardware. Vision models in particular are heavy; realistic expectations are set in `app/README.md`.
+- **Ask Toci verified, photo AI impressions not**: Ollama + `llama3.2` are running on this machine and Ask Toci is now covered by a [Braintrust eval](app/README.md#evaluating-ask-toci-with-braintrust) (100% off-topic accuracy, 88.9% proposal-presence accuracy as of the last run). Coach narration shares that same model/path but hasn't been separately eval'd. The `llava` vision model for photo impressions has never been pulled on this machine — that path is still only verified via its tested fallback (photo saves fine, no AI note), not live output. CPU-only generation here is also slow (~3 tok/s) — long JSON-proposal replies can take a couple minutes.
 - **Ask Toci's scope guardrail** is a strong deterrent (pre-filter + system prompt), not a mathematically airtight guarantee against a determined adversarial prompt on a local open-weight model.
 - **No auth** — single hardcoded demo user; the architecture doc's Sign in with Apple/Google plan isn't wired up, and the Profile → Account "Sign Out" control is explicitly a no-op that says so on screen. This also means Toci Premium currently applies to that one demo user, not per-real-person — a real multi-user launch needs auth before the paywall means anything.
 - **Toci Premium is iOS/App Store only** — no Android/Play Billing integration yet (the backend's `subscription_platform` field is ready for it, the verification code isn't written).
