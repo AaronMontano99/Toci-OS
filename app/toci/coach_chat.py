@@ -58,9 +58,9 @@ OFF_TOPIC_MESSAGE = (
 _OFF_TOPIC_PATTERNS = [
     r"\bcapital of\b", r"\bpresident of\b", r"\bprime minister\b",
     r"\bwhat (year|century)\b", r"\bwho (is|was) the\b",
-    r"\bweather (in|today|tomorrow)\b", r"\bstock price\b", r"\bexchange rate\b",
+    r"\bweather\b.{0,15}\b(in|today|tomorrow)\b", r"\bstock price\b", r"\bexchange rate\b",
     r"\btranslate\b", r"\bwrite (a |me a )?(poem|song|essay|story)\b",
-    r"\bwrite (some |a )?(code|python|javascript|sql)\b", r"\bdebug (this|my) code\b",
+    r"\bwrite (some |a )?(code|python|javascript|sql)\b", r"\bdebug (this|my)\b.{0,15}\bcode\b",
     r"\bmath (problem|homework)\b", r"\bsolve for x\b",
     r"\brecipe for\b(?!.*\b(protein|muscle|post-workout|pre-workout)\b)",
     r"\bmovie\b", r"\btv show\b", r"\bcelebrity\b", r"\bnews today\b",
