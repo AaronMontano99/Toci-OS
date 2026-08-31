@@ -112,9 +112,13 @@ slot — Braintrust's default worker count (one per CPU core) fires multiple
 test cases at Ollama concurrently, which just queues behind that one slot.
 Since the client-side timeout counts from when a request is *sent*, not when
 Ollama starts on it, queued requests can spuriously time out with zero
-relation to actual generation speed. `--num-workers 1` serializes eval
-requests to match reality and removes that noise from the `model_available`
-score.
+relation to actual generation speed. Confirmed by comparison: concurrent runs
+put `model_available` anywhere from 75-92% (queueing noise); serialized with
+`--num-workers 1` it settled at a consistent 91.7%. The remaining ~8% is a
+real hardware limit, not a bug — CPU-only generation here runs ~3 tok/s, and
+the slowest path (a structured JSON proposal, sometimes two Ollama round
+trips) can occasionally still clear the 240s timeout on its own, serialized
+or not.
 
 So far this eval has driven two real fixes, both landed in `coach_chat.py`:
 1. The off-topic pre-filter's regexes required matched words to sit
@@ -123,7 +127,7 @@ So far this eval has driven two real fixes, both landed in `coach_chat.py`:
    between them. Took `off_topic_correct` to 100%.
 2. Ollama calls had no seed/temperature pinned, making the JSON-proposal path
    non-deterministic. Pinning `{"seed": 42, "temperature": 0}` improved
-   `proposal_presence_correct` from 81.8% to 88.9%.
+   `proposal_presence_correct` to 90.9% (measured serialized).
 
 ## What's real here
 
