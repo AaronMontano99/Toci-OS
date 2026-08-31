@@ -34,6 +34,11 @@ from . import models
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "llama3.2"
+# Fixed seed + zero temperature: this app's chat is a program-builder tool,
+# not a creative assistant -- deterministic, repeatable output for the same
+# input/history is more valuable here than response variety, and it removes
+# a whole axis of flakiness from the JSON-proposal path.
+OLLAMA_OPTIONS = {"seed": 42, "temperature": 0}
 OLLAMA_CHAT_TIMEOUT_S = 240.0  # a 7-day JSON proposal is a few hundred tokens; measured ~2 tok/s on
 # CPU-only local hardware makes this a multi-minute wait in the worst case -- a ceiling, not a target.
 # Faster hardware (or a smaller/quantized model) finishes well before it; this just keeps a legitimately
@@ -249,6 +254,7 @@ def _request_structured_proposal(db: Session, user_id: int, message: str) -> dic
                 "messages": [{"role": "user", "content": prompt}],
                 "format": "json",
                 "stream": False,
+                "options": OLLAMA_OPTIONS,
             },
             timeout=OLLAMA_CHAT_TIMEOUT_S,
         )
@@ -284,7 +290,7 @@ def chat(db: Session, user_id: int, message: str) -> dict:
     try:
         resp = httpx.post(
             OLLAMA_CHAT_URL,
-            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
+            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False, "options": OLLAMA_OPTIONS},
             timeout=OLLAMA_CHAT_TIMEOUT_S,
         )
         resp.raise_for_status()
