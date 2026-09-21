@@ -30,7 +30,7 @@ import re
 import httpx
 from sqlalchemy.orm import Session
 
-from . import models
+from . import engine, models
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "llama3.2"
@@ -114,9 +114,75 @@ def _exercise_catalog(db: Session) -> list[str]:
     return [e.name for e in db.query(models.Exercise).order_by(models.Exercise.name).all()]
 
 
+def _recent_feedback_summary(db: Session, user_id: int, today: dt.date) -> str:
+    """Real signal about how training has actually been going lately --
+    readiness trend, adherence, and any lift that missed its target last
+    session -- so Ask Toci's answers are grounded in what's actually
+    happening, not just the static profile/program shape from
+    _user_context_summary above. Uses the exact same engine.readiness_trend
+    that generate_recommendation's own day-plan escalation reads, so the
+    chat coach and the actual program recommendation never disagree about
+    what "a few rough days" means.
+    """
+    readiness = db.query(models.ReadinessScore).filter_by(user_id=user_id, date=today).first()
+    lines = []
+    if readiness:
+        trend = engine.readiness_trend(db, user_id, today)
+        if trend["consecutive_low_days"] >= 3:
+            trend_note = f" — {trend['consecutive_low_days']} low-readiness days in a row"
+        elif trend["direction"] != "stable":
+            trend_note = f", trending {trend['direction']}"
+        else:
+            trend_note = ""
+        lines.append(f"Today's readiness: {readiness.score:g} ({readiness.band}){trend_note}.")
+    else:
+        lines.append("No readiness reading yet today.")
+
+    program = db.query(models.Program).filter_by(user_id=user_id, status="active").first()
+    if program:
+        meso = (
+            db.query(models.Mesocycle).filter_by(program_id=program.id)
+            .order_by(models.Mesocycle.index.desc()).first()
+        )
+        days = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all() if meso else []
+        scheduled_per_week = sum(1 for d in days if d.day_type in ("lift", "run"))
+        if scheduled_per_week:
+            week_start = today - dt.timedelta(days=6)
+            completed = (
+                db.query(models.WorkoutSession.date)
+                .filter(
+                    models.WorkoutSession.user_id == user_id,
+                    models.WorkoutSession.date >= week_start,
+                    models.WorkoutSession.date <= today,
+                )
+                .distinct()
+                .count()
+            )
+            lines.append(f"Training adherence (last 7 days): {completed} of {scheduled_per_week} scheduled sessions completed.")
+
+        stalled = set()
+        for d in days:
+            if d.day_type != "lift":
+                continue
+            for item in d.template.get("exercises", []):
+                ex = db.query(models.Exercise).get(item["exercise_id"])
+                if not ex:
+                    continue
+                progression = engine.progression_options(
+                    db, user_id, ex.id, item["target_rir"], item["reps"], item["starting_load_kg"]
+                )
+                if progression["why"].startswith("Last session missed target"):
+                    stalled.add(ex.name)
+        if stalled:
+            lines.append("Missed target reps/RIR last session on: " + ", ".join(sorted(stalled)) + ".")
+
+    return "\n".join(lines)
+
+
 def _system_prompt(db: Session, user_id: int) -> str:
     catalog = _exercise_catalog(db)
     context = _user_context_summary(db, user_id)
+    feedback = _recent_feedback_summary(db, user_id, dt.date.today())
     return (
         "You are Toci, an experienced strength & conditioning coach built into the Toci OS app. "
         "You ONLY discuss this user's training program, exercises, workout logging, recovery, and "
@@ -125,6 +191,10 @@ def _system_prompt(db: Session, user_id: int) -> str:
         "short sentence redirecting back to their training, and nothing else -- do not answer the "
         "off-topic question even partially.\n\n"
         f"{context}\n\n"
+        "Recent feedback signal — ground your coaching in this real, current data rather than "
+        "generic advice; bring it up unprompted when it's relevant (e.g. a real slump, a stalled "
+        "lift, low adherence), not just when directly asked:\n"
+        f"{feedback}\n\n"
         "Exercises you may use when proposing a program (use these exact names only -- never invent "
         "a new exercise name):\n" + ", ".join(catalog) + "\n\n"
         "When the user asks you to build, change, or redesign their program, respond conversationally "

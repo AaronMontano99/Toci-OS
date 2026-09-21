@@ -62,6 +62,13 @@ DATASET = [
     # -- edge case: recipe wording that should NOT be caught by the
     # off-topic pre-filter's negative lookahead (protein/post-workout carve-out) --
     {"input": "Got a recipe for a good post-workout protein shake?", "expected": {"off_topic": False, "expects_proposal": False}},
+
+    # -- feedback-aware context (readiness/adherence/stalled-lift signal folded
+    # into the system prompt, see _recent_feedback_summary): a natural
+    # "how am I doing" question should get a real, on-topic answer without
+    # tripping the off-topic filter or spuriously emitting a proposal just
+    # because the prompt now carries more program/performance detail --
+    {"input": "How has my training been going lately?", "expected": {"off_topic": False, "expects_proposal": False}},
 ]
 
 
