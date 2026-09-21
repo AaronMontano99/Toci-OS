@@ -4,7 +4,7 @@ import React from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { useSettings, useStartWorkout, useToday } from '@/api/hooks';
-import { Goal, ProgramResponse } from '@/api/types';
+import { Goal, LiftPrescription, ProgramResponse } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { CoachNoteCard } from '@/components/ui/CoachNoteCard';
@@ -52,8 +52,27 @@ export function OverviewSegment({ program, onOpenCoach }: { program: ProgramResp
   const { data: todayData } = useToday();
   const startWorkout = useStartWorkout();
   const units = settings?.units ?? 'imperial';
+  // `today` (the scheduled week entry) only supplies completion status below --
+  // it must NOT drive the card's title/exercises/duration. Those come from
+  // `program.today`, the readiness-adjusted recommendation (same one
+  // HeroWorkoutCard renders on the Today tab) -- otherwise a readiness swap
+  // (e.g. a 3-day slump escalating a lift day to recovery, see
+  // engine.readiness_trend()) shows "Active Recovery" on Today but the
+  // original scheduled lift here, with a "Start Workout" button that
+  // contradicts what the app just told the user to do.
   const today = program.week.find((d) => d.is_today);
   const status = todayData?.workout_status;
+  const rec = program.today;
+  const isLift = rec.session_type === 'lift';
+  const recLift = rec.prescription as LiftPrescription;
+  const recExercises = isLift ? (recLift.exercises ?? []) : [];
+  const recTitle = isLift
+    ? (recLift.label ?? 'Lift')
+    : rec.session_type === 'run'
+      ? 'Run'
+      : rec.session_type === 'recover'
+        ? 'Active Recovery'
+        : 'Rest Day';
 
   const onStartOrResume = async () => {
     if (status?.state === 'active' && status.session_id) {
@@ -73,7 +92,15 @@ export function OverviewSegment({ program, onOpenCoach }: { program: ProgramResp
   };
 
   const primaryLabel =
-    status?.state === 'active' ? 'Resume' : status?.state === 'completed' ? 'View Summary' : 'Start Workout';
+    status?.state === 'active'
+      ? 'Resume'
+      : status?.state === 'completed'
+        ? 'View Summary'
+        : rec.session_type === 'run'
+          ? 'Log Run'
+          : rec.session_type === 'recover'
+            ? 'Start Recovery'
+            : 'Start Workout';
 
   return (
     <View style={{ gap: SPACING.lg }}>
@@ -91,15 +118,15 @@ export function OverviewSegment({ program, onOpenCoach }: { program: ProgramResp
             </View>
           )}
         </View>
-        <Text variant="cardTitle">{today?.label ?? program.today.session_type}</Text>
-        {today && today.day_type === 'lift' && (
+        <Text variant="cardTitle">{recTitle}</Text>
+        {isLift && recExercises.length > 0 && (
           <Text variant="caption" tone="tertiary">
-            Est. {today.exercises.length * 8 + 10} min · {today.exercises.length} exercises
+            Est. {recExercises.length * 8 + 10} min · {recExercises.length} exercises
           </Text>
         )}
-        {today && today.exercises.length > 0 && (
+        {isLift && recExercises.length > 0 && (
           <Text variant="body" tone="secondary" numberOfLines={1}>
-            {today.exercises.map((e) => e.name).join(' · ')}
+            {recExercises.map((e) => e.name).join(' · ')}
           </Text>
         )}
         <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
