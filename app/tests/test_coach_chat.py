@@ -71,5 +71,5 @@ def test_system_prompt_embeds_the_feedback_signal(db_session, seeded):
     _set_readiness(db_session, today, 30, "red")
 
     prompt = coach_chat._system_prompt(db_session, DEMO_USER_ID)
-    assert "Recent feedback signal" in prompt
+    assert "RECENT DATA" in prompt
     assert "Today's readiness: 30 (red)." in prompt
