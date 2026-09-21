@@ -107,6 +107,55 @@ def compute_readiness(db: Session, user_id: int, date: dt.date) -> models.Readin
     return row
 
 
+def readiness_trend(db: Session, user_id: int, date: dt.date, days: int = 7) -> dict:
+    """A single day's band can't tell a one-off rough night from a real
+    slump -- this looks at the last `days` saved ReadinessScore rows
+    (today's included, once compute_readiness has saved it) to answer that.
+    Powers both generate_recommendation's escalation below and Ask Toci's
+    context (coach_chat.py), so the day-plan and the chat coach reason
+    about the exact same numbers.
+
+    consecutive_low_days: amber/red days in a row ending at `date`, walking
+    backward and stopping at the first green day or the first day with no
+    saved reading at all (an actual gap, not a bad reading, shouldn't count
+    as "still struggling").
+    direction: "improving"/"declining"/"stable", comparing the mean of the
+    earlier half of the window to the later half -- a coarse trend, not a
+    regression fit, which is all a handful of noisy daily scores supports.
+    """
+    start = date - dt.timedelta(days=days - 1)
+    rows = (
+        db.query(models.ReadinessScore)
+        .filter(
+            models.ReadinessScore.user_id == user_id,
+            models.ReadinessScore.date >= start,
+            models.ReadinessScore.date <= date,
+        )
+        .order_by(models.ReadinessScore.date.asc())
+        .all()
+    )
+    by_date = {r.date: r for r in rows}
+
+    consecutive_low_days = 0
+    cursor = date
+    while cursor in by_date and by_date[cursor].band in ("amber", "red"):
+        consecutive_low_days += 1
+        cursor -= dt.timedelta(days=1)
+
+    direction = "stable"
+    scores = [r.score for r in rows]
+    if len(scores) >= 4:
+        midpoint = len(scores) // 2
+        earlier_avg = statistics.mean(scores[:midpoint])
+        later_avg = statistics.mean(scores[midpoint:])
+        if later_avg - earlier_avg >= 5:
+            direction = "improving"
+        elif earlier_avg - later_avg >= 5:
+            direction = "declining"
+
+    return {"consecutive_low_days": consecutive_low_days, "direction": direction, "days_considered": len(rows)}
+
+
 def _last_top_set(db: Session, user_id: int, exercise_id: int):
     return (
         db.query(models.WorkoutSet)
@@ -302,7 +351,19 @@ def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDa
     the same progression engine instead of replaying a stale, unadjusted template."""
     injury_regions = _active_injury_regions(db, user_id)
     user_subs = _user_exercise_substitutions(db, user_id)
-    set_multiplier = 0.8 if readiness.band == "amber" else 1.0
+    # This path is reached when the user explicitly picks a saved workout
+    # despite today's readiness (generate_recommendation would otherwise have
+    # swapped a scheduled lift day to recovery) -- respect that choice rather
+    # than block it, but still trim harder than a plain amber day when it's
+    # part of a real slump (see readiness_trend), not just today's reading.
+    trend = readiness_trend(db, user_id, dt.date.today())
+    slumping = trend["consecutive_low_days"] >= 3 and readiness.band != "green"
+    if slumping:
+        set_multiplier = 0.6
+    elif readiness.band == "amber":
+        set_multiplier = 0.8
+    else:
+        set_multiplier = 1.0
 
     exercises_out = []
     for item in day.template.get("exercises", []):
@@ -357,6 +418,12 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
 
     reasoning = [f"Readiness {readiness.score:g} ({readiness.band})"]
     injury_regions = _active_injury_regions(db, user_id)
+    trend = readiness_trend(db, user_id, date)
+    # 3+ amber/red days running is a real slump, not a rough night -- worth
+    # reacting to more than one more day's single reading would justify on
+    # its own. Escalates amber to the same handling as red; red itself was
+    # already the most conservative branch, so it's unaffected.
+    slumping = trend["consecutive_low_days"] >= 3 and readiness.band != "green"
 
     if day is None or day.day_type == "rest":
         return _save_recommendation(db, user_id, date, "rest", {"note": "Scheduled rest day"}, reasoning, readiness)
@@ -368,8 +435,14 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
         )
 
     if day.day_type == "lift":
-        if readiness.band == "red":
-            reasoning.append("Readiness low — swapping to active recovery instead of lifting")
+        if readiness.band == "red" or slumping:
+            if slumping and readiness.band != "red":
+                reasoning.append(
+                    f"{trend['consecutive_low_days']} days of low readiness in a row — taking a full "
+                    "recovery day instead of trimming volume, rather than let it compound"
+                )
+            else:
+                reasoning.append("Readiness low — swapping to active recovery instead of lifting")
             return _save_recommendation(
                 db, user_id, date, "recover",
                 {"note": "Active recovery: 20 min easy walk + mobility"}, reasoning, readiness,
@@ -416,9 +489,15 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
 
     if day.day_type == "run":
         planned = day.template
-        if readiness.band == "red":
+        if readiness.band == "red" or slumping:
             prescription = {"run_type": "recovery_jog", "duration_min": 20, "zone": 1}
-            reasoning.append("Readiness low — capped to an easy zone 1 jog")
+            if slumping and readiness.band != "red":
+                reasoning.append(
+                    f"{trend['consecutive_low_days']} days of low readiness in a row — capping to an easy "
+                    "zone 1 jog rather than let it compound"
+                )
+            else:
+                reasoning.append("Readiness low — capped to an easy zone 1 jog")
         elif readiness.band == "amber":
             prescription = {"run_type": "easy", "duration_min": planned.get("duration_min", 30), "zone": 2}
             reasoning.append("Readiness moderate — downgraded to an easy pace")
