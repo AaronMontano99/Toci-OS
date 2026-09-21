@@ -14,13 +14,22 @@ import { ReadinessCard } from '@/features/today/ReadinessCard';
 import { ThisWeekCard } from '@/features/today/ThisWeekCard';
 import { WeightTrendCard } from '@/features/today/WeightTrendCard';
 import { greeting } from '@/lib/format';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { SPACING } from '@/theme/tokens';
 
 export default function TodayScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useToday();
-  const { data: settings } = useSettings();
+  const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: nutrition } = useNutritionToday();
+
+  // First-run gate: a brand-new user (or one who restarted the interview from
+  // Profile) lands here before ever seeing tabs -- send them into the guided
+  // onboarding flow instead of an empty Today screen. Waits on settings
+  // specifically (not the heavier `isLoading` below) since that's the only
+  // query this depends on.
+  if (!settingsLoading && settings && !settings.onboarding_completed) {
+    return <Redirect href="/onboarding/welcome" />;
+  }
 
   if (isLoading) {
     return (

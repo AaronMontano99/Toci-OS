@@ -111,6 +111,16 @@ class User(Base):
     # "movements": str, "notes": str}, ...], one entry per weekday at most.
     custom_schedule = Column(JSON, nullable=False, default=list)
 
+    # Training-onboarding answers (the guided first-run interview) that don't
+    # already have a home elsewhere on this model. Same convention as
+    # goal_pace_key/activity_level above -- plain unvalidated strings/ints,
+    # option catalogs live in the frontend onboarding feature.
+    training_days_per_week = Column(Integer)
+    session_length_min = Column(Integer)
+    training_split_preference = Column(String)  # "upper_lower" | "push_pull_legs" | "full_body" | "coach_choice"
+    training_notes = Column(String)  # free text: dislikes, cardio preference, anything else
+    recovery_check_in_method = Column(String)  # "manual" | "wearable_later" | "not_now"
+
 
 class Injury(Base):
     __tablename__ = "injuries"

@@ -77,6 +77,33 @@ export function AccountSegment() {
         <Button label="Update password" size="compact" loading={updatePassword.isPending} onPress={() => updatePassword.mutate()} />
       </Card>
 
+      <Card style={{ gap: SPACING.sm }}>
+        <Text variant="cardTitle">Redo the setup interview</Text>
+        <Text variant="caption" tone="tertiary">
+          Restarts the guided goal/schedule/equipment questions from the beginning.
+        </Text>
+        <Button
+          label="Restart onboarding"
+          variant="secondary"
+          size="compact"
+          loading={update.isPending}
+          onPress={() => {
+            Alert.alert('Restart onboarding?', 'You can redo the goal, schedule, and equipment questions.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Restart',
+                style: 'destructive',
+                onPress: () =>
+                  update.mutate(
+                    { onboarding_completed: false },
+                    { onSuccess: () => router.replace('/onboarding/welcome') },
+                  ),
+              },
+            ]);
+          }}
+        />
+      </Card>
+
       <Text variant="caption" tone="tertiary">
         This is a single-user local demo — there&rsquo;s no sign-in flow yet, so &ldquo;Sign out&rdquo; and multi-account
         features aren&rsquo;t wired up (see app/README.md&rsquo;s known gaps).
