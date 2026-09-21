@@ -30,6 +30,7 @@ function RootNavigator() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="onboarding" />
       <Stack.Screen name="workout" options={{ presentation: 'fullScreenModal' }} />
       <Stack.Screen name="nutrition" options={{ presentation: 'fullScreenModal' }} />
       <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />

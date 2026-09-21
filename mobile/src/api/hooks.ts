@@ -469,6 +469,33 @@ export function useUpdateSettings() {
   });
 }
 
+// -------------------------------------------------------------- onboarding ----
+// The guided first-run interview (see mobile/src/app/onboarding/). Most of its
+// answers (goal, experience_level, equipment, age, height, training_*) are
+// plain Settings fields set via useUpdateSettings as the user goes -- this
+// call is only the final step: it logs the starting body weight and computes
+// the calorie goal server-side (same Mifflin-St Jeor formula Settings' "Recalculate
+// from profile" uses), then flips onboarding_completed.
+export interface OnboardingCompletePayload {
+  current_weight_kg: number;
+  goal_weight_kg: number;
+  goal_pace_key: string;
+  activity_level: string;
+  sex: string;
+}
+
+export function useCompleteOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: OnboardingCompletePayload) =>
+      api.post<{ ok: boolean }>('/api/onboarding/complete', payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      qc.invalidateQueries({ queryKey: ['today'] });
+    },
+  });
+}
+
 // --------------------------------------------------------- subscription ----
 // Real Toci Premium ($6.99/mo) -- see mobile/src/app/subscription.tsx for
 // the purchase flow itself (expo-iap + useIAP), and app/toci/apple_iap.py

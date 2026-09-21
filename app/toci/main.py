@@ -1301,6 +1301,11 @@ def get_settings(db: Session = Depends(get_db)):
         "household_size": user.household_size,
         "shopping_weekly_budget": user.shopping_weekly_budget,
         "coach_name": user.coach_name,
+        "training_days_per_week": user.training_days_per_week,
+        "session_length_min": user.session_length_min,
+        "training_split_preference": user.training_split_preference,
+        "training_notes": user.training_notes,
+        "recovery_check_in_method": user.recovery_check_in_method,
     }
 
 

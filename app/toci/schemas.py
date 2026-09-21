@@ -139,6 +139,11 @@ class SettingsUpdateIn(BaseModel):
     household_size: Optional[int] = None
     shopping_weekly_budget: Optional[float] = None
     coach_name: Optional[str] = None
+    training_days_per_week: Optional[int] = None
+    session_length_min: Optional[int] = None
+    training_split_preference: Optional[str] = None
+    training_notes: Optional[str] = None
+    recovery_check_in_method: Optional[str] = None
 
 
 class PurchaseVerifyIn(BaseModel):

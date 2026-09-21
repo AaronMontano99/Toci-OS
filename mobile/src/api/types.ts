@@ -253,6 +253,11 @@ export interface Settings {
   household_size: number;
   shopping_weekly_budget: number | null;
   coach_name: string;
+  training_days_per_week: number | null;
+  session_length_min: number | null;
+  training_split_preference: string | null;
+  training_notes: string | null;
+  recovery_check_in_method: string | null;
 }
 
 export interface FoodItem {
