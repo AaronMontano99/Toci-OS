@@ -67,7 +67,12 @@ export default function TodayScreen() {
         <StreakPill days={data.streak} />
       </View>
 
-      <ReadinessCard score={data.readiness.score} band={data.readiness.band} checkedIn={data.checked_in} />
+      <ReadinessCard
+        score={data.readiness.score}
+        band={data.readiness.band}
+        checkedIn={data.checked_in}
+        sessionType={data.recommendation.session_type}
+      />
 
       <HeroWorkoutCard
         sessionType={data.recommendation.session_type}
