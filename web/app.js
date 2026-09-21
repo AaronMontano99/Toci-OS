@@ -1062,7 +1062,7 @@ async function openLiftSession(resumeSessionId, customPrescription) {
 function populateAddExerciseSelect() {
   const select = document.getElementById("add-exercise-select");
   const options = state.exercises
-    .map((e) => '<option value="' + e.id + '">' + e.name + "</option>")
+    .map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + "</option>")
     .join("");
   select.innerHTML = '<option value="">Choose an exercise…</option><option value="__custom__">＋ Custom exercise…</option>' + options;
 }
@@ -1340,7 +1340,7 @@ function defaultMealSlot() {
 function renderFoodEntryRow(e) {
   return (
     '<div class="pr-row"><div style="min-width:0;flex:1;">' +
-    '<div class="name">' + e.name + (e.brand ? " — " + e.brand : "") + "</div>" +
+    '<div class="name">' + escapeHtml(e.name) + (e.brand ? " — " + escapeHtml(e.brand) : "") + "</div>" +
     '<div class="date tnum">' + e.serving_qty + e.serving_unit + " × " + e.servings + " · " + Math.round(e.calories) +
     " kcal · P" + Math.round(e.protein_g) + " C" + Math.round(e.carbs_g) + " F" + Math.round(e.fat_g) + "</div></div>" +
     '<div style="display:flex;align-items:center;gap:0.4rem;flex:none;">' +
@@ -2417,7 +2417,7 @@ function renderNewMealItems() {
   }
   container.innerHTML = newMealItems
     .map((item, i) => (
-      '<div class="pr-row"><div class="name">' + item.name + '</div>' +
+      '<div class="pr-row"><div class="name">' + escapeHtml(item.name) + '</div>' +
       '<div style="display:flex;align-items:center;gap:0.4rem;">' +
       '<input type="number" step="0.25" min="0.25" value="' + item.servings + '" class="new-meal-servings-input tnum" data-idx="' + i + '" style="' + inputRowStyle + '">' +
       '<button class="set-delete-btn" data-remove-idx="' + i + '" aria-label="Remove item">×</button></div></div>'
@@ -2720,8 +2720,8 @@ function renderCartItemRow(item) {
     '<div class="pr-row"><input type="checkbox" class="cart-item-check" data-itemid="' + item.id + '"' +
     (item.is_checked ? " checked" : "") + ' style="flex:none;margin-right:0.6rem;width:18px;height:18px;">' +
     '<div style="min-width:0;flex:1;' + (item.is_checked ? "opacity:0.5;text-decoration:line-through;" : "") + '">' +
-    '<div class="name">' + item.name + (item.in_pantry ? ' <span class="badge neutral">Have it</span>' : "") + '</div>' +
-    '<div class="date tnum">' + item.quantity + " " + item.unit + " · " + priceStr + (item.purpose ? " · " + item.purpose : "") + '</div></div>' +
+    '<div class="name">' + escapeHtml(item.name) + (item.in_pantry ? ' <span class="badge neutral">Have it</span>' : "") + '</div>' +
+    '<div class="date tnum">' + item.quantity + " " + escapeHtml(item.unit) + " · " + priceStr + (item.purpose ? " · " + escapeHtml(item.purpose) : "") + '</div></div>' +
     '<button class="set-delete-btn" data-itemid="' + item.id + '" aria-label="Remove item">×</button></div>'
   );
 }
@@ -2777,7 +2777,7 @@ async function loadPantry() {
   }
   list.innerHTML = data.items
     .map((p) => (
-      '<div class="pr-row"><span class="name">' + p.name + '</span>' +
+      '<div class="pr-row"><span class="name">' + escapeHtml(p.name) + '</span>' +
       '<button class="set-delete-btn" data-pantryid="' + p.id + '" aria-label="Remove">×</button></div>'
     ))
     .join("");
@@ -2807,7 +2807,7 @@ async function loadProgress() {
   if (!state.exercises.length) state.exercises = await api("/exercises");
   const select = document.getElementById("progress-exercise-select");
   if (!select.dataset.wired) {
-    select.innerHTML = state.exercises.map((e) => '<option value="' + e.id + '">' + e.name + "</option>").join("");
+    select.innerHTML = state.exercises.map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + "</option>").join("");
     const bench = state.exercises.find((e) => e.name.indexOf("Bench") !== -1);
     if (bench) select.value = bench.id;
     select.addEventListener("change", () => renderProgressChart(select.value));
@@ -3095,10 +3095,10 @@ function renderProgramGoals(goals) {
       return (
         '<div class="card tight" style="margin-bottom:0.6rem;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">' +
-        '<span style="font-size:0.85rem;font-weight:600;">' + g.title + "</span>" +
+        '<span style="font-size:0.85rem;font-weight:600;">' + escapeHtml(g.title) + "</span>" +
         '<span class="badge neutral" style="font-size:0.62rem;">' + (GOAL_STATUS_LABELS[g.status] || "Stable") + "</span></div>" +
         '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;"></div></div>' +
-        '<div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.35rem;">' + valueLine + pct + "% there</div>" +
+        '<div class="tnum" style="font-size:0.75rem;color:var(--neutral-2);margin-top:0.35rem;">' + escapeHtml(valueLine) + pct + "% there</div>" +
         "</div>"
       );
     })
@@ -3525,8 +3525,8 @@ async function loadSettings() {
   } else {
     injuryList.innerHTML = data.injuries
       .map((i) => {
-        const note = i.description ? " — " + i.description : "";
-        return '<div class="set-row"><span class="k">' + titleCase(i.body_region) + note + '</span>' +
+        const note = i.description ? " — " + escapeHtml(i.description) : "";
+        return '<div class="set-row"><span class="k">' + escapeHtml(titleCase(i.body_region)) + note + '</span>' +
           '<span class="v"><button class="btn small danger" data-injid="' + i.id + '">Remove</button></span></div>';
       })
       .join("");
