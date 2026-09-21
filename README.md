@@ -21,12 +21,12 @@ engine's logic firsthand, not as a production consumer app — see
 
 | Layer | State |
 |---|---|
-| Mobile app (Expo / React Native / Expo Router) | **Working, feature-complete** — all 6 tabs, real CRUD throughout, runs in Expo Go or Expo web against the same FastAPI backend; verified end-to-end in iOS Simulator (real backend data, no errors) — see [`mobile/README.md`](mobile/README.md) |
-| Backend (FastAPI + SQLite) | **Working** — the recommendation engine, all data endpoints, and the local demo web frontend; see [`app/README.md`](app/README.md) |
-| Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab from one shared theme context |
+| Mobile app (Expo / React Native / Expo Router) | **Working, feature-complete** — all 6 tabs, real CRUD throughout, a guided first-run onboarding interview ahead of them, runs in Expo Go or Expo web against the same FastAPI backend; verified end-to-end in iOS Simulator (real backend data, no errors) — see [`mobile/README.md`](mobile/README.md) |
+| Backend (FastAPI + SQLite) | **Working** — the recommendation engine (now trend-aware, not just single-day), all data endpoints, and the local demo web frontend; see [`app/README.md`](app/README.md) |
+| Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
-| Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 88 backend tests (pytest), 73 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
+| Tests / CI | 128 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -35,14 +35,64 @@ Not production-ready — no auth, no real wearable data, no Postgres, no deploym
 
 Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
 
+## Updates
+
+Dated log of each round of work landed on this repo, newest first.
+
+**Update 1 — Onboarding, adaptive feedback, and a pre-launch QA pass (2026-09-21)**
+- Added the guided 13-screen first-run onboarding interview (see below).
+- Made the readiness engine trend-aware: 3+ consecutive amber/red days now
+  escalates to a full recovery swap instead of another volume trim, and
+  Ask Toci's system prompt was given the same real readiness/adherence/
+  stalled-lift signal so its answers are grounded in current data, not
+  just static profile shape.
+- **Pre-launch QA pass** (a full test run, a manual security review, and a
+  live walkthrough in iOS Simulator — not just reading the diff) caught
+  three real bugs none of the automated suites had surfaced:
+  1. An Ask Toci reply quoted the system prompt's own internal instruction
+     text back to the user verbatim, on a real live query — the
+     Braintrust eval scored 100%/100%/92% both before and after, since its
+     scorers check off-topic/proposal/availability, not reply quality.
+     Fixed the prompt structure; re-ran the same live query to confirm.
+  2. The Today and Program tabs could disagree about what to do on a given
+     day — Today correctly swapped to Active Recovery during a readiness
+     slump, Program still showed the original scheduled lift with a
+     "Start Workout" button. Root cause: the Program tab read the raw
+     schedule instead of the readiness-adjusted recommendation. Fixed,
+     along with a matching bug in the Readiness card's copy.
+  3. Several free-text fields in the web frontend (`web/app.js`) reached
+     `innerHTML` without the `escapeHtml()` helper the same file already
+     uses in ~27 other places — a stored-XSS gap, low risk today
+     (single local user) but real the moment this backend is ever
+     deployed for more than one person. Fixed all found call sites.
+- Backend and CORS/auth/crypto/IAP-verification posture reviewed and found
+  solid otherwise — see [Known gaps](#known-gaps) for what's genuinely
+  still open (mainly: no auth yet, which is the root cause of most of
+  what's left).
+
 ## What actually works right now
 
 Everything below is live in the mobile app (or the backend it talks to) — not a mockup, not mock data.
 
+**Guided first-run onboarding**
+Instead of dropping a new user into a settings form, a 13-screen interview
+(welcome → primary/secondary goal → experience → training days → session
+length → equipment → split preference → body profile → recovery
+preference → confirmation → an animated "building your plan" moment →
+a personalized reveal card) collects everything the engine below needs,
+one question at a time — segmented progress bar, tap-to-commit selectable
+cards, and a coach that reacts to prior answers (e.g. picking 4 days
+gets *"Four days gives us enough room to train everything twice without
+living in the gym"* on the next screen) before you've done a single
+workout. Every answer routes through the same `/api/settings` /
+`/api/onboarding/complete` / `/api/goals` endpoints the rest of the app
+already used — nothing onboarding-specific was invented server-side.
+Re-triggerable anytime from Profile → Account → "Restart onboarding."
+
 **The recommendation engine (`toci/engine.py`)**
 - Readiness scoring — HRV/RHR z-scores against a rolling baseline, sleep vs. target, and a subjective check-in, weighted and banded exactly as documented in the architecture spec.
 - Progressive overload — logging a set today changes what's prescribed next session, based on the actual RIR/reps-hit rule, not a fixed schedule.
-- Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery.
+- Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery. It's trend-aware, not just single-day: `readiness_trend()` counts consecutive low-readiness days, and 3+ in a row escalates an amber day to the same full-recovery handling a single red day already gets, rather than trimming volume yet again.
 - Injury-aware substitution — an active injury swaps out the affected lift on the next session that includes it.
 - **Collaborative progression** — instead of silently picking a weight, the engine offers a few reasoned next-session options (repeat / increase / technique-focus), and logging feeds back `feel` (clean/difficult/sloppy/partial/assisted/pain) and `confidence_next` per set so the coaching stays grounded in how training actually felt, not just numbers hit.
 
@@ -76,7 +126,7 @@ now a matching edit and delete, wherever that makes sense.
 **Program tab**
 - Segmented Overview / Schedule / Goals / Coach tabs: a hero progress card, Today's Workout, a THIS WEEK day strip, goal-progress cards, a tap-to-expand weekly schedule with day-swapping, and deterministic Coach Observations (plateau/progression/adherence-trend detection), optionally rephrased in a warmer voice by a local LLM.
 - **Progress photo timeline** — two explicit, permission-respecting actions: "Take Photo" and "Choose from Library." Each photo can get a short qualitative AI posture/build impression from a local vision model, with an honest fallback message when that's unavailable. No photos are ever pre-seeded — every timeline starts empty.
-- **Ask Toci** — a conversational program-builder, restricted strictly to this user's own program/goals/training history. Off-topic requests are declined before the message ever reaches the model. Program-change requests get a structured JSON proposal — validated against the app's real exercise catalog — that must be explicitly **Applied** or **Discarded**; nothing changes automatically.
+- **Ask Toci** — a conversational program-builder, restricted strictly to this user's own program/goals/training history. Off-topic requests are declined before the message ever reaches the model. Program-change requests get a structured JSON proposal — validated against the app's real exercise catalog — that must be explicitly **Applied** or **Discarded**; nothing changes automatically. It's also feedback-aware: every prompt carries today's readiness + trend, the last 7 days' adherence against the scheduled week, and any lift that missed its target reps/RIR last session, using the exact same trend logic the day-plan escalation above reads — so asking "how's my training been going" gets an answer grounded in what's actually happening, not generic advice.
 
 **Log tab**
 - Lift and run logging with lb/kg unit switching, a rest timer, an exercise picker with on-the-fly substitution, and workout-split pictograms.
@@ -129,13 +179,13 @@ Mac and why (kept there in case a capable Mac becomes available later).
 
 ## Known gaps
 
-- **Ask Toci verified, photo AI impressions not**: Ollama + `llama3.2` are running on this machine and Ask Toci is now covered by a [Braintrust eval](app/README.md#evaluating-ask-toci-with-braintrust) (100% off-topic accuracy, 90.9% proposal-presence accuracy, 91.7% model availability, all measured serialized). Coach narration shares that same model/path but hasn't been separately eval'd. The `llava` vision model for photo impressions has never been pulled on this machine — that path is still only verified via its tested fallback (photo saves fine, no AI note), not live output. CPU-only generation here is also slow (~3 tok/s) — long JSON-proposal replies can take several minutes and occasionally still hit the 240s timeout.
+- **Ask Toci verified, photo AI impressions not**: Ollama + `llama3.2` are running on this machine and Ask Toci is now covered by a [Braintrust eval](app/README.md#evaluating-ask-toci-with-braintrust) (100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability, all measured serialized, 13 cases). Coach narration shares that same model/path but hasn't been separately eval'd. The `llava` vision model for photo impressions has never been pulled on this machine — that path is still only verified via its tested fallback (photo saves fine, no AI note), not live output. CPU-only generation here is also slow (~3 tok/s) — long JSON-proposal replies can take several minutes and occasionally still hit the 240s timeout; the feedback-aware system prompt (see above) adds real context length to every call, which measurably increases per-call latency on this hardware in exchange for grounded answers.
 - **Ask Toci's scope guardrail** is a strong deterrent (pre-filter + system prompt), not a mathematically airtight guarantee against a determined adversarial prompt on a local open-weight model.
 - **No auth** — single hardcoded demo user; the architecture doc's Sign in with Apple/Google plan isn't wired up, and the Profile → Account "Sign Out" control is explicitly a no-op that says so on screen. This also means Toci Premium currently applies to that one demo user, not per-real-person — a real multi-user launch needs auth before the paywall means anything.
 - **Toci Premium is iOS/App Store only** — no Android/Play Billing integration yet (the backend's `subscription_platform` field is ready for it, the verification code isn't written).
 - **No real wearable data** — HRV/RHR/sleep are simulated around a seeded baseline until manually overridden on the Recovery Check-in screen. Whoop/Spotify OAuth is real end to end, but this repo has never been linked to a real Whoop/Spotify developer app.
 - **SQLite, not Postgres** — a one-line change in `toci/database.py` when that matters.
-- **No training-load/ACWR tracking, no deload auto-trigger, no program version history** — this implements the readiness + progression core loop, not every table in the full architecture spec.
+- **No training-load/ACWR tracking, no deload auto-trigger, no program version history** — this implements the readiness + progression core loop, not every table in the full architecture spec. There is now a coarse multi-day readiness-slump escalation (`engine.readiness_trend()` — 3+ consecutive amber/red days triggers fuller recovery than a single bad day would), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week.
 - **No migrations tooling, no deployment config.**
 - **Qualitative goals aren't numerically tracked** — "improve posture," "look more athletic" etc. don't fit the Goal model's start→target progress bar, so they're intentionally not forced into it (addressed instead via the primary program focus and the recovery day's mobility work) rather than inventing a fake metric.
 - **Native apps not started** — this is entirely the Expo/React Native mobile app plus the FastAPI backend; the original Kotlin Multiplatform/SwiftUI/Jetpack Compose plan (below) was superseded, not built.
