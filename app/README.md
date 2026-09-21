@@ -120,7 +120,7 @@ the slowest path (a structured JSON proposal, sometimes two Ollama round
 trips) can occasionally still clear the 240s timeout on its own, serialized
 or not.
 
-So far this eval has driven two real fixes, both landed in `coach_chat.py`:
+So far this eval has driven three real changes, all landed in `coach_chat.py`:
 1. The off-topic pre-filter's regexes required matched words to sit
    immediately adjacent, missing natural phrasing like "weather **like**
    tomorrow" or "debug this **Python** code" — fixed by allowing a small gap
@@ -128,6 +128,17 @@ So far this eval has driven two real fixes, both landed in `coach_chat.py`:
 2. Ollama calls had no seed/temperature pinned, making the JSON-proposal path
    non-deterministic. Pinning `{"seed": 42, "temperature": 0}` improved
    `proposal_presence_correct` to 90.9% (measured serialized).
+3. Ask Toci's system prompt only carried static profile/program shape — it
+   had no way to know if readiness had been trending down, whether the last
+   week's sessions were actually getting logged, or whether a lift had
+   stalled, even though that data already existed elsewhere in the app.
+   `_recent_feedback_summary()` now folds all three into every prompt (same
+   `engine.readiness_trend()` the day-plan escalation below reads, so the
+   chat and the actual recommendation never disagree). Confirmed serialized:
+   `model_available` 100%, `off_topic_correct` 100%, `proposal_presence_correct`
+   92.31% (13 cases) — no regression from the longer prompt, at the cost of
+   a real, expected latency increase on this CPU-only hardware from more
+   context to process per call.
 
 ## What's real here
 
@@ -138,6 +149,11 @@ So far this eval has driven two real fixes, both landed in `coach_chat.py`:
 - **Autoregulation** — an amber or red readiness band measurably changes the
   day's prescription (reduced volume, downgraded run intensity, or a swap to
   recovery) — try it: submit a poor Recovery Check-in and watch Today update.
+  A single rough day and a real slump aren't treated the same way either:
+  `engine.readiness_trend()` counts consecutive amber/red days, and 3+ in a
+  row escalates an amber day to the same handling red gets on its own
+  (full recovery swap, or a capped zone 1 jog) rather than just trimming
+  volume again.
 - **Injury-aware substitution** — add a shoulder injury in Settings and Bench
   Press gets swapped on the next lift day that includes it.
 - **Persistence** — everything is a real SQLite row. Refresh the page, restart
