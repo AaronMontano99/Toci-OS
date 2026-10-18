@@ -96,9 +96,9 @@ training, including the weeks that go wrong, and measure what happens.*
 - The athlete is a model, not a person. This shows the engine reacts
   sensibly to hard situations; real proof needs planned-vs-completed
   tracking with real users.
-- 141 backend tests (13 new). Work is on `claude/training-simulator`, built
-  on `claude/try-it-out` (which has every September update; `main` on
-  GitHub is still the Aug 30 version).
+- 141 backend tests (13 new). Built on `claude/training-simulator` and
+  merged into `main` along with every September update, so `main` is
+  the current app again.
 
 **Update 1 — Onboarding, adaptive feedback, and a pre-launch QA pass (2026-09-21)**
 - Added the guided 13-screen first-run onboarding interview (see below).
