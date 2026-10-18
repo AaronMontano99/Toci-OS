@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from . import adherence
 from . import apple_iap
 from . import coach
 from . import coach_chat as coach_chat_client
@@ -215,7 +216,8 @@ def get_today(db: Session = Depends(get_db)):
 
     return {
         "date": today.isoformat(),
-        "readiness": {"score": readiness.score, "band": readiness.band},
+        "readiness": {"score": readiness.score, "band": readiness.band,
+                      "low_streak": reco_engine.readiness_trend(db, DEMO_USER_ID, today)["consecutive_low_days"]},
         "recovery": {
             "hrv_ms": recovery.hrv_ms,
             "resting_hr_bpm": recovery.resting_hr_bpm,
@@ -745,22 +747,17 @@ def progress_weekly_summary(db: Session = Depends(get_db)):
     )
     weight_delta_kg = round(weight_rows[-1].weight_kg - weight_rows[0].weight_kg, 1) if len(weight_rows) >= 2 else None
 
-    _, meso = _active_mesocycle(db)
-    program_days = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()
-    by_weekday = {d.weekday: d for d in program_days}
-    planned_days = 0
-    matched_days = 0
-    checkin_days = 0
-    for i in range(7):
-        d = week_start + dt.timedelta(days=i)
-        pd = by_weekday.get(d.weekday())
-        if pd and pd.day_type in ("lift", "run"):
-            planned_days += 1
-            model = models.WorkoutSession if pd.day_type == "lift" else models.CardioSession
-            if db.query(model).filter_by(user_id=DEMO_USER_ID, date=d).first():
-                matched_days += 1
-        if db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=d).first():
-            checkin_days += 1
+    # Planned = what Toci actually told the user each day (a readiness swap to recovery
+    # isn't a missed workout), from the same plan-vs-done record the Habits card shows.
+    # Days the app wasn't opened still count here, against the schedule: otherwise not
+    # opening the app at all would score as a perfect week.
+    week = adherence.report(db, DEMO_USER_ID, today, days=7)["summary"]
+    planned_days = week["planned_training_days"] + week["scheduled_without_a_plan"]
+    matched_days = week["trained"] + week["trained_without_a_plan"]
+    checkin_days = sum(
+        1 for i in range(7)
+        if db.query(models.DailyCheckin).filter_by(user_id=DEMO_USER_ID, date=week_start + dt.timedelta(days=i)).first()
+    )
 
     workout_adherence = (matched_days / planned_days) if planned_days else 1.0
     nutrition_adherence = days_logged / 7
@@ -784,6 +781,13 @@ def progress_weekly_summary(db: Session = Depends(get_db)):
             "checkin_adherence": round(checkin_adherence, 2),
         },
     }
+
+
+@app.get("/api/progress/plan-vs-done")
+def progress_plan_vs_done(days: int = 28, db: Session = Depends(get_db)):
+    """What Toci planned each day against what was logged, plus how often its
+    "increase" calls actually worked out. See toci/adherence.py."""
+    return adherence.report(db, DEMO_USER_ID, dt.date.today(), days=max(7, min(days, 120)))
 
 
 def _photo_out(p: models.ProgressPhoto):

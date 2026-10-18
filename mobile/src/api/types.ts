@@ -57,7 +57,8 @@ export interface WorkoutStatus {
 
 export interface TodayResponse {
   date: string;
-  readiness: { score: number; band: ReadinessBand };
+  // low_streak: amber/red days in a row ending today (engine.readiness_trend)
+  readiness: { score: number; band: ReadinessBand; low_streak?: number };
   recovery: { hrv_ms: number | null; resting_hr_bpm: number | null; sleep_duration_min: number | null };
   checked_in: boolean;
   recommendation: {
@@ -371,4 +372,27 @@ export interface ShoppingItem {
   purpose: string | null;
   is_checked: boolean;
   source: string;
+}
+
+// -------------------------------------------------------------- plan vs done ----
+// GET /api/progress/plan-vs-done (app/toci/adherence.py)
+
+export type PlanDayStatus = 'as planned' | 'modified' | 'done' | 'swapped' | 'skipped' | 'rested' | 'extra session';
+
+export interface PlanVsDone {
+  start: string;
+  end: string;
+  days: { date: string; planned: string; plan_source: 'app' | 'schedule'; status: PlanDayStatus }[];
+  summary: {
+    planned_training_days: number;
+    trained: number;
+    adherence: number | null;
+    as_prescribed: number | null;
+    extra_sessions: number;
+    days_without_a_plan: number;
+    scheduled_without_a_plan: number;
+    trained_without_a_plan: number;
+  };
+  calibration: Record<string, { n: number; hit: number; rate: number; verdict: 'collecting' | 'pushing too hard' | 'too cautious' | 'well calibrated' }>;
+  strength: { exercise_id: number; name: string | null; sessions: number; first_e1rm_kg: number; last_e1rm_kg: number; change_pct: number }[];
 }

@@ -10,6 +10,7 @@ import {
   LogSummary,
   NutritionToday,
   PersonalRecord,
+  PlanVsDone,
   ProgramResponse,
   RecipeSummary,
   Settings,
@@ -417,6 +418,10 @@ export function useBodyWeightHistory(days = 30) {
     queryKey: ['bodyWeightHistory', days],
     queryFn: () => api.get<{ points: { id: number; date: string; weight_kg: number }[] }>(`/api/body-weight/history?days=${days}`),
   });
+}
+
+export function usePlanVsDone(days = 28) {
+  return useQuery({ queryKey: ['planVsDone', days], queryFn: () => api.get<PlanVsDone>(`/api/progress/plan-vs-done?days=${days}`) });
 }
 
 export function useWeeklySummary() {

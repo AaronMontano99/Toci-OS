@@ -557,9 +557,41 @@ def _save_recommendation(db, user_id, date, session_type, prescription, reasonin
     row.reasoning = reasoning
     row.readiness_score = readiness.score
     row.band = readiness.band
+    _snapshot_plan(db, user_id, date, session_type, prescription, readiness)
     db.commit()
     db.refresh(row)
     return row
+
+
+def _trained_on(db: Session, user_id: int, date: dt.date) -> bool:
+    lifted = (
+        db.query(models.WorkoutSet.id)
+        .join(models.WorkoutSession, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
+        .filter(models.WorkoutSession.user_id == user_id, models.WorkoutSession.date == date)
+        .first()
+    )
+    ran = db.query(models.CardioSession.id).filter_by(user_id=user_id, date=date).first()
+    return bool(lifted or ran)
+
+
+def _snapshot_plan(db: Session, user_id: int, date: dt.date, session_type: str, prescription: dict, readiness) -> None:
+    """Keep models.PlannedSession in step with the plan until training starts, then freeze it."""
+    plan = db.query(models.PlannedSession).filter_by(user_id=user_id, date=date).first()
+    if plan is not None and plan.locked:
+        return
+    trained = _trained_on(db, user_id, date)
+    if plan is not None and trained:
+        plan.locked = True  # keep the plan as it was before training, not this regenerated one
+        return
+    if plan is None:
+        plan = models.PlannedSession(user_id=user_id, date=date, after_training=trained)
+        db.add(plan)
+    plan.session_type = session_type
+    plan.prescription = prescription
+    plan.readiness_score = readiness.score
+    plan.band = readiness.band
+    plan.planned_at = dt.datetime.utcnow()
+    plan.locked = trained
 
 
 def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness: models.ReadinessScore) -> models.Recommendation:

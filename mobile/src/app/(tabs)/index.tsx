@@ -81,6 +81,7 @@ export default function TodayScreen() {
         band={data.readiness.band}
         checkedIn={data.checked_in}
         sessionType={data.recommendation.session_type}
+        lowStreak={data.readiness.low_streak}
       />
 
       <HeroWorkoutCard

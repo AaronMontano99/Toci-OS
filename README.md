@@ -26,7 +26,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 153 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Tests / CI | 164 backend tests (pytest), 81 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -38,6 +38,47 @@ Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci
 ## Updates
 
 Dated log of each round of work landed on this repo, newest first.
+
+**Update 6 — Planned vs completed: grading the coach on real training (2026-10-18)**
+
+*Why:* the simulator can show the engine reacting sensibly to a modeled
+lifter, but not that a real person gets stronger following it. The only
+thing that can is a record of what Toci told someone to do next to what
+they actually did. Building it turned up a reason it couldn't exist yet:
+the stored plan wasn't trustworthy.
+
+- **The plan is now frozen when training starts** (`planned_sessions`).
+  Today's recommendation gets regenerated (a check-in rewrites it), and a
+  regenerated plan already sees the sets logged that day: a lifter who
+  benched 100 kg would find "today's plan" quietly rewritten to 102.5 kg
+  after the fact. The frozen copy follows the plan until the first set or
+  run is logged, then never changes. A plan first made after training is
+  marked as such and isn't used as a "before".
+- **Plan vs done** (`app/toci/adherence.py`, `GET /api/progress/plan-vs-done`):
+  every day is *as planned*, *modified*, *skipped*, *swapped*, *rested*, or
+  an *extra session*; every planned exercise is *as prescribed*, *lighter*,
+  *heavier* or *short* (right weight, missed reps or sets).
+- **The engine graded on real results:** when Toci said *increase*, how
+  often were all the reps hit at the new weight? Under 60% means it pushes
+  too hard, over 95% too cautious. It says "collecting" until there are 20
+  tries, and estimated-1RM trends per lift sit beside it.
+- **Only advice actually given counts.** Days nobody opened the app are
+  shown separately against the weekly schedule, not as skipped workouts:
+  you can't ignore a plan you were never shown. (Found by running it on a
+  copy of the real database, which has no recent training: it read "0% —
+  0 of 20 planned days" until this was fixed.)
+- **A Plan vs done card on Progress → Habits**, and the weekly consistency
+  score now counts what Toci actually planned: taking the recovery day it
+  told you to take no longer counts as a missed workout.
+- **Fixed copy left behind by Update 4:** on a slump day the Readiness card
+  said "solid day to train" next to a session cut to 60%. It now says it's
+  a shorter session (the Today API sends the low-readiness streak).
+- **Checked against the simulator:** run the tracker on a simulated
+  athlete's database and it counts exactly the sessions the athlete really
+  trained, for a consistent lifter and a 2-3-day-a-week one.
+- 164 backend tests (11 new), 81 mobile tests (6 new). The new card is
+  covered by component tests but hasn't been looked at in the iOS
+  Simulator yet.
 
 **Update 5 — Easing back in by how long you were away, and a fairer progress rule (2026-10-18)**
 
@@ -191,7 +232,7 @@ training, including the weeks that go wrong, and measure what happens.*
     says fail, so it says fail.
 - The athlete is a model, not a person. This shows the engine reacts
   sensibly to hard situations; real proof needs planned-vs-completed
-  tracking with real users.
+  tracking with real users (built in Update 6).
 - 141 backend tests (13 new). Built on `claude/training-simulator` and
   merged into `main` along with every September update, so `main` is
   the current app again.

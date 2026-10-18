@@ -318,10 +318,13 @@ def _warm_up(athlete, name, sets, reps, load, scenario):
     return athlete.perform(name, sets, reps, load)[1]
 
 
-def run(policy_cls, scenario: Scenario, seed: int) -> Result:
+def run(policy_cls, scenario: Scenario, seed: int, keep: list | None = None) -> Result:
+    """One athlete, one scenario, one policy. `keep`, if given, gets the policy appended (tests read its database)."""
     rng = random.Random(seed)
     athlete = Athlete(random.Random(seed * 7919 + 1), scenario)
     policy = policy_cls(scenario)
+    if keep is not None:
+        keep.append(policy)
     res = Result(policy.name, scenario.name, seed)
 
     # four weeks of the same program at its starting loads first: people install the app while already training,

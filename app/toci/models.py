@@ -277,6 +277,29 @@ class Recommendation(Base):
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_reco_user_date"),)
 
 
+class PlannedSession(Base):
+    """What Toci told the user to do on a day, as it stood when they started training.
+
+    Recommendation rows get regenerated (a later check-in rewrites today's plan,
+    and the regenerated plan already sees the sets logged today), so they can't
+    say what was planned. This copy follows the recommendation until the first
+    set or run of the day is logged, then never changes. after_training marks a
+    plan first generated once training had already started: it isn't a real
+    "before", so plan-vs-done leaves it out."""
+    __tablename__ = "planned_sessions"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    session_type = Column(String, nullable=False)
+    prescription = Column(JSON, nullable=False)
+    readiness_score = Column(Float)
+    band = Column(String)
+    planned_at = Column(DateTime, nullable=False, default=dt.datetime.utcnow)
+    locked = Column(Boolean, nullable=False, default=False)
+    after_training = Column(Boolean, nullable=False, default=False)
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_planned_user_date"),)
+
+
 class Goal(Base):
     __tablename__ = "goals"
     id = Column(Integer, primary_key=True)

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Text } from '@/components/ui/Text';
+import { PlanVsDoneCard } from '@/features/progress/PlanVsDoneCard';
 import { useTheme } from '@/theme/ThemeContext';
 import { SPACING } from '@/theme/tokens';
 
@@ -41,6 +42,8 @@ export function ConsistencyPanel() {
           {data.matched_days} of {data.planned_days} planned sessions completed this week.
         </Text>
       </Card>
+
+      <PlanVsDoneCard />
 
       <Card style={{ gap: SPACING.base }}>
         <Row label="Workouts" value={data.consistency.workout_adherence} colors={colors} />

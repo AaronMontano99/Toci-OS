@@ -14,11 +14,12 @@ interface ReadinessCardProps {
   score: number;
   band: ReadinessBand;
   checkedIn: boolean;
-  // Lets an amber day that engine.py escalated to a full recovery swap (3+
-  // consecutive low-readiness days -- see readiness_trend()) say so, instead
-  // of amber's ordinary "solid day to train" copy flatly contradicting the
-  // "Active Recovery" card sitting right below it.
   sessionType?: SessionType;
+  // Amber/red days in a row ending today. 3+ amber is a slump: engine.py keeps
+  // the lift but cuts it to ~60% of the sets (it used to swap to recovery, which
+  // the training simulator showed made the week back a workload spike), so the
+  // card says that instead of amber's ordinary "solid day to train".
+  lowStreak?: number;
 }
 
 const BAND_COPY: Record<ReadinessBand, { label: string; interpretation: string }> = {
@@ -26,13 +27,13 @@ const BAND_COPY: Record<ReadinessBand, { label: string; interpretation: string }
   amber: { label: 'Moderate', interpretation: 'Energy is decent — solid day to train.' },
   red: { label: 'Low', interpretation: 'Energy is low — today leans toward active recovery.' },
 };
-const AMBER_SLUMP_INTERPRETATION = "A few rough days in a row — today's a full recovery day, not just a lighter one.";
+const AMBER_SLUMP_INTERPRETATION = 'A few rough days in a row — today is a shorter session, about 60% of the sets.';
 
-export function ReadinessCard({ score, band, checkedIn, sessionType }: ReadinessCardProps) {
+export function ReadinessCard({ score, band, checkedIn, sessionType, lowStreak = 0 }: ReadinessCardProps) {
   const { colors } = useTheme();
   const bandColor = { green: colors.sage, amber: colors.warmAmber, red: colors.mutedTerracotta }[band];
   const interpretation =
-    band === 'amber' && sessionType === 'recover' ? AMBER_SLUMP_INTERPRETATION : BAND_COPY[band].interpretation;
+    band === 'amber' && sessionType === 'lift' && lowStreak >= 3 ? AMBER_SLUMP_INTERPRETATION : BAND_COPY[band].interpretation;
 
   return (
     <Pressable onPress={() => router.push('/checkin')}>
