@@ -26,7 +26,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 128 backend tests (pytest), 73 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Tests / CI | 128 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -34,6 +34,41 @@ engine's logic firsthand, not as a production consumer app — see
 Not production-ready — no auth, no real wearable data, no Postgres, no deployment. See [Known gaps](#known-gaps) before mistaking this for more than it is.
 
 Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci OS — Architecture Draft v0.1](https://claude.ai/code/artifact/b02ac323-a8e3-43eb-a19f-4dae3b9fb897)**
+
+## Updates
+
+Dated log of each round of work landed on this repo, newest first.
+
+**Update 1 — Onboarding, adaptive feedback, and a pre-launch QA pass (2026-09-21)**
+- Added the guided 13-screen first-run onboarding interview (see below).
+- Made the readiness engine trend-aware: 3+ consecutive amber/red days now
+  escalates to a full recovery swap instead of another volume trim, and
+  Ask Toci's system prompt was given the same real readiness/adherence/
+  stalled-lift signal so its answers are grounded in current data, not
+  just static profile shape.
+- **Pre-launch QA pass** (a full test run, a manual security review, and a
+  live walkthrough in iOS Simulator — not just reading the diff) caught
+  three real bugs none of the automated suites had surfaced:
+  1. An Ask Toci reply quoted the system prompt's own internal instruction
+     text back to the user verbatim, on a real live query — the
+     Braintrust eval scored 100%/100%/92% both before and after, since its
+     scorers check off-topic/proposal/availability, not reply quality.
+     Fixed the prompt structure; re-ran the same live query to confirm.
+  2. The Today and Program tabs could disagree about what to do on a given
+     day — Today correctly swapped to Active Recovery during a readiness
+     slump, Program still showed the original scheduled lift with a
+     "Start Workout" button. Root cause: the Program tab read the raw
+     schedule instead of the readiness-adjusted recommendation. Fixed,
+     along with a matching bug in the Readiness card's copy.
+  3. Several free-text fields in the web frontend (`web/app.js`) reached
+     `innerHTML` without the `escapeHtml()` helper the same file already
+     uses in ~27 other places — a stored-XSS gap, low risk today
+     (single local user) but real the moment this backend is ever
+     deployed for more than one person. Fixed all found call sites.
+- Backend and CORS/auth/crypto/IAP-verification posture reviewed and found
+  solid otherwise — see [Known gaps](#known-gaps) for what's genuinely
+  still open (mainly: no auth yet, which is the root cause of most of
+  what's left).
 
 ## What actually works right now
 
