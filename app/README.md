@@ -151,9 +151,9 @@ So far this eval has driven three real changes, all landed in `coach_chat.py`:
   recovery) — try it: submit a poor Recovery Check-in and watch Today update.
   A single rough day and a real slump aren't treated the same way either:
   `engine.readiness_trend()` counts consecutive amber/red days, and 3+ in a
-  row escalates an amber day to the same handling red gets on its own
-  (full recovery swap, or a capped zone 1 jog) rather than just trimming
-  volume again.
+  row cuts a lift day to ~60% of its sets (and a run to an easy zone 1
+  jog), so a rough stretch stays a lighter stretch instead of weeks off.
+  A red day on its own is still a full recovery swap.
 - **Injury-aware substitution** — add a shoulder injury in Settings and Bench
   Press gets swapped on the next lift day that includes it.
 - **Persistence** — everything is a real SQLite row. Refresh the page, restart

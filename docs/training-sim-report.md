@@ -10,11 +10,11 @@ Pass rules (fixed before the first run): no safety violations; fewer failed sets
 | Consistent lifter | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
 | No wearable (check-in only) | Toci engine | +2.6% | 32 | 39 | 0 | 0 | 0 | 0 | 0 |
 | No wearable (check-in only) | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
-| Missed workouts + a three-week break | Toci engine | -1.5% | 14.5 | 7 | 0 | 6 | 0 | 8 | 0 |
+| Missed workouts + a three-week break | Toci engine | -1.4% | 14.5 | 7 | 0 | 6 | 0 | 8 | 0 |
 | Missed workouts + a three-week break | Fixed program | -0.9% | 14.5 | 46 | 0 | 6 | 0 | n/a | 852 |
 | Stalled near their ceiling | Toci engine | +0.3% | 32 | 35.5 | 0 | 0 | 0 | 13 | 0 |
 | Stalled near their ceiling | Fixed program | +0.3% | 32 | 169 | 0 | 0 | 0 | n/a | 915 |
-| Two weeks of life stress | Toci engine | +1.8% | 24 | 22.5 | 0 | 9 | 0 | 18.5 | 0 |
+| Two weeks of life stress | Toci engine | +2.3% | 30 | 34 | 0 | 0 | 0 | 18 | 0 |
 | Two weeks of life stress | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
 | Inconsistent availability | Toci engine | +0.9% | 20 | 18.5 | 0 | 0 | 0 | 10 | 0 |
 | Inconsistent availability | Fixed program | +1.1% | 20 | 81.5 | 0 | 0 | 0 | n/a | 710 |
@@ -29,7 +29,7 @@ Medians over athletes; safety violations are totals.
 - **No wearable (check-in only): PASS**. A consistent lifter with no watch or ring, which is every user today: only the morning check-in feeds readiness.
 - **Missed workouts + a three-week break: FAIL** (failed: keeps the progress). About 1 in 4 sessions missed at random, then nothing at all in weeks 4-6 (vacation, illness).
 - **Stalled near their ceiling: PASS**. An advanced lifter with almost no room left. Adding weight every week can only end in failed sets.
-- **Two weeks of life stress: FAIL** (failed: no more spikes, keeps the progress). Weeks 3-4: bad sleep, low HRV, high stress. Readiness should catch it before the bar does.
+- **Two weeks of life stress: PASS**. Weeks 3-4: bad sleep, low HRV, high stress. Readiness should catch it before the bar does.
 - **Inconsistent availability: FAIL** (failed: keeps the progress). Only gets in on Mondays and Wednesdays, plus a random third day half the time.
 - **Home gym (dumbbells, no barbell): PASS**. Trains at home with dumbbells and a bench, as the Home gym setting describes: no barbell, rack or cables. Every barbell lift has to become a dumbbell lift.
 

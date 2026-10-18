@@ -26,7 +26,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 149 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Tests / CI | 150 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -38,6 +38,33 @@ Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci
 ## Updates
 
 Dated log of each round of work landed on this repo, newest first.
+
+**Update 4 — Training through a rough stretch instead of stopping (2026-10-18)**
+
+*Why:* the last life-stress problem from Update 2. When readiness was
+low three days running, the engine swapped every lift day for a recovery
+day. Over a two-week stress slump that meant almost no training, so the
+week back at normal volume landed as a workload spike (9 per simulated
+athlete) and cost progress.
+
+- **A slump now means a short session, not a cancelled one:** about 60%
+  of the planned sets while readiness stays amber. A red day is still
+  full recovery, and a single amber day still trims ~20%. That's closer
+  to the architecture spec's own amber rule ("proceed, volume reduced"),
+  and it's what the engine already did when you picked a saved workout
+  during a slump.
+- **Simulator, two weeks of life stress:** workload spikes **9 → 0**,
+  strength **+1.8% → +2.3%** (fixed program +2.0%), 34 failed sets vs
+  163. It now passes. Every other scenario is unchanged. **5 of 7 pass.**
+- **Tried and removed:** the spec's ACWR volume cap (trim sets when the
+  last week runs over 1.5× your usual). On its own it cut the spikes to
+  2, but combined with the change above it prevented no spikes anywhere
+  and cost progress (inconsistent availability +1.0% → +0.7%), so it's
+  out and ACWR stays on the roadmap. Worth knowing: the simulator's spike
+  check also uses ACWR, so that result is weaker evidence than the
+  strength and failed-set numbers.
+- 150 backend tests; the slump test now pins the new behavior, plus one
+  that a red day during a slump is still recovery.
 
 **Update 3 — Prescribing for the equipment you actually have (2026-10-18)**
 
@@ -190,7 +217,7 @@ Re-triggerable anytime from Profile → Account → "Restart onboarding."
 **The recommendation engine (`toci/engine.py`)**
 - Readiness scoring — HRV/RHR z-scores against a rolling baseline, sleep vs. target, and a subjective check-in, weighted and banded exactly as documented in the architecture spec.
 - Progressive overload — logging a set today changes what's prescribed next session, based on the actual RIR/reps-hit rule, not a fixed schedule.
-- Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery. It's trend-aware, not just single-day: `readiness_trend()` counts consecutive low-readiness days, and 3+ in a row escalates an amber day to the same full-recovery handling a single red day already gets, rather than trimming volume yet again.
+- Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery. It's trend-aware, not just single-day: `readiness_trend()` counts consecutive low-readiness days, and 3+ in a row drops an amber day to a short session at ~60% of the sets (a red day is still full recovery), so a rough stretch doesn't turn into weeks off and a spike on the way back (see Update 4).
 - Injury-aware substitution — an active injury swaps out the affected lift on the next session that includes it.
 - Equipment-aware planning — a home-gym or bodyweight setting swaps each lift for a same-movement version you can actually do, with weights and progression scaled to that equipment (see Update 3).
 - **Collaborative progression** — instead of silently picking a weight, the engine offers a few reasoned next-session options (repeat / increase / technique-focus), and logging feeds back `feel` (clean/difficult/sloppy/partial/assisted/pain) and `confidence_next` per set so the coaching stays grounded in how training actually felt, not just numbers hit.
@@ -284,7 +311,7 @@ Mac and why (kept there in case a capable Mac becomes available later).
 - **Toci Premium is iOS/App Store only** — no Android/Play Billing integration yet (the backend's `subscription_platform` field is ready for it, the verification code isn't written).
 - **No real wearable data** — HRV/RHR/sleep are simulated around a seeded baseline until manually overridden on the Recovery Check-in screen. Whoop/Spotify OAuth is real end to end, but this repo has never been linked to a real Whoop/Spotify developer app.
 - **SQLite, not Postgres** — a one-line change in `toci/database.py` when that matters.
-- **No training-load/ACWR tracking in the engine, no program version history** (a deload after two missed sessions now exists; ACWR is measured only in the simulator) — this implements the readiness + progression core loop, not every table in the full architecture spec. There is now a coarse multi-day readiness-slump escalation (`engine.readiness_trend()` — 3+ consecutive amber/red days triggers fuller recovery than a single bad day would), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week.
+- **No training-load/ACWR tracking in the engine, no program version history** (a deload after two missed sessions now exists; ACWR is measured only in the simulator) — this implements the readiness + progression core loop, not every table in the full architecture spec. There is a coarse multi-day readiness-slump rule (`engine.readiness_trend()` — 3+ consecutive amber/red days cut a session to ~60% of its sets), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week. An ACWR volume cap was tried in Update 4 and removed because it didn't help in the simulator.
 - **No migrations tooling, no deployment config.**
 - **Qualitative goals aren't numerically tracked** — "improve posture," "look more athletic" etc. don't fit the Goal model's start→target progress bar, so they're intentionally not forced into it (addressed instead via the primary program focus and the recovery day's mobility work) rather than inventing a fake metric.
 - **Equipment swaps cover the built-in catalog only** — exercises you add yourself are assumed to fit any setting, since the app doesn't know what they need.

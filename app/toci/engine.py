@@ -300,6 +300,11 @@ def _last_session_date_before(db: Session, user_id: int, exercise_id: int, date:
 
 DELOAD_FACTOR = 0.9
 
+# 3+ low-readiness days running (amber, not red): keep lifting, at about 60% of the sets.
+# Swapping every lift day for recovery instead (the Update 1 behavior) made the week back
+# a workload spike after the sessions skipped during the slump, and cost progress.
+SLUMP_SET_MULTIPLIER = 0.6
+
 # Strength mostly holds for about three weeks off; past that, coming back at the
 # old weight (let alone heavier) is how people get hurt. Come back lighter instead.
 LAYOFF_DAYS = 21
@@ -512,7 +517,7 @@ def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDa
     trend = readiness_trend(db, user_id, date)
     slumping = trend["consecutive_low_days"] >= 3 and readiness.band != "green"
     if slumping:
-        set_multiplier = 0.6
+        set_multiplier = SLUMP_SET_MULTIPLIER
     elif readiness.band == "amber":
         set_multiplier = 0.8
     else:
@@ -579,21 +584,21 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
         )
 
     if day.day_type == "lift":
-        if readiness.band == "red" or slumping:
-            if slumping and readiness.band != "red":
-                reasoning.append(
-                    f"{trend['consecutive_low_days']} days of low readiness in a row — taking a full "
-                    "recovery day instead of trimming volume, rather than let it compound"
-                )
-            else:
-                reasoning.append("Readiness low — swapping to active recovery instead of lifting")
+        if readiness.band == "red":
+            reasoning.append("Readiness low — swapping to active recovery instead of lifting")
             return _save_recommendation(
                 db, user_id, date, "recover",
                 {"note": "Active recovery: 20 min easy walk + mobility"}, reasoning, readiness,
             )
 
         set_multiplier = 1.0
-        if readiness.band == "amber":
+        if slumping:
+            set_multiplier = SLUMP_SET_MULTIPLIER
+            reasoning.append(
+                f"{trend['consecutive_low_days']} days of low readiness in a row — a short session at about "
+                f"{round(SLUMP_SET_MULTIPLIER * 100)}% of the sets, rather than stopping and coming back to a spike"
+            )
+        elif readiness.band == "amber":
             set_multiplier = 0.8
             reasoning.append("Readiness moderate — volume trimmed ~20%")
 

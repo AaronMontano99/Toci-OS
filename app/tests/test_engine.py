@@ -86,15 +86,27 @@ def test_single_red_day_swaps_the_lift_for_recovery(db_session, seeded):
     assert any("swapping to active recovery" in line for line in reco.reasoning)
 
 
-def test_three_consecutive_amber_days_escalates_lift_to_recovery(db_session, seeded):
+def test_three_consecutive_amber_days_keeps_lifting_at_reduced_volume(db_session, seeded):
+    # Update 4: a slump used to swap every lift day for recovery, and the training
+    # simulator showed the week back then landed as a workload spike. Now it keeps
+    # a short session going instead: ~60% of the sets, below a single amber day's 80%.
     today = seeded["today"]
     _set_readiness(db_session, today - dt.timedelta(days=2), 55, "amber")
     _set_readiness(db_session, today - dt.timedelta(days=1), 52, "amber")
     readiness = _set_readiness(db_session, today, 50, "amber")
 
     reco = engine.generate_recommendation(db_session, DEMO_USER_ID, today, readiness)
-    assert reco.session_type == "recover"
+    assert reco.session_type == "lift"
+    assert reco.prescription["exercises"][0]["sets"] == 2  # 3 sets x 0.6
     assert any("3 days of low readiness in a row" in line for line in reco.reasoning)
+
+
+def test_a_red_day_during_a_slump_is_still_recovery(db_session, seeded):
+    today = seeded["today"]
+    _set_readiness(db_session, today - dt.timedelta(days=2), 55, "amber")
+    _set_readiness(db_session, today - dt.timedelta(days=1), 52, "amber")
+    readiness = _set_readiness(db_session, today, 30, "red")
+    assert engine.generate_recommendation(db_session, DEMO_USER_ID, today, readiness).session_type == "recover"
 
 
 def test_two_consecutive_amber_days_does_not_yet_escalate(db_session, seeded):
