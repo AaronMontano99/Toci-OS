@@ -1161,7 +1161,7 @@ def exercise_decision(exercise_id: int, db: Session = Depends(get_db)):
                 target_rir, target_reps, starting_load_kg = item["target_rir"], item["reps"], item["starting_load_kg"]
                 break
 
-    return reco_engine.progression_options(db, DEMO_USER_ID, exercise_id, target_rir, target_reps, starting_load_kg)
+    return reco_engine.progression_options(db, DEMO_USER_ID, exercise_id, target_rir, target_reps, starting_load_kg, today=today)
 
 
 @app.get("/api/exercises/{exercise_id}/memory")

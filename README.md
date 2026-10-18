@@ -26,7 +26,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 128 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Tests / CI | 141 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -38,6 +38,67 @@ Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci
 ## Updates
 
 Dated log of each round of work landed on this repo, newest first.
+
+**Update 2 — The engine has to prove itself: an 8-week training simulator (2026-10-18)**
+
+*Why:* I want to stop building features and start building outcomes. Toci
+already had six tabs and a recommendation engine, but nothing showed the
+engine actually makes better decisions than a printed program, and the
+only judge of its coaching was me reading its output. So this update asks
+the harder question: *put the engine in charge of eight weeks of someone's
+training, including the weeks that go wrong, and measure what happens.*
+
+- **Added a training simulator** (`app/toci/simulator.py`, `python -m
+  toci.simulator`, report in [`docs/training-sim-report.md`](docs/training-sim-report.md)).
+  The real engine plans every day for a virtual athlete. The athlete is
+  modeled separately from the engine (hard-set adaptation, fatigue that
+  fades over a week, detraining after three weeks off, a strength ceiling),
+  produces its own HRV/sleep/check-in, and actually performs the sets, so
+  the engine never grades itself. 7 scenarios (consistent, no wearable,
+  missed workouts plus a three-week break, stalled near a ceiling, two weeks
+  of life stress, inconsistent availability, no squat rack) × 20 athletes,
+  against a fixed +2.5 kg-per-session program, with pass rules written
+  down before the first run and safety rules checked every day.
+- **Before the fixes the engine failed all 7 scenarios and broke a safety
+  rule 259 times.** What the simulator found:
+  1. **An ordinary day scored amber.** HRV and resting HR at your own
+     baseline scored 50/100, so a perfectly normal day came out ~66 (green
+     is 70+). With no wearable, which is every user today, it was amber
+     most days, and three ambers in a row swap lift days for recovery: a
+     stress-free lifter trained 25 of 32 planned sessions. Fixed: your
+     baseline (or no reading) now scores 75, falling steeply below it.
+     The documented 70/40 bands are unchanged.
+  2. **Progression judged one set.** With straight sets "the top set" was
+     really set 1, the freshest, so a missed final set still earned more
+     weight. Now every set has to hit its reps.
+  3. **Came back heavier after weeks off.** After 21+ days away it now
+     restarts at ~90%.
+  4. **No reset after repeated misses.** It repeated a failing weight
+     forever (91 failed sets for a stalled lifter). Two missed sessions in
+     a row now reset ~10%.
+  5. **A date bug:** `build_lift_day_prescription` read *today's*
+     readiness trend even when planning another day.
+- **After: 0 safety violations, and 3 of 7 scenarios pass.** A consistent
+  lifter now trains all 32 sessions and gains +2.5% vs +2.0% on the fixed
+  program, with 35 failed sets instead of 164.
+- **Still failing, on purpose, because they're real:**
+  - *No squat rack:* the engine never reads `user.equipment`, so it keeps
+    prescribing squats and benches. Fixing it needs equipment data per
+    exercise and a decision on substitutes.
+  - *Life stress:* skipping the bad weeks and then returning to full
+    volume causes workload spikes. I tried a one-day ramp back; it didn't
+    help, so I took it out.
+  - *Missed workouts / inconsistent availability:* easing back in after a
+    break and resetting after misses costs a little progress vs the fixed
+    program (−1.3% vs −0.9%, +0.9% vs +1.1%), in exchange for 6 vs 46 and
+    19 vs 77 failed sets. That's a trade I'd make, but the rule I set
+    says fail, so it says fail.
+- The athlete is a model, not a person. This shows the engine reacts
+  sensibly to hard situations; real proof needs planned-vs-completed
+  tracking with real users.
+- 141 backend tests (13 new). Work is on `claude/training-simulator`, built
+  on `claude/try-it-out` (which has every September update; `main` on
+  GitHub is still the Aug 30 version).
 
 **Update 1 — Onboarding, adaptive feedback, and a pre-launch QA pass (2026-09-21)**
 - Added the guided 13-screen first-run onboarding interview (see below).
@@ -185,9 +246,10 @@ Mac and why (kept there in case a capable Mac becomes available later).
 - **Toci Premium is iOS/App Store only** — no Android/Play Billing integration yet (the backend's `subscription_platform` field is ready for it, the verification code isn't written).
 - **No real wearable data** — HRV/RHR/sleep are simulated around a seeded baseline until manually overridden on the Recovery Check-in screen. Whoop/Spotify OAuth is real end to end, but this repo has never been linked to a real Whoop/Spotify developer app.
 - **SQLite, not Postgres** — a one-line change in `toci/database.py` when that matters.
-- **No training-load/ACWR tracking, no deload auto-trigger, no program version history** — this implements the readiness + progression core loop, not every table in the full architecture spec. There is now a coarse multi-day readiness-slump escalation (`engine.readiness_trend()` — 3+ consecutive amber/red days triggers fuller recovery than a single bad day would), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week.
+- **No training-load/ACWR tracking in the engine, no program version history** (a deload after two missed sessions now exists; ACWR is measured only in the simulator) — this implements the readiness + progression core loop, not every table in the full architecture spec. There is now a coarse multi-day readiness-slump escalation (`engine.readiness_trend()` — 3+ consecutive amber/red days triggers fuller recovery than a single bad day would), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week.
 - **No migrations tooling, no deployment config.**
 - **Qualitative goals aren't numerically tracked** — "improve posture," "look more athletic" etc. don't fit the Goal model's start→target progress bar, so they're intentionally not forced into it (addressed instead via the primary program focus and the recovery day's mobility work) rather than inventing a fake metric.
+- **Equipment isn't read by the engine** — `user.equipment` is collected in onboarding and Profile, but the day plan ignores it (the simulator's "no squat rack" scenario fails on exactly this).
 - **Native apps not started** — this is entirely the Expo/React Native mobile app plus the FastAPI backend; the original Kotlin Multiplatform/SwiftUI/Jetpack Compose plan (below) was superseded, not built.
 - **Schedule rearranging is swap-only, not drag-and-drop** — a deliberate lighter-weight alternative that covers the same real need (permanently rearranging which day does what) without the added complexity; full drag-and-drop reordering was floated in the design doc but never built.
 

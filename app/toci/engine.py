@@ -10,6 +10,7 @@ Simplified from the full production design for a local demo:
 """
 
 import datetime as dt
+import math
 import statistics
 
 from sqlalchemy.orm import Session
@@ -50,6 +51,15 @@ def rolling_baseline(db: Session, user_id: int, date: dt.date, field: str, days:
     return statistics.mean(values), (statistics.pstdev(values) or 1.0)
 
 
+def _strain_component(z: float) -> float:
+    """z is signed so that positive = better recovered than usual. Sitting at your
+    own baseline (or having no reading at all) is "no sign of strain" = 75, not 50:
+    with 50, an ordinary day landed in amber (~66) and three ordinary days in a row
+    tripped the slump escalation. Worse than usual falls off steeply (0 at -3 SD);
+    better than usual only has room to reach 100."""
+    return 75 + (z / 3.0) * (25 if z > 0 else 75)
+
+
 def _zscore(value, mean, std, clip=3.0):
     if value is None or mean is None or not std:
         return 0.0
@@ -64,12 +74,12 @@ def compute_readiness(db: Session, user_id: int, date: dt.date) -> models.Readin
     # HRV (40%) -- higher vs. baseline is better
     hrv_mean, hrv_std = rolling_baseline(db, user_id, date, "hrv_ms")
     hrv_z = _zscore(recovery.hrv_ms if recovery else None, hrv_mean, hrv_std)
-    hrv_component = 50 + (hrv_z / 3.0) * 50
+    hrv_component = _strain_component(hrv_z)
 
     # Resting HR (15%) -- lower vs. baseline is better -> invert
     rhr_mean, rhr_std = rolling_baseline(db, user_id, date, "resting_hr_bpm")
     rhr_z = _zscore(recovery.resting_hr_bpm if recovery else None, rhr_mean, rhr_std)
-    rhr_component = 50 - (rhr_z / 3.0) * 50
+    rhr_component = _strain_component(-rhr_z)
 
     # Sleep (25%) -- duration vs. personal target
     sleep_min = recovery.sleep_duration_min if recovery and recovery.sleep_duration_min else TARGET_SLEEP_MIN
@@ -248,11 +258,58 @@ def exercise_memory(db: Session, user_id: int, exercise_id: int, today: dt.date,
     }
 
 
+def _last_session_sets(db: Session, user_id: int, exercise_id: int, date: dt.date):
+    """Every logged set of this exercise from its most recent session date."""
+    return (
+        db.query(models.WorkoutSet)
+        .join(models.WorkoutSession, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
+        .filter(
+            models.WorkoutSession.user_id == user_id,
+            models.WorkoutSet.exercise_id == exercise_id,
+            models.WorkoutSet.actual_load_kg.isnot(None),
+            models.WorkoutSession.date == date,
+        )
+        .all()
+    )
+
+
+def _last_session_date(db: Session, user_id: int, exercise_id: int):
+    row = (
+        db.query(models.WorkoutSession.date)
+        .join(models.WorkoutSet, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
+        .filter(models.WorkoutSession.user_id == user_id, models.WorkoutSet.exercise_id == exercise_id,
+                models.WorkoutSet.actual_load_kg.isnot(None))
+        .order_by(models.WorkoutSession.date.desc())
+        .first()
+    )
+    return row[0] if row else None
+
+
+def _last_session_date_before(db: Session, user_id: int, exercise_id: int, date: dt.date):
+    row = (
+        db.query(models.WorkoutSession.date)
+        .join(models.WorkoutSet, models.WorkoutSet.workout_session_id == models.WorkoutSession.id)
+        .filter(models.WorkoutSession.user_id == user_id, models.WorkoutSet.exercise_id == exercise_id,
+                models.WorkoutSet.actual_load_kg.isnot(None), models.WorkoutSession.date < date)
+        .order_by(models.WorkoutSession.date.desc())
+        .first()
+    )
+    return row[0] if row else None
+
+
+DELOAD_FACTOR = 0.9
+
+# Strength mostly holds for about three weeks off; past that, coming back at the
+# old weight (let alone heavier) is how people get hurt. Come back lighter instead.
+LAYOFF_DAYS = 21
+LAYOFF_LOAD_FACTOR = 0.9
+
 # feel ratings that mean "don't add load yet, even if reps were technically hit"
 FEEL_BLOCKS_INCREASE = {"sloppy", "partial", "assisted", "pain"}
 
 
-def progression_options(db: Session, user_id: int, exercise_id: int, target_rir: float, target_reps, starting_load_kg: float):
+def progression_options(db: Session, user_id: int, exercise_id: int, target_rir: float, target_reps, starting_load_kg: float,
+                        today: dt.date | None = None):
     """Returns {options: [...], recommended_type, why} -- a few reasonable next-session
     choices instead of one auto-picked number, in the spirit of a coach offering options
     rather than issuing an order. Each option: {type, load_kg, reps, label, detail}."""
@@ -268,11 +325,44 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
             "why": "No prior data — starting weight",
         }
 
-    hit_reps = (last.actual_reps or 0) >= (last.prescribed_reps or 0)
+    last_date = _last_session_date(db, user_id, exercise_id)
+    days_off = (today - last_date).days if today and last_date else 0
+    if days_off >= LAYOFF_DAYS:
+        back = round(math.floor(last.actual_load_kg * LAYOFF_LOAD_FACTOR / SMALLEST_INCREMENT_KG) * SMALLEST_INCREMENT_KG, 1)
+        why = f"{days_off} days since you last did this — coming back at {back:g}kg (about 90%) to rebuild before adding load"
+        return {
+            "options": [{"type": "repeat", "load_kg": back, "reps": target_reps, "label": f"Ease back in at {back:g}kg", "detail": why}],
+            "recommended_type": "repeat",
+            "why": why,
+        }
+
+    # Judge the whole last session, not just its heaviest set: with straight sets
+    # every set shares a load, so "the top set" was really just set 1 -- the
+    # freshest one -- and a missed final set still earned an increase.
+    session = _last_session_sets(db, user_id, exercise_id, last_date) if last_date else [last]
+    hit_reps = all((s.actual_reps or 0) >= (s.prescribed_reps or 0) for s in session)
+
+    # Two sessions in a row missing reps at the same weight: repeating it a third
+    # time rarely works. Reset about 10% and build back up.
+    if not hit_reps and last_date:
+        before = _last_session_date_before(db, user_id, exercise_id, last_date)
+        earlier = _last_session_sets(db, user_id, exercise_id, before) if before else []
+        if earlier and not all((s.actual_reps or 0) >= (s.prescribed_reps or 0) for s in earlier) \
+                and max(s.actual_load_kg for s in earlier) >= last.actual_load_kg:
+            reset = round(math.floor(last.actual_load_kg * DELOAD_FACTOR / SMALLEST_INCREMENT_KG) * SMALLEST_INCREMENT_KG, 1)
+            why = f"Missed reps two sessions running at {last.actual_load_kg:g}kg — resetting to {reset:g}kg to build back up"
+            return {
+                "options": [{"type": "deload", "load_kg": reset, "reps": target_reps, "label": f"Reset to {reset:g}kg", "detail": why},
+                            {"type": "repeat", "load_kg": round(last.actual_load_kg, 1), "reps": target_reps,
+                             "label": f"Repeat {last.actual_load_kg:g}kg", "detail": "Same weight, third attempt"}],
+                "recommended_type": "deload",
+                "why": why,
+            }
     # RIR is optional -- the logging UI doesn't always capture it. When present, use it as
     # an extra gate; when absent, reps-hit alone decides.
     rir_ok = last.rir is None or last.rir >= target_rir
-    feel_ok = last.feel not in FEEL_BLOCKS_INCREASE
+    blocking = next((s.feel for s in session if s.feel in FEEL_BLOCKS_INCREASE), None)
+    feel_ok = blocking is None
     load = last.actual_load_kg
     increased_load = round(load + SMALLEST_INCREMENT_KG, 1)
 
@@ -295,7 +385,7 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
         recommended_type, why = "repeat", "Last session missed target — holding load"
     elif not feel_ok:
         recommended_type = "repeat"
-        why = f"Reps were hit, but the final set felt {last.feel} — repeating to lock in quality before adding load"
+        why = f"Reps were hit, but a set felt {blocking} — repeating to lock in quality before adding load"
     elif last.confidence_next == "no":
         recommended_type = "repeat"
         why = "Reps were hit, but you weren't confident going heavier — repeating to build that confidence"
@@ -344,7 +434,8 @@ def _resolve_exercise(ex: models.Exercise, injury_regions: set, user_subs: dict)
     return ex.id, ex.name, None
 
 
-def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDay, readiness: models.ReadinessScore) -> dict:
+def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDay, readiness: models.ReadinessScore,
+                                date: dt.date | None = None) -> dict:
     """Build a {label, exercises} lift prescription for an arbitrary ProgramDay,
     honoring today's readiness and injuries the same way generate_recommendation's
     lift branch does. Powers the Log tab's "Choose Saved Workout" flow so it reuses
@@ -356,7 +447,8 @@ def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDa
     # swapped a scheduled lift day to recovery) -- respect that choice rather
     # than block it, but still trim harder than a plain amber day when it's
     # part of a real slump (see readiness_trend), not just today's reading.
-    trend = readiness_trend(db, user_id, dt.date.today())
+    date = date or readiness.date or dt.date.today()
+    trend = readiness_trend(db, user_id, date)
     slumping = trend["consecutive_low_days"] >= 3 and readiness.band != "green"
     if slumping:
         set_multiplier = 0.6
@@ -375,7 +467,7 @@ def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDa
         # future sets log against it, so the coach should reason about its
         # own history, not the original movement's.
         progression = progression_options(
-            db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"]
+            db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"], today=date
         )
         recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
         sets = max(1, round(item["sets"] * set_multiplier))
@@ -462,7 +554,7 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
                 reasoning.append(injury_reason)
 
             progression = progression_options(
-                db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"]
+                db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"], today=date
             )
             recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
             sets = max(1, round(item["sets"] * set_multiplier))

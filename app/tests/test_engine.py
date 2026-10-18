@@ -24,9 +24,10 @@ def test_compute_readiness_defaults_to_neutral_without_history_or_checkin(db_ses
     row = engine.compute_readiness(db_session, DEMO_USER_ID, today)
     # No recovery reading, no checkin, no baseline history yet -- every
     # component should fall back to its documented neutral default rather
-    # than crash or silently zero out.
-    assert row.hrv_component == 50.0
-    assert row.rhr_component == 50.0
+    # than crash or silently zero out. No reading means no sign of strain (75):
+    # at 50, every user without a wearable scored amber every single day.
+    assert row.hrv_component == 75.0
+    assert row.rhr_component == 75.0
     assert row.subjective_component == 70.0
     assert row.band in ("green", "amber", "red")
 
