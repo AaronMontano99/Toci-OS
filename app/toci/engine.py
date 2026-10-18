@@ -13,9 +13,10 @@ import datetime as dt
 import math
 import statistics
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import models
+from . import equipment, models
 
 TARGET_SLEEP_MIN = 8 * 60
 BASELINE_WINDOW_DAYS = 28
@@ -309,7 +310,7 @@ FEEL_BLOCKS_INCREASE = {"sloppy", "partial", "assisted", "pain"}
 
 
 def progression_options(db: Session, user_id: int, exercise_id: int, target_rir: float, target_reps, starting_load_kg: float,
-                        today: dt.date | None = None):
+                        today: dt.date | None = None, by_reps: bool = False, increment_kg: float = SMALLEST_INCREMENT_KG):
     """Returns {options: [...], recommended_type, why} -- a few reasonable next-session
     choices instead of one auto-picked number, in the spirit of a coach offering options
     rather than issuing an order. Each option: {type, load_kg, reps, label, detail}."""
@@ -328,7 +329,7 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
     last_date = _last_session_date(db, user_id, exercise_id)
     days_off = (today - last_date).days if today and last_date else 0
     if days_off >= LAYOFF_DAYS:
-        back = round(math.floor(last.actual_load_kg * LAYOFF_LOAD_FACTOR / SMALLEST_INCREMENT_KG) * SMALLEST_INCREMENT_KG, 1)
+        back = round(math.floor(last.actual_load_kg * LAYOFF_LOAD_FACTOR / increment_kg) * increment_kg, 1)
         why = f"{days_off} days since you last did this — coming back at {back:g}kg (about 90%) to rebuild before adding load"
         return {
             "options": [{"type": "repeat", "load_kg": back, "reps": target_reps, "label": f"Ease back in at {back:g}kg", "detail": why}],
@@ -349,7 +350,7 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
         earlier = _last_session_sets(db, user_id, exercise_id, before) if before else []
         if earlier and not all((s.actual_reps or 0) >= (s.prescribed_reps or 0) for s in earlier) \
                 and max(s.actual_load_kg for s in earlier) >= last.actual_load_kg:
-            reset = round(math.floor(last.actual_load_kg * DELOAD_FACTOR / SMALLEST_INCREMENT_KG) * SMALLEST_INCREMENT_KG, 1)
+            reset = round(math.floor(last.actual_load_kg * DELOAD_FACTOR / increment_kg) * increment_kg, 1)
             why = f"Missed reps two sessions running at {last.actual_load_kg:g}kg — resetting to {reset:g}kg to build back up"
             return {
                 "options": [{"type": "deload", "load_kg": reset, "reps": target_reps, "label": f"Reset to {reset:g}kg", "detail": why},
@@ -364,17 +365,24 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
     blocking = next((s.feel for s in session if s.feel in FEEL_BLOCKS_INCREASE), None)
     feel_ok = blocking is None
     load = last.actual_load_kg
-    increased_load = round(load + SMALLEST_INCREMENT_KG, 1)
+    increased_load = round(load + increment_kg, 1)
 
     options = [{
         "type": "repeat", "load_kg": round(load, 1), "reps": target_reps,
         "label": f"Repeat {load:g}kg", "detail": "Same weight -- aim for cleaner or more total reps",
     }]
     can_increase = hit_reps and rir_ok and feel_ok
-    if can_increase:
+    if can_increase and by_reps:
+        # Nothing to add weight with (bodyweight training, a band): the next step is a rep.
+        more = min((last.prescribed_reps or target_reps) + 1, target_reps * 2)
+        options.append({
+            "type": "increase", "load_kg": round(load, 1), "reps": more,
+            "label": f"{more} reps", "detail": "+1 rep from last session -- no weight to add",
+        })
+    elif can_increase:
         options.append({
             "type": "increase", "load_kg": increased_load, "reps": target_reps,
-            "label": f"Increase to {increased_load:g}kg", "detail": f"+{SMALLEST_INCREMENT_KG:g}kg from last session",
+            "label": f"Increase to {increased_load:g}kg", "detail": f"+{increment_kg:g}kg from last session",
         })
     options.append({
         "type": "technique_focus", "load_kg": round(load, 1), "reps": target_reps,
@@ -395,9 +403,14 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
     else:
         recommended_type = "increase"
         detail = f"RIR {last.rir:g} at target, reps hit" if last.rir is not None else "reps hit"
-        why = f"Last session: {detail} — progressing +{SMALLEST_INCREMENT_KG:g}kg"
+        why = f"Last session: {detail} — " + ("adding a rep" if by_reps else f"progressing +{increment_kg:g}kg")
 
     return {"options": options, "recommended_type": recommended_type, "why": why}
+
+
+def _user_equipment(db: Session, user_id: int) -> str:
+    user = db.query(models.User).get(user_id)
+    return user.equipment if user and user.equipment else "full_gym"
 
 
 def _active_injury_regions(db: Session, user_id: int):
@@ -419,19 +432,67 @@ def _user_exercise_substitutions(db: Session, user_id: int) -> dict:
     return {sub.original_exercise_id: exercise for sub, exercise in rows}
 
 
-def _resolve_exercise(ex: models.Exercise, injury_regions: set, user_subs: dict):
-    """Injury-driven substitution (safety) takes precedence over a user's
-    standing preference. Returns (exercise_id, name, injury_reason_or_None)."""
+def _exercise_named(db: Session, name: str, pattern: str, muscle: str) -> models.Exercise:
+    row = db.query(models.Exercise).filter(func.lower(models.Exercise.name) == name.lower()).first()
+    if row is None:
+        row = models.Exercise(name=name, movement_pattern=pattern, primary_muscle_group=muscle)
+        db.add(row)
+        db.flush()
+    return row
+
+
+def _resolve_exercise(db: Session, ex: models.Exercise, injury_regions: set, user_subs: dict, gear: str | None = None):
+    """Which exercise to actually prescribe. Injury-driven substitution (safety)
+    comes first, then the user's standing preference if their equipment can do
+    it, then an equipment swap when their equipment can't do the planned one.
+    Returns (exercise_id, name, reason_or_None, load_factor_or_None); the load
+    factor is set only for an equipment swap, to scale the starting weight to
+    the new implement."""
     for region in injury_regions:
         sub_name = SUBSTITUTIONS.get(ex.name, {}).get(region)
         if sub_name:
-            return ex.id, sub_name, f"Substituted {ex.name} for {sub_name} — active {region.replace('_', ' ')} injury"
+            reason = f"Substituted {ex.name} for {sub_name} — active {region.replace('_', ' ')} injury"
+            swap = equipment.swap_for(sub_name, gear)
+            if swap:
+                sub = _exercise_named(db, swap[0], swap[2], swap[3])
+                return sub.id, sub.name, f"{reason}; {swap[0]} instead, for your equipment", swap[1]
+            return ex.id, sub_name, reason, None
 
     preferred = user_subs.get(ex.id)
-    if preferred:
-        return preferred.id, preferred.name, None
+    if preferred and equipment.fits(preferred.name, gear):
+        return preferred.id, preferred.name, None, None
 
-    return ex.id, ex.name, None
+    swap = equipment.swap_for(ex.name, gear)
+    if swap:
+        sub = _exercise_named(db, swap[0], swap[2], swap[3])
+        return sub.id, sub.name, f"{ex.name} needs equipment you don't have — {sub.name} instead", swap[1]
+
+    return ex.id, ex.name, None, None
+
+
+def _prescribe_item(db: Session, user_id: int, item: dict, injury_regions: set, user_subs: dict, gear: str | None,
+                    date: dt.date | None) -> dict:
+    """One template exercise -> what to do today, for this user's injuries, preferences and equipment."""
+    ex = db.query(models.Exercise).get(item["exercise_id"])
+    exercise_id, name, reason, factor = _resolve_exercise(db, ex, injury_regions, user_subs, gear)
+    loaded = equipment.can_add_load(gear)
+    step = equipment.increment_kg(gear)
+    start = item["starting_load_kg"] if factor is None else round(item["starting_load_kg"] * factor / step) * step
+    if not loaded:
+        start = 0.0
+    # Progression reads the resolved exercise's own history -- if it's a
+    # persisted substitution, that's a different real exercise_id, and
+    # future sets log against it, so the coach should reason about its
+    # own history, not the original movement's.
+    progression = progression_options(
+        db, user_id, exercise_id, item["target_rir"], item["reps"], start, today=date,
+        by_reps=not loaded or (factor == 0), increment_kg=step,
+    )
+    recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
+    return {"exercise_id": exercise_id, "name": name, "reason": reason, "progression": progression,
+            "equipment_swap": factor is not None and ex.name != name,
+            # no weights to load at all: whatever an old gym session logged doesn't apply
+            "load_kg": recommended["load_kg"] if loaded else 0.0, "reps": recommended.get("reps", item["reps"])}
 
 
 def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDay, readiness: models.ReadinessScore,
@@ -457,26 +518,17 @@ def build_lift_day_prescription(db: Session, user_id: int, day: models.ProgramDa
     else:
         set_multiplier = 1.0
 
+    gear = _user_equipment(db, user_id)
     exercises_out = []
     for item in day.template.get("exercises", []):
-        ex = db.query(models.Exercise).get(item["exercise_id"])
-        exercise_id, name, _ = _resolve_exercise(ex, injury_regions, user_subs)
-
-        # Progression reads the resolved exercise's own history -- if it's a
-        # persisted substitution, that's a different real exercise_id, and
-        # future sets log against it, so the coach should reason about its
-        # own history, not the original movement's.
-        progression = progression_options(
-            db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"], today=date
-        )
-        recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
+        p = _prescribe_item(db, user_id, item, injury_regions, user_subs, gear, date)
         sets = max(1, round(item["sets"] * set_multiplier))
         exercises_out.append({
-            "exercise_id": exercise_id,
-            "name": name,
+            "exercise_id": p["exercise_id"],
+            "name": p["name"],
             "sets": sets,
-            "reps": item["reps"],
-            "load_kg": recommended["load_kg"],
+            "reps": p["reps"],
+            "load_kg": p["load_kg"],
             "target_rir": item["target_rir"],
         })
 
@@ -546,25 +598,23 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
             reasoning.append("Readiness moderate — volume trimmed ~20%")
 
         user_subs = _user_exercise_substitutions(db, user_id)
-        exercises_out = []
+        gear = _user_equipment(db, user_id)
+        exercises_out, swapped = [], 0
         for item in day.template.get("exercises", []):
-            ex = db.query(models.Exercise).get(item["exercise_id"])
-            exercise_id, name, injury_reason = _resolve_exercise(ex, injury_regions, user_subs)
-            if injury_reason:
-                reasoning.append(injury_reason)
-
-            progression = progression_options(
-                db, user_id, exercise_id, item["target_rir"], item["reps"], item["starting_load_kg"], today=date
-            )
-            recommended = next(o for o in progression["options"] if o["type"] == progression["recommended_type"])
+            p = _prescribe_item(db, user_id, item, injury_regions, user_subs, gear, date)
+            progression = p["progression"]
+            if p["equipment_swap"]:
+                swapped += 1
+            elif p["reason"]:
+                reasoning.append(p["reason"])
             sets = max(1, round(item["sets"] * set_multiplier))
             exercises_out.append(
                 {
-                    "exercise_id": exercise_id,
-                    "name": name,
+                    "exercise_id": p["exercise_id"],
+                    "name": p["name"],
                     "sets": sets,
-                    "reps": item["reps"],
-                    "load_kg": recommended["load_kg"],
+                    "reps": p["reps"],
+                    "load_kg": p["load_kg"],
                     "target_rir": item["target_rir"],
                     "progression_options": progression["options"],
                     "recommended_type": progression["recommended_type"],
@@ -574,6 +624,9 @@ def generate_recommendation(db: Session, user_id: int, date: dt.date, readiness:
             if len(reasoning) < 3:
                 reasoning.append(progression["why"])
 
+        if swapped:
+            setting = gear.replace("_", " ")
+            reasoning.insert(1, f"{swapped} exercise{'s' if swapped > 1 else ''} swapped for what a {setting} has")
         return _save_recommendation(
             db, user_id, date, "lift",
             {"label": day.label, "exercises": exercises_out}, reasoning, readiness,

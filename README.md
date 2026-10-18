@@ -26,7 +26,7 @@ engine's logic firsthand, not as a production consumer app — see
 | Design system | **Toci Pastel Apricot**, dark-first, 8 fully switchable accent themes (Apricot, Mint, Blush, Butter, Sky, Coral, Cocoa, Graphite) applied consistently across every tab (and the onboarding flow) from one shared theme context |
 | Data | Seeded with a **real training profile** (not placeholder demo data) — see below |
 | Local AI features (Coach narration, Ask Toci, photo impressions) | Ask Toci verified end-to-end against a real local Ollama (`llama3.2`) with a [Braintrust eval harness](app/README.md#evaluating-ask-toci-with-braintrust) driving fixes — now including a feedback-aware system prompt (readiness trend, adherence, stalled lifts), confirmed serialized: 100% off-topic accuracy, 92.31% proposal-presence accuracy, 100% model availability; Coach narration uses the same model/path but hasn't been separately eval'd; photo impressions (`llava`) still unverified — see [Known gaps](#known-gaps) |
-| Tests / CI | 141 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
+| Tests / CI | 149 backend tests (pytest), 76 mobile tests (Jest + React Native Testing Library), `tsc`/`eslint` clean, GitHub Actions CI on every push/PR |
 
 **Run the mobile app** (primary way to use this): `./start-toci.sh` from the repo root starts the backend and Expo (pointed at iOS Simulator) in one shot. See [`mobile/README.md`](mobile/README.md) for the manual steps, Node version requirements, and physical-device setup notes.
 **Run the backend alone**, with its bundled vanilla-JS demo frontend: see [`app/README.md`](app/README.md) — `cd app && ... && uvicorn toci.main:app --reload`, then open `http://localhost:8000`.
@@ -38,6 +38,43 @@ Full spec: **[docs/architecture.md](docs/architecture.md)** · Rendered: **[Toci
 ## Updates
 
 Dated log of each round of work landed on this repo, newest first.
+
+**Update 3 — Prescribing for the equipment you actually have (2026-10-18)**
+
+*Why:* Update 2's simulator caught it: onboarding asks whether you train
+in a full gym, a home gym or with bodyweight only, and then the engine
+never read the answer. A home lifter was told to barbell squat and bench
+every session, so the "adaptive" plan was one they couldn't follow.
+
+- **The engine now plans with your equipment** (`app/toci/equipment.py`).
+  Each setting means exactly what onboarding tells you it means: *Home gym*
+  is dumbbells, bands and a bench (no barbell, rack, cables or pull-up
+  bar); *Bodyweight* is nothing at all. Every catalog exercise has the
+  lowest setting it works with, and a same-movement swap below that:
+  Back Squat → Goblet Squat → Tempo Bodyweight Squat, Bench → Dumbbell
+  Bench → Push-Up, Pull-Up → Band Lat Pulldown → Doorframe Row, and so on.
+- **Swaps are real exercises** with their own history, so progression
+  tracks your goblet squat, not your old barbell number. Starting weights
+  are scaled to the new implement (e.g. a dumbbell press starts around 40%
+  of the barbell, per hand).
+- **Progression fits the gear:** home dumbbells step 1 kg, not 2.5 kg (on
+  a 30 kg dumbbell a 2.5 kg jump is an 8% leap; in the simulator 1 kg steps
+  cut failed sets from 70 to 37). Bodyweight and band work progresses by
+  adding a rep, since there's no weight to add.
+- **Order of priority:** an injury swap first (safety), then your own
+  saved swap if your equipment can do it, then the equipment swap.
+  Exercises you add yourself are trusted to fit.
+- The Program tab's week view shows the same swapped names as the day
+  plan, and a 0 kg load now reads **Bodyweight** instead of "0 lb".
+- **Simulator, home gym (no barbell):** before, 32 prescriptions a home
+  lifter couldn't do; now 0, all 32 sessions trained, +2.5% strength and
+  37 failed sets vs +1.9% and 166 for a printed home program. **4 of 7
+  scenarios now pass.** One change to the comparison, said out loud: the
+  baseline used to be the printed *barbell* plan, which a home lifter can't
+  do at all (0 sessions, 0 failed sets), so "fewer failed sets than it"
+  could never pass. The baseline is now that plan done with the same
+  dumbbells. The pass rules themselves didn't change.
+- 149 backend tests (8 new), 76 mobile tests.
 
 **Update 2 — The engine has to prove itself: an 8-week training simulator (2026-10-18)**
 
@@ -155,6 +192,7 @@ Re-triggerable anytime from Profile → Account → "Restart onboarding."
 - Progressive overload — logging a set today changes what's prescribed next session, based on the actual RIR/reps-hit rule, not a fixed schedule.
 - Autoregulation — an amber/red readiness band measurably trims volume, downgrades run intensity, or swaps to recovery. It's trend-aware, not just single-day: `readiness_trend()` counts consecutive low-readiness days, and 3+ in a row escalates an amber day to the same full-recovery handling a single red day already gets, rather than trimming volume yet again.
 - Injury-aware substitution — an active injury swaps out the affected lift on the next session that includes it.
+- Equipment-aware planning — a home-gym or bodyweight setting swaps each lift for a same-movement version you can actually do, with weights and progression scaled to that equipment (see Update 3).
 - **Collaborative progression** — instead of silently picking a weight, the engine offers a few reasoned next-session options (repeat / increase / technique-focus), and logging feeds back `feel` (clean/difficult/sloppy/partial/assisted/pain) and `confidence_next` per set so the coaching stays grounded in how training actually felt, not just numbers hit.
 
 **Everything you log can be fixed, not just added**
@@ -249,7 +287,7 @@ Mac and why (kept there in case a capable Mac becomes available later).
 - **No training-load/ACWR tracking in the engine, no program version history** (a deload after two missed sessions now exists; ACWR is measured only in the simulator) — this implements the readiness + progression core loop, not every table in the full architecture spec. There is now a coarse multi-day readiness-slump escalation (`engine.readiness_trend()` — 3+ consecutive amber/red days triggers fuller recovery than a single bad day would), but that's a simple streak counter, not real ACWR (acute:chronic workload ratio) or an automatic deload week.
 - **No migrations tooling, no deployment config.**
 - **Qualitative goals aren't numerically tracked** — "improve posture," "look more athletic" etc. don't fit the Goal model's start→target progress bar, so they're intentionally not forced into it (addressed instead via the primary program focus and the recovery day's mobility work) rather than inventing a fake metric.
-- **Equipment isn't read by the engine** — `user.equipment` is collected in onboarding and Profile, but the day plan ignores it (the simulator's "no squat rack" scenario fails on exactly this).
+- **Equipment swaps cover the built-in catalog only** — exercises you add yourself are assumed to fit any setting, since the app doesn't know what they need.
 - **Native apps not started** — this is entirely the Expo/React Native mobile app plus the FastAPI backend; the original Kotlin Multiplatform/SwiftUI/Jetpack Compose plan (below) was superseded, not built.
 - **Schedule rearranging is swap-only, not drag-and-drop** — a deliberate lighter-weight alternative that covers the same real need (permanently rearranging which day does what) without the added complexity; full drag-and-drop reordering was floated in the design doc but never built.
 

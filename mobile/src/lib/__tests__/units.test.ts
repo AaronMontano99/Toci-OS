@@ -32,6 +32,7 @@ describe('formatWeight', () => {
 
   it('respects an explicit digit count', () => {
     expect(formatWeight(100, 'metric', 1)).toBe('100.0 kg');
+    expect(formatWeight(0, 'imperial')).toBe('Bodyweight');
   });
 
   it('converts kg to lb for imperial display', () => {

@@ -16,6 +16,7 @@ from . import apple_iap
 from . import coach
 from . import coach_chat as coach_chat_client
 from . import engine as reco_engine
+from . import equipment
 from . import models, schemas
 from . import nutrition as nutrition_client
 from . import recipes as recipes_client
@@ -966,8 +967,16 @@ def _goal_out(g: models.Goal):
     }
 
 
+def _name_for_equipment(name: str, gear: str) -> str:
+    """The week view shows what the day plan will actually prescribe for this user's equipment."""
+    swap = equipment.swap_for(name, gear)
+    return swap[0] if swap else name
+
+
 def _week_detail(db: Session, meso, today: dt.date):
     monday = today - dt.timedelta(days=today.weekday())
+    user = db.query(models.User).get(DEMO_USER_ID)
+    gear = user.equipment if user and user.equipment else "full_gym"
     days = db.query(models.ProgramDay).filter_by(mesocycle_id=meso.id).all()
     by_weekday = {d.weekday: d for d in days}
     exercise_ids = {
@@ -1006,7 +1015,7 @@ def _week_detail(db: Session, meso, today: dt.date):
             entry["exercises"] = [
                 {
                     "exercise_id": item["exercise_id"],
-                    "name": exercises_by_id[item["exercise_id"]].name if item["exercise_id"] in exercises_by_id else "Unknown exercise",
+                    "name": _name_for_equipment(exercises_by_id[item["exercise_id"]].name, gear) if item["exercise_id"] in exercises_by_id else "Unknown exercise",
                     "sets": item["sets"], "reps": item["reps"], "target_rir": item["target_rir"],
                 }
                 for item in pd.template.get("exercises", [])

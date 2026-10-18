@@ -16,6 +16,9 @@ export function weightUnitLabel(units: Units): string {
 
 export function formatWeight(kg: number | null | undefined, units: Units, digits = 0): string {
   if (kg == null) return '—';
+  // 0 is how the engine prescribes bodyweight work (push-ups, planks, a bodyweight-only
+  // equipment setting): "Bodyweight" says that, "0 lb" reads like a mistake.
+  if (kg === 0) return 'Bodyweight';
   const value = kgToDisplay(kg, units);
   return `${value.toFixed(digits)} ${weightUnitLabel(units)}`;
 }

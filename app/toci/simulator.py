@@ -37,7 +37,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from . import engine, models
+from . import engine, equipment, models
 from .database import Base
 
 DAYS = 56
@@ -52,14 +52,19 @@ LONG_LAYOFF_DAYS = 21  # strength mostly holds for ~3 weeks off; after that, com
 DETRAIN_PER_DAY = 0.003
 ACWR_SPIKE = 1.5       # acute:chronic workload above this is the usual "spike" line (Gabbett 2016)
 
-# name -> (true rested 1RM kg, rack/barbell needed)
+# name -> true rested 1RM in kg
 LIFTS = {
-    "Barbell Back Squat": (120.0, True),
-    "Romanian Deadlift": (105.0, False),
-    "Barbell Bench Press": (105.0, True),
-    "Barbell Row": (85.0, False),
-    "Overhead Press": (60.0, False),
+    "Barbell Back Squat": 120.0,
+    "Romanian Deadlift": 105.0,
+    "Barbell Bench Press": 105.0,
+    "Barbell Row": 85.0,
+    "Overhead Press": 60.0,
 }
+# The home-gym version of each lift, from the engine's own equipment map. A lifter's dumbbell
+# 1RM (per hand) is taken as the barbell 1RM times the same load factor the engine starts from,
+# so the swap starts at the same relative effort as the barbell plan did.
+HOME = {n: equipment.swap_for(n, "home_gym") for n in LIFTS}
+LIFTS.update({sw[0]: LIFTS[n] * sw[1] for n, sw in HOME.items() if sw and sw[1] > 0})
 
 # weekday -> (day_type, label, template). Loads start around 75% of 1RM.
 PROGRAM = {
@@ -103,9 +108,9 @@ SCENARIOS = [
     Scenario("availability", "Inconsistent availability",
              "Only gets in on Mondays and Wednesdays, plus a random third day half the time.",
              skip=lambda day, rng: (day % 7) not in (0, 2) and not ((day % 7) in (4, 5) and rng.random() < 0.25)),
-    Scenario("equipment", "Limited equipment (no squat rack)",
-             "Trains at home without a rack. Squat and bench can't be done; everything else can.",
-             equipment="home_gym", unavailable=frozenset({"Barbell Back Squat", "Barbell Bench Press"})),
+    Scenario("equipment", "Home gym (dumbbells, no barbell)",
+             "Trains at home with dumbbells and a bench, as the Home gym setting describes: no barbell, rack or cables. Every barbell lift has to become a dumbbell lift.",
+             equipment="home_gym", unavailable=frozenset(n for n, sw in HOME.items() if sw)),
 ]
 
 
@@ -124,7 +129,7 @@ class Athlete:
     rhr0: float = 56.0
 
     def __post_init__(self):
-        for name, (one_rm, _) in LIFTS.items():
+        for name, one_rm in LIFTS.items():
             self.base[name] = self.start[name] = one_rm * self.rng.uniform(0.95, 1.05)
             self.fatigue[name] = 0.0
             self.idle[name] = 0
@@ -204,7 +209,7 @@ class EnginePolicy:
         self.user = models.User(id=1, name="Sim", units="metric", equipment=scenario.equipment)
         self.db.add(self.user)
         self.ex = {}
-        for name in LIFTS:
+        for name in [n for n in LIFTS if n in HOME]:  # the program's own lifts; swaps get created by the engine
             e = models.Exercise(name=name, movement_pattern="compound", primary_muscle_group="mixed")
             self.db.add(e)
             self.db.flush()
@@ -220,7 +225,9 @@ class EnginePolicy:
                 tpl = {"exercises": [{"exercise_id": self.ex[n], "sets": s, "reps": r, "target_rir": rir, "starting_load_kg": l} for n, s, r, rir, l in tpl]}
             self.db.add(models.ProgramDay(mesocycle_id=meso.id, weekday=weekday, day_type=kind, label=label, template=tpl))
         self.db.commit()
-        self.names = {v: k for k, v in self.ex.items()}
+
+    def _id(self, name):
+        return self.ex.get(name) or self.db.query(models.Exercise).filter_by(name=name).one().id
 
     def observe(self, date, recovery, checkin):
         if recovery:
@@ -233,7 +240,7 @@ class EnginePolicy:
         rec = engine.generate_recommendation(self.db, 1, date, readiness)
         lifts = []
         if rec.session_type == "lift":
-            lifts = [(self.names[e["exercise_id"]], e["sets"], e["reps"], e["load_kg"]) for e in rec.prescription["exercises"]]
+            lifts = [(e["name"], e["sets"], e["reps"], e["load_kg"]) for e in rec.prescription["exercises"]]
         return dict(kind=rec.session_type, band=readiness.band, lifts=lifts, run=rec.prescription if rec.session_type == "run" else None)
 
     def log(self, date, name, load, reps, sets_out):
@@ -241,19 +248,24 @@ class EnginePolicy:
         self.db.add(session)
         self.db.flush()
         for i, s in enumerate(sets_out):
-            self.db.add(models.WorkoutSet(workout_session_id=session.id, exercise_id=self.ex[name], set_index=i,
+            self.db.add(models.WorkoutSet(workout_session_id=session.id, exercise_id=self._id(name), set_index=i,
                                           prescribed_reps=reps, prescribed_load_kg=load, actual_reps=s["reps"],
                                           actual_load_kg=load, rir=s["rir"], feel=s["feel"], confidence_next=s["confidence_next"]))
         self.db.commit()
 
 
 class FixedPolicy:
-    """The printed program: same days, same sets, +2.5 kg every time a lift is done, no matter what."""
+    """The printed program: same days, same sets, a fixed jump every time a lift is done, no matter what.
+    Someone training at home follows the home version of the printed plan (the same dumbbell lifts the
+    engine picks, +1 kg a session); comparing against a barbell plan they can't do at all would make the
+    engine look good for free."""
 
     name = "Fixed program"
 
     def __init__(self, scenario: Scenario):
         self.next_load = {}
+        self.scenario = scenario
+        self.step = equipment.increment_kg(scenario.equipment)
 
     def observe(self, date, recovery, checkin):
         pass
@@ -262,11 +274,16 @@ class FixedPolicy:
         kind, _, tpl = PROGRAM[date.weekday()]
         if kind != "lift":
             return dict(kind=kind, band=None, lifts=[], run=tpl if kind == "run" else None)
-        lifts = [(n, s, r, self.next_load.setdefault(n, l)) for n, s, r, _, l in tpl]
+        lifts = []
+        for n, s, r, _, l in tpl:
+            if n in self.scenario.unavailable:
+                sub, factor, *_ = HOME[n]
+                n, l = sub, round(l * factor / self.step) * self.step
+            lifts.append((n, s, r, self.next_load.setdefault(n, l)))
         return dict(kind="lift", band=None, lifts=lifts, run=None)
 
     def log(self, date, name, load, reps, sets_out):
-        self.next_load[name] = load + INCREMENT_KG
+        self.next_load[name] = load + self.step
 
 
 # ---------------------------------------------------------------- one run
@@ -287,6 +304,20 @@ class Result:
     violations: list = field(default_factory=list)
 
 
+def program_lifts(scenario: Scenario) -> list:
+    """The lifts this athlete actually trains: the plan's own, or the home version when the barbell isn't there."""
+    names = {n for kind, _, tpl in PROGRAM.values() if kind == "lift" for n, *_ in tpl}
+    return sorted(n if n not in scenario.unavailable else HOME[n][0] for n in names)
+
+
+def _warm_up(athlete, name, sets, reps, load, scenario):
+    """Before the app: training the plan at its starting loads, with dumbbells if that's all there is."""
+    if name in scenario.unavailable:
+        sub, factor, *_ = HOME[name]
+        name, load = sub, load * factor
+    return athlete.perform(name, sets, reps, load)[1]
+
+
 def run(policy_cls, scenario: Scenario, seed: int) -> Result:
     rng = random.Random(seed)
     athlete = Athlete(random.Random(seed * 7919 + 1), scenario)
@@ -301,7 +332,7 @@ def run(policy_cls, scenario: Scenario, seed: int) -> Result:
         rec, chk = athlete.signals(0)
         policy.observe(date, rec if scenario.wearable else None, chk)
         kind, _, tpl = PROGRAM[date.weekday()]
-        warm = sum(athlete.perform(n, s, r, l)[1] for n, s, r, _, l in tpl if n not in scenario.unavailable) if kind == "lift" else 0.0
+        warm = sum(_warm_up(athlete, n, s, r, l, scenario) for n, s, r, _, l in tpl) if kind == "lift" else 0.0
         athlete.end_day(warm)
     start_1rm = {n: athlete.rested_1rm(n) for n in LIFTS}
 
@@ -353,7 +384,7 @@ def run(policy_cls, scenario: Scenario, seed: int) -> Result:
             res.spikes += bool(ratio and ratio > ACWR_SPIKE)
         athlete.end_day(load_today)
 
-    doable = [n for n in LIFTS if n not in scenario.unavailable]
+    doable = program_lifts(scenario)
     res.gain_pct = statistics.mean(athlete.rested_1rm(n) / start_1rm[n] - 1 for n in doable)
     return res
 

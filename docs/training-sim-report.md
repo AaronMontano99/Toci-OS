@@ -6,20 +6,20 @@ Pass rules (fixed before the first run): no safety violations; fewer failed sets
 
 | Scenario | Policy | Strength gain | Sessions | Failed sets | Grinding sets | Workload spikes | Undoable lifts prescribed | Amber/red days | Safety violations |
 |---|---|---|---|---|---|---|---|---|---|
-| Consistent lifter | Toci engine | +2.5% | 32 | 35.5 | 0 | 0 | 0 | 12 | 0 |
-| Consistent lifter | Fixed program | +2.0% | 32 | 164 | 0 | 0 | 0 | n/a | 892 |
-| No wearable (check-in only) | Toci engine | +2.6% | 32 | 37.5 | 0 | 0 | 0 | 0 | 0 |
-| No wearable (check-in only) | Fixed program | +2.0% | 32 | 164 | 0 | 0 | 0 | n/a | 892 |
-| Missed workouts + a three-week break | Toci engine | -1.3% | 14.5 | 6 | 0 | 6 | 0 | 7 | 0 |
-| Missed workouts + a three-week break | Fixed program | -0.9% | 14.5 | 46 | 0 | 6 | 0 | n/a | 834 |
-| Stalled near their ceiling | Toci engine | +0.4% | 32 | 42 | 0 | 0 | 0 | 12 | 0 |
-| Stalled near their ceiling | Fixed program | +0.4% | 32 | 171 | 0 | 0 | 0 | n/a | 920 |
-| Two weeks of life stress | Toci engine | +1.8% | 24 | 21 | 0 | 9 | 0 | 18 | 0 |
-| Two weeks of life stress | Fixed program | +2.0% | 32 | 164 | 0 | 0 | 0 | n/a | 892 |
-| Inconsistent availability | Toci engine | +0.9% | 20 | 19 | 0 | 0 | 0 | 9.5 | 0 |
-| Inconsistent availability | Fixed program | +1.1% | 20 | 77 | 0 | 0 | 0 | n/a | 705 |
-| Limited equipment (no squat rack) | Toci engine | +1.8% | 32 | 18 | 0 | 0 | 32 | 9 | 0 |
-| Limited equipment (no squat rack) | Fixed program | +1.6% | 32 | 67.5 | 0 | 0 | 32 | n/a | 416 |
+| Consistent lifter | Toci engine | +2.5% | 32 | 36.5 | 0 | 0 | 0 | 13 | 0 |
+| Consistent lifter | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
+| No wearable (check-in only) | Toci engine | +2.6% | 32 | 39 | 0 | 0 | 0 | 0 | 0 |
+| No wearable (check-in only) | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
+| Missed workouts + a three-week break | Toci engine | -1.5% | 14.5 | 7 | 0 | 6 | 0 | 8 | 0 |
+| Missed workouts + a three-week break | Fixed program | -0.9% | 14.5 | 46 | 0 | 6 | 0 | n/a | 852 |
+| Stalled near their ceiling | Toci engine | +0.3% | 32 | 35.5 | 0 | 0 | 0 | 13 | 0 |
+| Stalled near their ceiling | Fixed program | +0.3% | 32 | 169 | 0 | 0 | 0 | n/a | 915 |
+| Two weeks of life stress | Toci engine | +1.8% | 24 | 22.5 | 0 | 9 | 0 | 18.5 | 0 |
+| Two weeks of life stress | Fixed program | +2.0% | 32 | 163 | 0 | 0 | 0 | n/a | 888 |
+| Inconsistent availability | Toci engine | +0.9% | 20 | 18.5 | 0 | 0 | 0 | 10 | 0 |
+| Inconsistent availability | Fixed program | +1.1% | 20 | 81.5 | 0 | 0 | 0 | n/a | 710 |
+| Home gym (dumbbells, no barbell) | Toci engine | +2.5% | 32 | 37 | 0 | 0 | 0 | 13 | 0 |
+| Home gym (dumbbells, no barbell) | Fixed program | +1.9% | 32 | 166.5 | 0 | 0 | 0 | n/a | 898 |
 
 Medians over athletes; safety violations are totals.
 
@@ -31,7 +31,7 @@ Medians over athletes; safety violations are totals.
 - **Stalled near their ceiling: PASS**. An advanced lifter with almost no room left. Adding weight every week can only end in failed sets.
 - **Two weeks of life stress: FAIL** (failed: no more spikes, keeps the progress). Weeks 3-4: bad sleep, low HRV, high stress. Readiness should catch it before the bar does.
 - **Inconsistent availability: FAIL** (failed: keeps the progress). Only gets in on Mondays and Wednesdays, plus a random third day half the time.
-- **Limited equipment (no squat rack): FAIL** (failed: only doable lifts). Trains at home without a rack. Squat and bench can't be done; everything else can.
+- **Home gym (dumbbells, no barbell): PASS**. Trains at home with dumbbells and a bench, as the Home gym setting describes: no barbell, rack or cables. Every barbell lift has to become a dumbbell lift.
 
 ## Limits
 
