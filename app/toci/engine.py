@@ -306,9 +306,15 @@ DELOAD_FACTOR = 0.9
 SLUMP_SET_MULTIPLIER = 0.6
 
 # Strength mostly holds for about three weeks off; past that, coming back at the
-# old weight (let alone heavier) is how people get hurt. Come back lighter instead.
+# old weight (let alone heavier) is how people get hurt. Come back lighter instead,
+# by how long it's been: training-cessation studies find strength largely kept for
+# ~3 weeks, so 3-4 weeks off needs less of a cut than a longer break.
 LAYOFF_DAYS = 21
-LAYOFF_LOAD_FACTOR = 0.9
+LONG_BREAK_DAYS = 28
+
+
+def layoff_factor(days_off: int) -> float:
+    return 0.95 if days_off < LONG_BREAK_DAYS else 0.9
 
 # feel ratings that mean "don't add load yet, even if reps were technically hit"
 FEEL_BLOCKS_INCREASE = {"sloppy", "partial", "assisted", "pain"}
@@ -334,8 +340,9 @@ def progression_options(db: Session, user_id: int, exercise_id: int, target_rir:
     last_date = _last_session_date(db, user_id, exercise_id)
     days_off = (today - last_date).days if today and last_date else 0
     if days_off >= LAYOFF_DAYS:
-        back = round(math.floor(last.actual_load_kg * LAYOFF_LOAD_FACTOR / increment_kg) * increment_kg, 1)
-        why = f"{days_off} days since you last did this — coming back at {back:g}kg (about 90%) to rebuild before adding load"
+        factor = layoff_factor(days_off)
+        back = round(math.floor(last.actual_load_kg * factor / increment_kg) * increment_kg, 1)
+        why = f"{days_off} days since you last did this — coming back at {back:g}kg (about {factor:.0%}) to rebuild before adding load"
         return {
             "options": [{"type": "repeat", "load_kg": back, "reps": target_reps, "label": f"Ease back in at {back:g}kg", "detail": why}],
             "recommended_type": "repeat",

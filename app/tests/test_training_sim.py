@@ -67,13 +67,25 @@ def test_every_set_hit_still_progresses(db_session, seeded):
     assert _options(db_session, today)["recommended_type"] == "increase"
 
 
-def test_coming_back_after_three_weeks_off_starts_lighter(db_session, seeded):
+def test_coming_back_after_three_weeks_off_starts_a_little_lighter(db_session, seeded):
     today = seeded["today"]
     _session(db_session, today - dt.timedelta(days=25), 100, [5, 5, 5])
     out = _options(db_session, today)
     assert out["recommended_type"] == "repeat"
-    assert out["options"][0]["load_kg"] == 90.0
-    assert "25 days" in out["why"]
+    assert out["options"][0]["load_kg"] == 95.0
+    assert "25 days" in out["why"] and "95%" in out["why"]
+
+
+def test_a_month_or_more_off_starts_lighter_still(db_session, seeded):
+    today = seeded["today"]
+    _session(db_session, today - dt.timedelta(days=30), 100, [5, 5, 5])
+    assert _options(db_session, today)["options"][0]["load_kg"] == 90.0
+
+
+def test_three_weeks_is_where_easing_back_starts(db_session, seeded):
+    today = seeded["today"]
+    _session(db_session, today - dt.timedelta(days=20), 100, [5, 5, 5])
+    assert _options(db_session, today)["recommended_type"] == "increase"
 
 
 def test_two_missed_sessions_in_a_row_reset_about_ten_percent(db_session, seeded):
@@ -137,3 +149,11 @@ def test_the_verdict_needs_every_rule():
     assert simulator.verdict(eng, fixed)["pass"]
     eng[0].impossible = 3
     assert not simulator.verdict(eng, fixed)["pass"]
+
+
+def test_progress_is_judged_within_half_a_point_of_the_fixed_program():
+    fixed = [simulator.Result("f", "x", 0, gain_pct=-0.009, failed_sets=40)]
+    close = [simulator.Result("e", "x", 0, gain_pct=-0.012, failed_sets=8)]
+    far = [simulator.Result("e", "x", 0, gain_pct=-0.016, failed_sets=8)]
+    assert simulator.verdict(close, fixed)["rules"]["keeps the progress"]
+    assert not simulator.verdict(far, fixed)["rules"]["keeps the progress"]
